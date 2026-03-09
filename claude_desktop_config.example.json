@@ -6,7 +6,8 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "4d32cadb485f8b9854988ffc06770cbc"
+        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
