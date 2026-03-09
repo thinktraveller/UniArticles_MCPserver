@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "uniarticles-mcp"
+      ],
+      "env": {
+        "SCOPUS_API_KEY": "4d32cadb485f8b9854988ffc06770cbc"
+      }
+    }
+  }
+}

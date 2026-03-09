@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "uniarticles-mcp"
+version = "0.2.0"
+description = "Unified MCP server for multi-source academic literature retrieval"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+keywords = ["mcp", "academic", "research", "scopus", "arxiv", "semanticscholar", "chemrxiv"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "arxiv>=2.1.0",
+    "mcp>=1.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "semanticscholar>=0.8.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/uniarticles-mcp"
+Repository = "https://github.com/yourusername/uniarticles-mcp"
+Issues = "https://github.com/yourusername/uniarticles-mcp/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+uniarticles-mcp = "uniarticles.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uniarticles"]
