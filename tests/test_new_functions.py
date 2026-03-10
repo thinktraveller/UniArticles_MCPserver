@@ -17,13 +17,13 @@ SAMPLE_OAI_XML = """<?xml version="1.0" encoding="UTF-8"?>
          xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/
          http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
   <responseDate>2023-10-27T10:00:00Z</responseDate>
-  <request verb="ListRecords" metadataPrefix="oai_dc">https://chemrxiv.org/engage/chemrxiv/public-api/v1/oai</request>
+  <request verb="ListRecords" metadataPrefix="oai_dc">https://example.org/oai</request>
   <ListRecords>
     <record>
       <header>
-        <identifier>oai:chemrxiv.org:12345</identifier>
+        <identifier>oai:example.org:12345</identifier>
         <datestamp>2023-10-26T00:00:00Z</datestamp>
-        <setSpec>chemrxiv</setSpec>
+        <setSpec>example</setSpec>
       </header>
       <metadata>
         <oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"

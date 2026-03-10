@@ -1,17 +1,25 @@
-# Teaching Log
 
-## Step 12: 发布 0.3.0 版本 (Release 0.3.0)
+## Step 15: 验证 ChemRxiv 功能彻底移除 (Verify Removal)
 
-### 1) 变更内容
-更新项目版本号为 `0.3.0`，以反映近期移除 ChemRxiv 模块及其他改进。
+### 1) 验证请求
+用户请求检查 `src` 目录下是否残留以下函数：
+- `search_chemrxiv`
+- `search_chemrxiv_title`
+- `get_chemrxiv_by_id`
+- `get_chemrxiv_by_doi`
+- `list_chemrxiv_categories`
+- `list_chemrxiv_licenses`
+- `list_chemrxiv_oai_records`
 
-- **修改文件**:
-  - `pyproject.toml`: 将 `version` 字段从 `0.2.0` 更新为 `0.3.0`。
-  - `src/uniarticles/__init__.py`: 添加 `__version__ = "0.3.0"` 变量，便于在代码中获取版本信息。
+### 2) 验证过程
+使用 `grep` 工具对 `src` 目录进行全文搜索。
 
-### 2) 验证
-- 检查 `pyproject.toml` 确认版本号已更新。
-- 检查 `src/uniarticles/__init__.py` 确认包含版本信息。
+### 3) 验证结果
+- **搜索结果**: 未找到任何匹配项 (No matches found)。
+- **结论**: 所有 ChemRxiv 相关函数已从源代码中彻底移除。之前的可见性问题确认为配置使用了旧版 PyPI 包导致（见 Step 14）。
+
+### 4) 后续操作建议
+请确保您的 MCP 客户端（如 Claude Desktop）使用了更新后的 `claude_desktop_config.example.json` 配置，并重启客户端以加载本地最新代码。
 
 Next, run:
-$ uv build
+$ echo "Verification complete: No ChemRxiv functions found in src."

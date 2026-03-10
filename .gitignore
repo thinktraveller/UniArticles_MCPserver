@@ -47,3 +47,4 @@ venv.bak/
 arxiv_downloads/
 *.pdf
 tests/__pycache__/
+TEACHING.md

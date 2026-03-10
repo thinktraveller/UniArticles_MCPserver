@@ -3,6 +3,7 @@
     "uniarticles-mcp-server": {
       "command": "uvx",
       "args": [
+        "--refresh",
         "uniarticles-mcp"
       ],
       "env": {

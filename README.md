@@ -51,6 +51,7 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
     "uniarticles-mcp-server": {
       "command": "uvx",
       "args": [
+        "--refresh", // If you do not want to force a refresh, remove this line
         "uniarticles-mcp"
       ],
       "env": {
