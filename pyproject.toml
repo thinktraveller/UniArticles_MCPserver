@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniarticles-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Unified MCP server for multi-source academic literature retrieval"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
-keywords = ["mcp", "academic", "research", "scopus", "arxiv", "semanticscholar", "chemrxiv"]
+keywords = ["mcp", "academic", "research", "scopus", "arxiv", "semanticscholar"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",

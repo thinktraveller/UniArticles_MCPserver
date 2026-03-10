@@ -9,7 +9,7 @@ import os
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from uniarticles.sources import scopus, semanticscholar, arxiv, chemrxiv
+from uniarticles.sources import scopus, semanticscholar, arxiv
 from mcp.server.fastmcp import FastMCP
 
 class TestUnifiedStructure(unittest.IsolatedAsyncioTestCase):
@@ -54,12 +54,6 @@ class TestUnifiedStructure(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data["source"], "arxiv")
         self.assertTrue(data["ok"])
         self.assertIsNone(data["error"])
-
-    async def test_chemrxiv_structure(self):
-        """Test ChemRxiv returns unified structure"""
-        data = chemrxiv._ok("test", [{"title": "Test"}])
-        self.assertEqual(data["source"], "chemrxiv")
-        self.assertTrue(data["ok"])
 
     async def test_semanticscholar_structure(self):
         """Test SemanticScholar returns unified structure"""

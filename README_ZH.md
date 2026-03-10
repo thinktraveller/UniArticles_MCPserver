@@ -9,14 +9,13 @@
 
 ## 总览
 
-UniArticles MCP Server 是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ChemRxiv**, **ArXiv**, **Semantic Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
+UniArticles MCP Server 是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**, **Semantic Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
 
 ## 功能特性
 
 - **统一接口**: 所有数据源使用统一的返回结构。
 - **多源支持**:
   - **Scopus**: 搜索、摘要详情、作者档案、引用论文、配额查询。
-  - **ChemRxiv**: 搜索 (关键词/标题)、ID/DOI 详情、分类列表、许可列表、OAI-PMH 记录。
   - **ArXiv**: 论文搜索、ID 查询、最新论文列表、PDF 下载。
   - **Semantic Scholar**: 论文搜索。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
@@ -110,7 +109,6 @@ src/
     └── sources/         # 数据源模块
         ├── arxiv.py
         ├── scopus.py
-        ├── chemrxiv.py
         ├── semanticscholar.py
         └── ...
 tests/                   # 集成与验证测试
@@ -139,13 +137,6 @@ python tests/verify_server.py
 - `get_author_profile(author_id)`: 获取作者档案。
 - `get_citing_papers(eid, count)`: 获取引用该文的论文。
 - `get_quota_status()`: 检查 API 配额。
-
-### ChemRxiv
-- `search_chemrxiv(term, limit, page, sort)`: 搜索预印本。
-- `search_chemrxiv_title(title, limit)`: 按标题搜索。
-- `get_chemrxiv_by_id(item_id)`: 按 ID 获取详情。
-- `get_chemrxiv_by_doi(doi)`: 按 DOI 获取详情。
-- `list_chemrxiv_oai_records(limit)`: 列出 OAI-PMH 记录。
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: 搜索论文。

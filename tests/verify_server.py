@@ -109,7 +109,7 @@ def main():
             tool_names = [t["name"] for t in tools]
             print(f"✅ Tools found: {tool_names}")
             
-            expected_tools = ["search_arxiv", "search_scopus", "search_semantic_scholar", "search_chemrxiv"]
+            expected_tools = ["search_arxiv", "search_scopus", "search_semantic_scholar"]
             missing = [t for t in expected_tools if t not in tool_names]
             
             if not missing:

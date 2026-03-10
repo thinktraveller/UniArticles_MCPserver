@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 # Ensure the source path is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from uniarticles.sources import scopus, chemrxiv, arxiv
+from uniarticles.sources import scopus, arxiv
 from uniarticles.config import Settings
 
 # Sample OAI XML for testing
@@ -102,83 +102,6 @@ class TestScopusFunctions(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["query"], "quota")
             self.assertEqual(result["items"][0]["limit"], "1000")
             self.assertEqual(result["items"][0]["remaining"], "999")
-
-
-class TestChemRxivFunctions(unittest.IsolatedAsyncioTestCase):
-    async def test_search_items(self):
-        with patch("uniarticles.sources.chemrxiv.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                "items": [{"id": "item1", "title": "Test Item"}]
-            }
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
-
-            result = await chemrxiv._search_items("test", 10, None, None)
-            
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["source"], "chemrxiv")
-            self.assertEqual(result["query"], "test")
-            self.assertEqual(len(result["items"]), 1)
-            self.assertEqual(result["items"][0]["title"], "Test Item")
-
-    async def test_get_item_by_id(self):
-        with patch("uniarticles.sources.chemrxiv.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {"id": "item1", "title": "Specific Item"}
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
-
-            result = await chemrxiv._get_item_by_id("item1")
-            
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["items"][0]["title"], "Specific Item")
-
-    async def test_get_item_by_doi(self):
-        with patch("uniarticles.sources.chemrxiv.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            # Mock search response that includes the DOI
-            mock_response.json.return_value = {
-                "items": [
-                    {"id": "item1", "doi": "10.1234/test", "title": "DOI Item"},
-                    {"id": "item2", "doi": "10.5678/other", "title": "Other Item"}
-                ]
-            }
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
-
-            result = await chemrxiv._get_item_by_doi("10.1234/test")
-            
-            self.assertTrue(result["ok"])
-            self.assertEqual(len(result["items"]), 1)
-            self.assertEqual(result["items"][0]["doi"], "10.1234/test")
-
-    async def test_list_categories(self):
-        with patch("uniarticles.sources.chemrxiv.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = [{"id": "cat1", "name": "Category 1"}]
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
-
-            result = await chemrxiv._list_categories()
-            
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["items"][0]["name"], "Category 1")
-
-    async def test_list_oai_records(self):
-        with patch("uniarticles.sources.chemrxiv.httpx.AsyncClient") as mock_client:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.text = SAMPLE_OAI_XML
-            mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
-
-            result = await chemrxiv._list_oai_records(10)
-            
-            self.assertTrue(result["ok"])
-            self.assertEqual(result["query"], "oai_records")
-            self.assertEqual(len(result["items"]), 1)
-            self.assertEqual(result["items"][0]["title"], "Test Title")
-            self.assertEqual(result["items"][0]["identifier"], "oai:chemrxiv.org:12345")
 
 
 class TestArxivFunctions(unittest.IsolatedAsyncioTestCase):

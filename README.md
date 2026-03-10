@@ -9,14 +9,13 @@
 
 ## Overview
 
-A unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ChemRxiv**, **ArXiv**, **Semantic Scholar**) into a single, standardized API for LLM agents (like Claude).
+A unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**, **Semantic Scholar**) into a single, standardized API for LLM agents (like Claude).
 
 ## Features
 
 - **Unified Interface**: Single search structure for all sources.
 - **Multi-Source Support**:
   - **Scopus**: Search, abstract details, author profiles, citing papers, quota check.
-  - **ChemRxiv**: Search (term/title), details by ID/DOI, categories, licenses, OAI-PMH records.
   - **ArXiv**: Search papers, search by ID, list recent papers, download PDF.
   - **Semantic Scholar**: Search papers.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
@@ -112,7 +111,6 @@ src/
     └── sources/         # Data source modules
         ├── arxiv.py
         ├── scopus.py
-        ├── chemrxiv.py
         ├── semanticscholar.py
         └── ...
 tests/                   # Integration and verification tests
@@ -141,13 +139,6 @@ python tests/verify_server.py
 - `get_author_profile(author_id)`: Get author profile information.
 - `get_citing_papers(eid, count)`: Get citing papers.
 - `get_quota_status()`: Check API quota.
-
-### ChemRxiv
-- `search_chemrxiv(term, limit, page, sort)`: Search preprints.
-- `search_chemrxiv_title(title, limit)`: Search by title.
-- `get_chemrxiv_by_id(item_id)`: Get details by ID.
-- `get_chemrxiv_by_doi(doi)`: Get details by DOI.
-- `list_chemrxiv_oai_records(limit)`: List OAI-PMH records.
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: Search papers.
