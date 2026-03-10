@@ -3,15 +3,15 @@
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
 [![Commercial-Use](https://img.shields.io/badge/Commercial-Restricted-red.svg)](LICENSE)
 
-[中文 (Chinese)](README_ZH.md)
+[中文版本 (Chinese)](README_ZH.md)
 
 ---
 
-## 🇬🇧 English
+## Overview
 
 A unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ChemRxiv**, **ArXiv**, **Semantic Scholar**) into a single, standardized API for LLM agents (like Claude).
 
-### Features
+## Features
 
 - **Unified Interface**: Single search structure for all sources.
 - **Multi-Source Support**:
@@ -22,14 +22,54 @@ A unified academic literature retrieval server implementing the Model Context Pr
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
-### Installation & Usage
+## ⚠️ API Key Requirements
 
-#### Prerequisites
-- Python 3.10+
-- [uv](https://github.com/astral-sh/uv) (Recommended) or pip
+This server integrates multiple data sources, and some advanced features require API keys:
 
-#### Option 1: Using uv (Recommended)
+1. **Scopus (Required)**:
+   - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
+   - **Restriction**: Your institution must have a subscription to Elsevier's services; otherwise, you cannot use related functions even with an API Key.
 
+2. **Semantic Scholar (Recommended)**:
+   - **How to get**: Apply at [Semantic Scholar API Key Form](https://www.semanticscholar.org/product/api#api-key-form).
+   - **Restriction**: Using an institutional email is recommended. Without an API Key, rate limits and results will be severely restricted.
+
+**Note**: Even without the above API keys, you can still use other functions normally.
+
+## Installation & Usage
+
+### Method 1: Direct Integration with LLM Clients (Recommended)
+Suitable for **Cherry Studio**, **LM Studio**, **Claude Desktop**, **Trae**, etc.
+
+**This project is published on PyPI, so you can configure it directly without downloading the full source code.**
+**Since these LLM clients are already configured with Python and uv environments, no additional downloads are required.**
+
+Simply add the following configuration to your client's MCP settings (e.g., `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "uniarticles-mcp"
+      ],
+      "env": {
+        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+      }
+    }
+  }
+}
+```
+
+📖 Troubleshooting? See: [Step-by-Step Configuration Guide](docs/guide.md)
+
+### Method 2: Local Installation (Advanced)
+Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv) (recommended) or pip.
+Useful for developers or those who want to modify the source code.
+
+**Using uv:**
 ```bash
 # Clone the repository
 git clone https://github.com/your-username/UniArticles_MCPserver.git
@@ -40,8 +80,7 @@ uv sync
 uv run uniarticles-mcp
 ```
 
-#### Option 2: Using pip
-
+**Using pip:**
 ```bash
 # Clone and setup venv
 python -m venv .venv
@@ -54,31 +93,7 @@ pip install -e .
 python -m uniarticles
 ```
 
-#### Claude Desktop Integration
-
-Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "uniarticles": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "C:/path/to/UniArticles_MCPserver",
-        "run",
-        "uniarticles-mcp"
-      ],
-      "env": {
-        "SCOPUS_API_KEY": "your_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "optional_key_here"
-      }
-    }
-  }
-}
-```
-
-### Configuration
+#### Configuration
 
 Create a `.env` file in the project root:
 
@@ -88,7 +103,7 @@ SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 
-### Project Structure
+#### Project Structure
 
 ```
 src/
@@ -104,7 +119,7 @@ tests/                   # Integration and verification tests
 pyproject.toml           # Project metadata and dependencies
 ```
 
-### Testing
+#### Testing
 
 Run automated integration tests:
 
@@ -118,52 +133,56 @@ Verify MCP protocol handshake:
 python tests/verify_server.py
 ```
 
-### Available Tools
+## Available Tools
 
-#### Scopus
+### Scopus
 - `search_scopus(query, count, sort)`: Search for documents.
 - `get_abstract_details(eid)`: Get detailed abstract information.
 - `get_author_profile(author_id)`: Get author profile information.
 - `get_citing_papers(eid, count)`: Get citing papers.
 - `get_quota_status()`: Check API quota.
 
-#### ChemRxiv
+### ChemRxiv
 - `search_chemrxiv(term, limit, page, sort)`: Search preprints.
 - `search_chemrxiv_title(title, limit)`: Search by title.
 - `get_chemrxiv_by_id(item_id)`: Get details by ID.
 - `get_chemrxiv_by_doi(doi)`: Get details by DOI.
 - `list_chemrxiv_oai_records(limit)`: List OAI-PMH records.
 
-#### ArXiv
+### ArXiv
 - `search_arxiv(query, max_results)`: Search papers.
 - `list_papers(max_results)`: List recent papers.
 - `read_paper(paper_id)`: Get paper metadata.
 - `download_paper(paper_id, filename, output_dir)`: Download PDF.
 
-#### Semantic Scholar
+### Semantic Scholar
 - `search_semantic_scholar(query, limit)`: Search papers.
 
 ---
 
-## ⚖️ License & Acknowledgments / 协议与致谢
+## 🤝 Call for Contributions
 
-### License / 协议
+Due to the author's background in Chemistry, I am less familiar with databases and API developments in other research fields. I warmly welcome contributions and Pull Requests (PRs) from the community to add more data sources!
+
+## ⚖️ License & Acknowledgments
+
+### License
 
 **AGPL-3.0 License with Commercial Restriction**
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
-本项目采用 **GNU Affero 通用公共许可证 v3.0 (AGPL-3.0)** 授权。
 
-🔴 **Commercial Use Restriction / 商业使用限制**:
+🔴 **Commercial Use Restriction**:
 Commercial use of this software is permitted **ONLY** with explicit written authorization from the author.
-**未经作者明确书面授权，严禁将本软件用于任何商业用途**（包括但不限于销售、SaaS服务、集成到商业产品中）。
 
-### Special Acknowledgments / 特别致谢
+### Special Acknowledgments
 
 - **[ScopusMCP](https://github.com/qwe4559999/scopus-mcp)**:
-  ScopusMCP是笔者第一个开发成功的文献检索MCP工具，但初始相当臃肿与难以抑制，感谢舍友 [(https://github.com/qwe4559999)](https://github.com/qwe4559999) 提供的使用pypi和uv打包的建议；
-  *ScopusMCP was the author's first successful literature retrieval MCP tool. Thanks to my roommate for the suggestion to use pypi and uv for packaging.*
+  ScopusMCP is the first literature retrieval MCP tool the author successfully developed, but initially it was quite bloated and difficult to port.Thanks to my roommate [(https://github.com/qwe4559999)](https://github.com/qwe4559999) for the suggestion to use pypi and uv for packaging.
 
 - **[ArxivMCPserver](https://github.com/blazickjp/arxiv-mcp-server)**:
-  ArxivMCPserver项目，本项目直接将其进行了打包集成。
-  *Integrated directly from the ArxivMCPserver project.*
+  Integrated directly from the ArxivMCPserver project.
+
+### Special Declaration
+
+This project uses AI-generated content.
