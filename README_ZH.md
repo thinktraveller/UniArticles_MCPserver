@@ -9,7 +9,7 @@
 
 ## 总览
 
-UniArticles MCP Server 是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**, **Semantic Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
+亿文通(UniArticles)是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**, **Semantic Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
 
 ## 功能特性
 
