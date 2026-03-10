@@ -63,6 +63,25 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
 }
 ```
 
+If you do not want to force refresh the cache package every time you restart, then instead add the following content: (but this will cause you to need to manually update the package when the package is updated)
+
+```json
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "uniarticles-mcp"
+      ],
+      "env": {
+        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+      }
+    }
+  }
+}
+```
+
 📖 Troubleshooting? See: [Step-by-Step Configuration Guide](docs/guide.md)
 
 ### Method 2: Local Installation (Advanced)

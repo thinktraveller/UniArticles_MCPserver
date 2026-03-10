@@ -1,25 +1,18 @@
 
-## Step 15: 验证 ChemRxiv 功能彻底移除 (Verify Removal)
+## Step 18: 更新 Git 忽略配置 (Update .gitignore)
 
-### 1) 验证请求
-用户请求检查 `src` 目录下是否残留以下函数：
-- `search_chemrxiv`
-- `search_chemrxiv_title`
-- `get_chemrxiv_by_id`
-- `get_chemrxiv_by_doi`
-- `list_chemrxiv_categories`
-- `list_chemrxiv_licenses`
-- `list_chemrxiv_oai_records`
+### 1) 需求分析
+用户希望在 `UniArticles_MCPserver` 仓库的 `.gitignore` 文件中额外忽略同级目录 `UniArticles_Skills` 下的 `TEACHING.md` 文件。
 
-### 2) 验证过程
-使用 `grep` 工具对 `src` 目录进行全文搜索。
+### 2) 解决方案
+在 `UniArticles_MCPserver/.gitignore` 文件末尾添加 `../UniArticles_Skills/TEACHING.md`。
 
-### 3) 验证结果
-- **搜索结果**: 未找到任何匹配项 (No matches found)。
-- **结论**: 所有 ChemRxiv 相关函数已从源代码中彻底移除。之前的可见性问题确认为配置使用了旧版 PyPI 包导致（见 Step 14）。
+### 3) 变更内容
+- **修改文件**: `c:\Users\joyjo\Desktop\Demo\UniArticles_MCPserver\UniArticles_MCPserver\.gitignore`
+- **新增项**: `../UniArticles_Skills/TEACHING.md`
 
-### 4) 后续操作建议
-请确保您的 MCP 客户端（如 Claude Desktop）使用了更新后的 `claude_desktop_config.example.json` 配置，并重启客户端以加载本地最新代码。
+### 4) 注意事项
+- 由于 Git 仓库根目录位于 `UniArticles_MCPserver`，该忽略规则可能不会直接影响 Git 的索引，但根据用户要求进行了显式添加。
 
 Next, run:
-$ echo "Verification complete: No ChemRxiv functions found in src."
+$ echo "Gitignore updated successfully."
