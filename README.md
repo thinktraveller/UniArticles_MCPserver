@@ -9,8 +9,8 @@
 
 ## Overview
 
-A unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**, **Semantic Scholar**) into a single, standardized API for LLM agents (like Claude).
-
+UniArticles(亿文通) is a unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**, **Semantic Scholar**) into a single, standardized API for LLM agents (like Claude).
+          
 ## Features
 
 - **Unified Interface**: Single search structure for all sources.
