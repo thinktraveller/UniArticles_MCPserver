@@ -50,7 +50,7 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
     "uniarticles-mcp-server": {
       "command": "uvx",
       "args": [
-        "--refresh", // If you do not want to force a refresh, remove this line
+        "--refresh",
         "uniarticles-mcp"
       ],
       "env": {
