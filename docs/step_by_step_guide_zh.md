@@ -48,7 +48,7 @@ https://dev.elsevier.com/
     "uniarticles-mcp-server": {
       "command": "uvx",
       "args": [
-        "--refresh", // 如果不希望强制刷新，则不需要此行
+        "--refresh", 
         "uniarticles-mcp"
       ],
       "env": {
