@@ -61,6 +61,45 @@ https://dev.elsevier.com/
 
 **请注意这段json代码的缩进！！任何不恰当的缩进都可能导致服务器导入的失败！！！**
 
+
+**如果您暂时不持有任何API Key**，则改为输入以下token：
+
+```json
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "uniarticles-mcp"
+      ],
+      "env": {
+      }
+    }
+  }
+}
+```
+
+**如果您成功申请到了Semantic Scholar的API Key**，则改为输入以下json：
+
+```json
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "uniarticles-mcp"
+      ],
+      "env": {
+        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+      }
+    }
+  }
+}
+```
+
 然后，点击此处启动服务；
 
 ![image-20260310105636416](images/image-20260310105636416.png)
