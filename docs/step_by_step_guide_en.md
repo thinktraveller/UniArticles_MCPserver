@@ -63,6 +63,44 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
 
 **Please pay attention to the indentation of this JSON code!! Any improper indentation may cause the server import to fail!!!**
 
+**If you do not currently hold any API Key**, enter the following token instead:
+
+```json
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "uniarticles-mcp"
+      ],
+      "env": {
+      }
+    }
+  }
+}
+```
+
+**If you have successfully applied for a Semantic Scholar API Key**, then enter the following json instead:
+
+```json
+{
+  "mcpServers": {
+    "uniarticles-mcp-server": {
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "uniarticles-mcp"
+      ],
+      "env": {
+        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+      }
+    }
+  }
+}
+```
+
 Then, click here to start the service:
 
 ![image-20260310105636416](images/image-20260310105636416.png)
