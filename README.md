@@ -83,7 +83,7 @@ If you do not want to force refresh the cache package every time you restart, th
 }
 ```
 
-📖 Troubleshooting? See: [Step-by-Step Configuration Guide](docs/guide.md)
+📖 Troubleshooting? See: [Step-by-Step Configuration Guide](docs/step_by_step_guide_en.md)
 
 ### Method 2: Local Installation (Advanced)
 Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv) (recommended) or pip.
