@@ -6,7 +6,7 @@ Why is there no Semantic Scholar API Key included? Because the author couldn't g
 
 I'm sorry that some of the pictures are in Chinese. If you have any questions, please feel free to ask.
 
-## 1. Apply for Scopus API Key
+## 1. Apply for Elsevier API Key (for Scopus and more)
 
 Go to the following website to apply for an API Key:
 
@@ -14,7 +14,7 @@ https://dev.elsevier.com/
 
 ![image-20260121000131000](images/image-20260121000131000_1.png)
 
-Note: You need to register with an institutional email address and verify your affiliation with the corresponding educational institution. Do not disclose the obtained API Key, as it may be misused by others.
+Note: You need to register with an institutional email address and verify your affiliation with the corresponding educational institution. Do not disclose the obtained API Key, as it may be misused by others. Scopus is an Elsevier database, and this key can also be used for other Elsevier APIs if your subscription and key scope allow it.
 
 ## 2. Download Cherry Studio
 
@@ -54,7 +54,7 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
       }
     }
   }
@@ -93,7 +93,7 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
         "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }

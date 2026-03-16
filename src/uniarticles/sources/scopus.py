@@ -158,22 +158,8 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_id, message=str(exc))
 
     @server.tool()
-    async def get_citing_papers(eid: str, count: int = 5, sort: str = "coverDate") -> dict:
-        """Get papers citing a specific Scopus document (by EID)."""
-        normalized_eid = eid.strip()
-        bounded = max(1, min(count, 25))
-        if not normalized_eid:
-            return _err(query=eid, message="eid must not be empty")
-        try:
-            # Reusing search_scopus with refeid() query
-            query = f"refeid({normalized_eid})"
-            return await _search_scopus(query=query, count=bounded, sort=sort)
-        except Exception as exc:
-            return _err(query=normalized_eid, message=str(exc))
-
-    @server.tool()
     async def get_quota_status() -> dict:
-        """Check current Scopus API quota status."""
+        """Check current Elsevier API quota status (via Scopus endpoint)."""
         try:
             return await _get_quota()
         except Exception as exc:
