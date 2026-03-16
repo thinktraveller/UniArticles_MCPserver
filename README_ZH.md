@@ -15,7 +15,7 @@
 
 - **统一接口**: 所有数据源使用统一的返回结构。
 - **多源支持**:
-  - **Scopus**: 搜索、摘要详情、作者档案、引用论文、配额查询。
+  - **Scopus**: 搜索、摘要详情、作者档案、配额查询。
   - **ArXiv**: 论文搜索、ID 查询、最新论文列表、PDF 下载。
   - **Semantic Scholar**: 论文搜索。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
@@ -25,9 +25,10 @@
 
 本服务器集成多个数据源，部分高级功能需要 API 密钥支持：
 
-1. **Scopus (必须)**:
+1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
    - **限制**: 您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key ，亦无法使用相关功能。
+   - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `SCOPUS_API_KEY`，但其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。
 
 2. **Semantic Scholar (建议)**:
    - **获取方式**: 需前往 [Semantic Scholar API Key Form](https://www.semanticscholar.org/product/api#api-key-form) 申请。
@@ -53,7 +54,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
         "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
@@ -72,7 +73,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
         "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
@@ -115,7 +116,7 @@ python -m uniarticles
 在项目根目录创建 `.env` 文件：
 
 ```env
-SCOPUS_API_KEY=your_scopus_api_key
+SCOPUS_API_KEY=your_elsevier_api_key
 SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
@@ -155,8 +156,7 @@ python tests/verify_server.py
 - `search_scopus(query, count, sort)`: 搜索文档。
 - `get_abstract_details(eid)`: 获取详细摘要信息。
 - `get_author_profile(author_id)`: 获取作者档案。
-- `get_citing_papers(eid, count)`: 获取引用该文的论文。
-- `get_quota_status()`: 检查 API 配额。
+- `get_quota_status()`: 检查 Elsevier API 配额（通过 Scopus 端点）。
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: 搜索论文。

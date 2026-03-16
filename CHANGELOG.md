@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0]
+
+### Changed
+- **Terminology**: Standardized user-facing wording from “Scopus API” to “Elsevier API” across documentation and configuration examples.
+  - Clarified that Scopus is an Elsevier database.
+  - Clarified that `SCOPUS_API_KEY` is an Elsevier API key and may be used for other Elsevier APIs when subscription scope allows.
+- **Docs & Examples**: Updated API key placeholders from `your_scopus_api_key_here`/`your_scopus_api_key` to Elsevier-oriented naming in guides and config examples.
+
+### Removed
+- **Scopus Citing Feature**: Removed non-working citing-paper capability from tools and scripts.
+  - Removed MCP tool `get_citing_papers`.
+  - Removed related CLI/script command paths and documentation references.
+
 ## [1.0.0] - 2026-03-10
 
 ### Added

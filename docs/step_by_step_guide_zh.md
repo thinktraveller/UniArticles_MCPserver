@@ -4,7 +4,7 @@
 
 为什么没有包含申请Semantic Scholar的API Key？因为笔者自己也没有申请到 (*￣︿￣)
 
-## 1、申请Scopus的API Key
+## 1、申请 Elsevier API Key（用于 Scopus 等服务）
 
 前往这个网址进行API Key的申请
 
@@ -12,7 +12,7 @@ https://dev.elsevier.com/
 
 ![image-20260121000131000](images/image-20260121000131000_1.png)
 
-注意：你需要使用一个教育邮箱注册，并且需要进行对应教育机构的身份验证；获得的API Key请勿泄露，否则可能被他人滥用
+注意：你需要使用一个教育邮箱注册，并且需要进行对应教育机构的身份验证；获得的 API Key 请勿泄露，否则可能被他人滥用。Scopus 是 Elsevier 旗下数据库，该 Key 本质为 Elsevier API Key，在订阅权限与密钥作用域允许时也可用于其他 Elsevier API 服务。
 
 ## 2、下载cherrystudio
 
@@ -52,7 +52,7 @@ https://dev.elsevier.com/
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
       }
     }
   }
@@ -92,7 +92,7 @@ https://dev.elsevier.com/
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
         "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }

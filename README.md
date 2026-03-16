@@ -15,7 +15,7 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
 
 - **Unified Interface**: Single search structure for all sources.
 - **Multi-Source Support**:
-  - **Scopus**: Search, abstract details, author profiles, citing papers, quota check.
+  - **Scopus**: Search, abstract details, author profiles, quota check.
   - **ArXiv**: Search papers, search by ID, list recent papers, download PDF.
   - **Semantic Scholar**: Search papers.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
@@ -25,9 +25,10 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
 
 This server integrates multiple data sources, and some advanced features require API keys:
 
-1. **Scopus (Required)**:
+1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
    - **Restriction**: Your institution must have a subscription to Elsevier's services; otherwise, you cannot use related functions even with an API Key.
+   - **Clarification**: Scopus is an Elsevier database. The `SCOPUS_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope.
 
 2. **Semantic Scholar (Recommended)**:
    - **How to get**: Apply at [Semantic Scholar API Key Form](https://www.semanticscholar.org/product/api#api-key-form).
@@ -55,7 +56,7 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
         "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
@@ -74,7 +75,7 @@ If you do not want to force refresh the cache package every time you restart, th
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_scopus_api_key_here",
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
         "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
@@ -117,7 +118,7 @@ python -m uniarticles
 Create a `.env` file in the project root:
 
 ```env
-SCOPUS_API_KEY=your_scopus_api_key
+SCOPUS_API_KEY=your_elsevier_api_key
 SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
@@ -157,8 +158,7 @@ python tests/verify_server.py
 - `search_scopus(query, count, sort)`: Search for documents.
 - `get_abstract_details(eid)`: Get detailed abstract information.
 - `get_author_profile(author_id)`: Get author profile information.
-- `get_citing_papers(eid, count)`: Get citing papers.
-- `get_quota_status()`: Check API quota.
+- `get_quota_status()`: Check Elsevier API quota (via Scopus endpoint).
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: Search papers.
