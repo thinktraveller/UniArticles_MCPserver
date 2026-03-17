@@ -83,6 +83,8 @@
 
 📖 **如果您在该方法下遇见了任何问题，详见：[傻瓜式配置攻略](docs/step_by_step_guide_zh.md)**
 
+如果您在启动服务时遇到 “MCP error -32000: Connection closed” 错误，请在 Cherry Studio 项目的该issue界面寻找解决方法：https://github.com/CherryHQ/cherry-studio/issues/3264
+
 ### 方法二：本地安装（高级）
 需要 Python 3.10+ 和 [uv](https://github.com/astral-sh/uv) (推荐) 或 pip。
 此方法适合开发者或需要手动配置环境的用户。
