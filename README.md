@@ -85,6 +85,8 @@ If you do not want to force refresh the cache package every time you restart, th
 
 📖 Troubleshooting? See: [Step-by-Step Configuration Guide](docs/step_by_step_guide_en.md)
 
+If you encounter `MCP error -32000: Connection closed` when starting the service, please find the solution in the related Cherry Studio issue: https://github.com/CherryHQ/cherry-studio/issues/3264
+
 ### Method 2: Local Installation (Advanced)
 Requires Python 3.10+ and [uv](https://github.com/astral-sh/uv) (recommended) or pip.
 Useful for developers or those who want to modify the source code.
