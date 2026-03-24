@@ -10,6 +10,7 @@ load_dotenv()
 @dataclass(frozen=True)
 class Settings:
     scopus_api_key: str | None = os.getenv("SCOPUS_API_KEY")
+    elsevier_insttoken: str | None = os.getenv("ELSEVIER_INSTTOKEN")
     arxiv_download_dir: str = os.getenv("ARXIV_DOWNLOAD_DIR", os.path.join(os.getcwd(), "arxiv_downloads"))
 
 

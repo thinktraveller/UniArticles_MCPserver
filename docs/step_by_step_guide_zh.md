@@ -2,10 +2,10 @@
 
 **请使用电脑端完成所有操作**
 
-完成本配置后，服务将在同一个 MCP 端点下同时支持 Scopus、ArXiv、PubMed 与 Google Scholar 工具。
+完成本配置后，服务将在同一个 MCP 端点下同时支持 Scopus、ScienceDirect、ArXiv、PubMed 与 Google Scholar 工具。
 Google Scholar 相关链路可能不稳定或暂时不可用，因此该部分能力属于测试性内容。
 
-## 1、申请 Elsevier API Key（用于 Scopus 等服务）
+## 1、申请 Elsevier API Key（用于 Scopus、ScienceDirect 等服务）
 
 前往这个网址进行API Key的申请
 
@@ -13,7 +13,9 @@ https://dev.elsevier.com/
 
 ![image-20260121000131000](images/image-20260121000131000_1.png)
 
-注意：你需要使用一个教育邮箱注册，并且需要进行对应教育机构的身份验证；获得的 API Key 请勿泄露，否则可能被他人滥用。Scopus 是 Elsevier 旗下数据库，该 Key 本质为 Elsevier API Key，在订阅权限与密钥作用域允许时也可用于其他 Elsevier API 服务。
+注意：你需要使用一个教育邮箱注册，并且需要进行对应教育机构的身份验证；获得的 API Key 请勿泄露，否则可能被他人滥用。Scopus 和 ScienceDirect 是 Elsevier 旗下数据库，该 Key 本质为 Elsevier API Key，在订阅权限与密钥作用域允许时也可用于其他 Elsevier API 服务。
+
+**如果您的机构提供了机构令牌 (Insttoken)，您还可以配置 `ELSEVIER_INSTTOKEN` 以获取更多数据访问权限。**
 
 ## 2、下载cherrystudio
 
