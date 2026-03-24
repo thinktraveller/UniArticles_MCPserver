@@ -15,7 +15,8 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
 
 - **Unified Interface**: Single search structure for all sources.
 - **Multi-Source Support**:
-  - **Scopus**: Search, abstract details, author profiles, quota check.
+  - **Scopus**: Search, abstract details, author profiles, author search, quota check.
+  - **ScienceDirect**: Article search, metadata search, full-text retrieval (requires entitlement).
   - **ArXiv**: Search papers, search by ID, list recent papers, download PDF.
   - **Paperscraper APIs**: PubMed search and Google Scholar title search.
   - **Google Scholar Stability Notice**: Google Scholar access may be unstable or temporarily unavailable; this part is experimental/test-only.
@@ -151,10 +152,16 @@ python tests/verify_server.py
 ## Available Tools
 
 ### Scopus
-- `search_scopus(query, count, sort)`: Search for documents.
-- `get_abstract_details(eid)`: Get detailed abstract information.
-- `get_author_profile(author_id)`: Get author profile information.
+- `search_scopus(query, count, sort, view)`: Search for documents.
+- `get_abstract_details(eid, view)`: Get detailed abstract information.
+- `get_author_profile(author_id, view)`: Get author profile information.
+- `search_authors(query, count, view)`: Search Scopus authors.
 - `get_quota_status()`: Check Elsevier API quota (via Scopus endpoint).
+
+### ScienceDirect
+- `search_sciencedirect(query, count, start, view)`: Search ScienceDirect records.
+- `get_article_metadata(query, count, start, view)`: Search article metadata.
+- `retrieve_article(identifier, identifier_type, view)`: Retrieve full-text article record.
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: Search papers.

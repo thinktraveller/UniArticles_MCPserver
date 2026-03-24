@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clarified that Google Scholar connectivity may be unstable or temporarily unavailable.
   - Marked Google Scholar-related capability as experimental/test-only.
 
+## [1.3.0] - 2026-03-24
+
+### Added
+- **ScienceDirect Integration**: Added new source module `src/uniarticles/sources/sciencedirect.py` with tools for article search, metadata, and retrieval.
+- **Enhanced Scopus Tools**: Added `search_authors` tool and introduced `view` parameter support for all Elsevier tools to control data verbosity.
+- **Institutional Support**: Added `ELSEVIER_INSTTOKEN` configuration support for users with institutional subscription tokens.
+
+### Changed
+- **Documentation**: Updated all READMEs and step-by-step guides to include ScienceDirect and enhanced Scopus capabilities.
+- **Stability Notice**: Added explicit warnings about Google Scholar instability across all documentation.
+
 ## [1.2.0] - 2026-03-24
 
 ### Added

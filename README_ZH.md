@@ -15,7 +15,8 @@
 
 - **统一接口**: 所有数据源使用统一的返回结构。
 - **多源支持**:
-  - **Scopus**: 搜索、摘要详情、作者档案、配额查询。
+  - **Scopus**: 搜索、摘要详情、作者档案、作者搜索、配额查询。
+  - **ScienceDirect**: 文章搜索、元数据搜索、全文检索（需要权限）。
   - **ArXiv**: 论文搜索、ID 查询、最新论文列表、PDF 下载。
   - **Paperscraper API**: PubMed 检索与 Google Scholar 标题检索。
   - **Google Scholar 稳定性说明**: Google Scholar 链路可能不稳定或暂时不可用，该能力为测试性内容。
@@ -149,10 +150,16 @@ python tests/verify_server.py
 ## 可用工具列表
 
 ### Scopus
-- `search_scopus(query, count, sort)`: 搜索文档。
-- `get_abstract_details(eid)`: 获取详细摘要信息。
-- `get_author_profile(author_id)`: 获取作者档案。
+- `search_scopus(query, count, sort, view)`: 搜索文档。
+- `get_abstract_details(eid, view)`: 获取详细摘要信息。
+- `get_author_profile(author_id, view)`: 获取作者档案。
+- `search_authors(query, count, view)`: 搜索作者。
 - `get_quota_status()`: 检查 Elsevier API 配额（通过 Scopus 端点）。
+
+### ScienceDirect
+- `search_sciencedirect(query, count, start, view)`: 搜索 ScienceDirect 记录。
+- `get_article_metadata(query, count, start, view)`: 搜索文章元数据。
+- `retrieve_article(identifier, identifier_type, view)`: 检索全文文章记录。
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: 搜索论文。

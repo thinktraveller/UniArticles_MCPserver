@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniarticles-mcp"
-version = "1.3.0"
+version = "1.5.0"
 description = "Unified MCP server for multi-source academic literature retrieval"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
-    { name = "Your Name", email = "your.email@example.com" }
+    { name = "thinktraveller", email = "wangzh685@mail2.sysu.edu.cn" }
 ]
 keywords = ["mcp", "academic", "research", "scopus", "arxiv", "pubmed", "scholar"]
 classifiers = [
@@ -31,9 +31,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/uniarticles-mcp"
-Repository = "https://github.com/yourusername/uniarticles-mcp"
-Issues = "https://github.com/yourusername/uniarticles-mcp/issues"
+Homepage = "https://github.com/thinktraveller"
+Repository = "https://github.com/thinktraveller/UniArticles_MCPserver"
+Issues = "https://github.com/thinktraveller/UniArticles_MCPserver/issues"
 
 [project.optional-dependencies]
 dev = [

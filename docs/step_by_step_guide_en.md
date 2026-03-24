@@ -4,10 +4,10 @@
 
 I'm sorry that some of the pictures are in Chinese. If you have any questions, please feel free to ask.
 
-After this configuration, the server supports Scopus, ArXiv, PubMed, and Google Scholar tools in a unified MCP endpoint.
+After this configuration, the server supports Scopus, ScienceDirect, ArXiv, PubMed, and Google Scholar tools in a unified MCP endpoint.
 Google Scholar access can be unstable or temporarily unavailable, so related capability is experimental/test-only.
 
-## 1. Apply for Elsevier API Key (for Scopus and more)
+## 1. Apply for Elsevier API Key (for Scopus, ScienceDirect, and more)
 
 Go to the following website to apply for an API Key:
 
@@ -15,7 +15,9 @@ https://dev.elsevier.com/
 
 ![image-20260121000131000](images/image-20260121000131000_1.png)
 
-Note: You need to register with an institutional email address and verify your affiliation with the corresponding educational institution. Do not disclose the obtained API Key, as it may be misused by others. Scopus is an Elsevier database, and this key can also be used for other Elsevier APIs if your subscription and key scope allow it.
+Note: You need to register with an institutional email address and verify your affiliation with the corresponding educational institution. Do not disclose the obtained API Key, as it may be misused by others. Scopus and ScienceDirect are Elsevier databases, and this key can also be used for other Elsevier APIs if your subscription and key scope allow it.
+
+**If your institution provides an Institutional Token (Insttoken), you can also configure `ELSEVIER_INSTTOKEN` to access more data.**
 
 ## 2. Download Cherry Studio
 
