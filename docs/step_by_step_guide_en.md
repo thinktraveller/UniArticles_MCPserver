@@ -2,9 +2,10 @@
 
 **Please perform all operations on a computer.**
 
-Why is there no Semantic Scholar API Key included? Because the author couldn't get one either... (*￣︿￣)
-
 I'm sorry that some of the pictures are in Chinese. If you have any questions, please feel free to ask.
+
+After this configuration, the server supports Scopus, ArXiv, PubMed, and Google Scholar tools in a unified MCP endpoint.
+Google Scholar access can be unstable or temporarily unavailable, so related capability is experimental/test-only.
 
 ## 1. Apply for Elsevier API Key (for Scopus and more)
 
@@ -75,26 +76,6 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
         "uniarticles-mcp"
       ],
       "env": {
-      }
-    }
-  }
-}
-```
-
-**If you have successfully applied for a Semantic Scholar API Key**, then enter the following json instead:
-
-```json
-{
-  "mcpServers": {
-    "uniarticles-mcp-server": {
-      "command": "uvx",
-      "args": [
-        "--refresh",
-        "uniarticles-mcp"
-      ],
-      "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }

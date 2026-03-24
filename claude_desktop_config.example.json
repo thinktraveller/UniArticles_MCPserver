@@ -7,8 +7,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
