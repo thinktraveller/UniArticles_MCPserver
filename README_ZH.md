@@ -9,7 +9,7 @@
 
 ## 总览
 
-亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**, **Semantic Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
+亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**）和文献 API（**PubMed**, **Google Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
 
 ## 功能特性
 
@@ -17,7 +17,8 @@
 - **多源支持**:
   - **Scopus**: 搜索、摘要详情、作者档案、配额查询。
   - **ArXiv**: 论文搜索、ID 查询、最新论文列表、PDF 下载。
-  - **Semantic Scholar**: 论文搜索。
+  - **Paperscraper API**: PubMed 检索与 Google Scholar 标题检索。
+  - **Google Scholar 稳定性说明**: Google Scholar 链路可能不稳定或暂时不可用，该能力为测试性内容。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
@@ -29,10 +30,6 @@
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
    - **限制**: 您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key ，亦无法使用相关功能。
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `SCOPUS_API_KEY`，但其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。
-
-2. **Semantic Scholar (建议)**:
-   - **获取方式**: 需前往 [Semantic Scholar API Key Form](https://www.semanticscholar.org/product/api#api-key-form) 申请。
-   - **限制**: 建议使用教育机构邮箱申请（即使拥有，您的申请也可能像笔者一样被拒绝）。如无 API Key，功能调用频率和返回结果将大幅受限。
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
 
@@ -54,8 +51,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -73,8 +69,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -119,7 +114,6 @@ python -m uniarticles
 
 ```env
 SCOPUS_API_KEY=your_elsevier_api_key
-SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 
@@ -131,8 +125,8 @@ src/
     ├── server.py        # MCP Server 入口点
     └── sources/         # 数据源模块
         ├── arxiv.py
+        ├── paperscraper.py
         ├── scopus.py
-        ├── semanticscholar.py
         └── ...
 tests/                   # 集成与验证测试
 pyproject.toml           # 项目元数据与依赖
@@ -166,8 +160,9 @@ python tests/verify_server.py
 - `read_paper(paper_id)`: 获取论文元数据。
 - `download_paper(paper_id, filename, output_dir)`: 下载 PDF。
 
-### Semantic Scholar
-- `search_semantic_scholar(query, limit)`: 搜索论文。
+### Paperscraper
+- `search_pubmed_papers(query, max_results)`: 在 PubMed 检索论文。
+- `search_scholar_papers(title)`: 按标题在 Google Scholar 检索论文元数据（测试性功能，可能因链路不稳定调用失败）。
 
 ---
 

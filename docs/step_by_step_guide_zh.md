@@ -2,7 +2,8 @@
 
 **请使用电脑端完成所有操作**
 
-为什么没有包含申请Semantic Scholar的API Key？因为笔者自己也没有申请到 (*￣︿￣)
+完成本配置后，服务将在同一个 MCP 端点下同时支持 Scopus、ArXiv、PubMed 与 Google Scholar 工具。
+Google Scholar 相关链路可能不稳定或暂时不可用，因此该部分能力属于测试性内容。
 
 ## 1、申请 Elsevier API Key（用于 Scopus 等服务）
 
@@ -74,26 +75,6 @@ https://dev.elsevier.com/
         "uniarticles-mcp"
       ],
       "env": {
-      }
-    }
-  }
-}
-```
-
-**如果您成功申请到了Semantic Scholar的API Key**，则改为输入以下json：
-
-```json
-{
-  "mcpServers": {
-    "uniarticles-mcp-server": {
-      "command": "uvx",
-      "args": [
-        "--refresh",
-        "uniarticles-mcp"
-      ],
-      "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }

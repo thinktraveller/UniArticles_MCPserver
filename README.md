@@ -9,7 +9,7 @@
 
 ## Overview
 
-UniArticles(亿文通) is a unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**, **Semantic Scholar**) into a single, standardized API for LLM agents (like Claude).
+UniArticles(亿文通) is a unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**) and literature APIs (**PubMed**, **Google Scholar**) into a single, standardized API for LLM agents (like Claude).
           
 ## Features
 
@@ -17,7 +17,8 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
 - **Multi-Source Support**:
   - **Scopus**: Search, abstract details, author profiles, quota check.
   - **ArXiv**: Search papers, search by ID, list recent papers, download PDF.
-  - **Semantic Scholar**: Search papers.
+  - **Paperscraper APIs**: PubMed search and Google Scholar title search.
+  - **Google Scholar Stability Notice**: Google Scholar access may be unstable or temporarily unavailable; this part is experimental/test-only.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
@@ -30,11 +31,7 @@ This server integrates multiple data sources, and some advanced features require
    - **Restriction**: Your institution must have a subscription to Elsevier's services; otherwise, you cannot use related functions even with an API Key.
    - **Clarification**: Scopus is an Elsevier database. The `SCOPUS_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope.
 
-2. **Semantic Scholar (Recommended)**:
-   - **How to get**: Apply at [Semantic Scholar API Key Form](https://www.semanticscholar.org/product/api#api-key-form).
-   - **Restriction**: Using an institutional email is recommended. Without an API Key, rate limits and results will be severely restricted.
-
-**Note**: Even without the above API keys, you can still use other functions normally.
+**Note**: Even without the above API key, you can still use other functions normally.
 
 ## Installation & Usage
 
@@ -56,8 +53,7 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -75,8 +71,7 @@ If you do not want to force refresh the cache package every time you restart, th
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -121,7 +116,6 @@ Create a `.env` file in the project root:
 
 ```env
 SCOPUS_API_KEY=your_elsevier_api_key
-SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 
@@ -133,8 +127,8 @@ src/
     ├── server.py        # MCP Server entry point
     └── sources/         # Data source modules
         ├── arxiv.py
+        ├── paperscraper.py
         ├── scopus.py
-        ├── semanticscholar.py
         └── ...
 tests/                   # Integration and verification tests
 pyproject.toml           # Project metadata and dependencies
@@ -168,8 +162,9 @@ python tests/verify_server.py
 - `read_paper(paper_id)`: Get paper metadata.
 - `download_paper(paper_id, filename, output_dir)`: Download PDF.
 
-### Semantic Scholar
-- `search_semantic_scholar(query, limit)`: Search papers.
+### Paperscraper
+- `search_pubmed_papers(query, max_results)`: Search papers from PubMed.
+- `search_scholar_papers(title)`: Search paper metadata from Google Scholar by title (experimental; may fail when Google Scholar is unstable).
 
 ---
 
