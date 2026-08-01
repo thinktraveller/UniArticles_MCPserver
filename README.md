@@ -79,7 +79,7 @@ If you do not want to force refresh the cache package every time you restart, th
 }
 ```
 
-📖 Troubleshooting? See: [Step-by-Step Configuration Guide](docs/step_by_step_guide_en.md)
+📖 Troubleshooting? See: [Step-by-Step Configuration Guide](project-docs/step_by_step_guide_en.md)
 
 If you encounter `MCP error -32000: Connection closed` when starting the service, please find the solution in the related Cherry Studio issue: https://github.com/CherryHQ/cherry-studio/issues/3264
 

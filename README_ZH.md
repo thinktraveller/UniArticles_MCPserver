@@ -77,7 +77,7 @@
 }
 ```
 
-📖 **如果您在该方法下遇见了任何问题，详见：[傻瓜式配置攻略](docs/step_by_step_guide_zh.md)**
+📖 **如果您在该方法下遇见了任何问题，详见：[傻瓜式配置攻略](project-docs/step_by_step_guide_zh.md)**
 
 如果您在启动服务时遇到 “MCP error -32000: Connection closed” 错误，请在 Cherry Studio 项目的该issue界面寻找解决方法：https://github.com/CherryHQ/cherry-studio/issues/3264
 

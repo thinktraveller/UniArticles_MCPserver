@@ -79,7 +79,10 @@ def _download_paper(paper_id: str, filename: str | None = None, output_dir: str 
     
     try:
         # arxiv library's download_pdf returns the filename
-        downloaded_path = paper.download_pdf(dirpath=target_dir, filename=filename)
+        if filename is None:
+            downloaded_path = paper.download_pdf(dirpath=target_dir)
+        else:
+            downloaded_path = paper.download_pdf(dirpath=target_dir, filename=filename)
         return _ok(
             query=paper_id, 
             items=[{
