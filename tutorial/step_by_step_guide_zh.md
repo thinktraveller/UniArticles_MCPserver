@@ -55,7 +55,7 @@ https://dev.elsevier.com/
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
       }
     }
   }

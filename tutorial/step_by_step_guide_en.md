@@ -57,7 +57,7 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
       }
     }
   }

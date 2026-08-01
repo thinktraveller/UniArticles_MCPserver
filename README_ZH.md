@@ -30,7 +30,7 @@
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
    - **限制**: 您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key ，亦无法使用相关功能。
-   - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `SCOPUS_API_KEY`，但其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。
+   - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
 
@@ -52,7 +52,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -70,7 +70,7 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -114,7 +114,7 @@ python -m uniarticles
 在项目根目录创建 `.env` 文件：
 
 ```env
-SCOPUS_API_KEY=your_elsevier_api_key
+ELSEVIER_API_KEY=your_elsevier_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 

@@ -30,9 +30,9 @@ def _err(query: str, message: str) -> dict:
 
 
 def _get_headers() -> dict[str, str]:
-    api_key = settings.scopus_api_key
+    api_key = settings.elsevier_api_key
     if not api_key:
-        raise ValueError("SCOPUS_API_KEY is required")
+        raise ValueError("ELSEVIER_API_KEY is required")
     headers = {
         "X-ELS-APIKey": api_key,
         "Accept": "application/json",

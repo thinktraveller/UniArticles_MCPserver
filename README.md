@@ -30,7 +30,7 @@ This server integrates multiple data sources, and some advanced features require
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
    - **Restriction**: Your institution must have a subscription to Elsevier's services; otherwise, you cannot use related functions even with an API Key.
-   - **Clarification**: Scopus is an Elsevier database. The `SCOPUS_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope.
+   - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
 
@@ -54,7 +54,7 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -72,7 +72,7 @@ If you do not want to force refresh the cache package every time you restart, th
         "uniarticles-mcp"
       ],
       "env": {
-        "SCOPUS_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
       }
     }
   }
@@ -116,7 +116,7 @@ python -m uniarticles
 Create a `.env` file in the project root:
 
 ```env
-SCOPUS_API_KEY=your_elsevier_api_key
+ELSEVIER_API_KEY=your_elsevier_api_key
 ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 
