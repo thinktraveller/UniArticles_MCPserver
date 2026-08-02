@@ -130,11 +130,65 @@
   - 本地 `.venv` 中 `annotated_types`/`pydantic` 包已损坏（`SyntaxError: source code string cannot contain null bytes`），导致 `mcp` 无法导入。这是**预先存在的环境问题，与本次改动无关**，不影响 config 解析逻辑的验证；但会阻碍后续步骤中"真实启动 MCP Server / 真实调用 API 工具"的验证，建议在进入计划书步骤 3～7 前先修复该 venv（重装依赖）。
   - 提醒使用者：可继续用旧名 `SCOPUS_API_KEY` 过渡（会有弃用警告），或在方便时将本地 `.env` 手动改为 `ELSEVIER_API_KEY`。
 
+### 步骤 3：遗留风险处置——调整 `get_abstract_details`/`retrieve_article` 默认 view —— 完成于 2026-08-02
+
+- 完成内容：将两个核心检索工具的默认 `view` 从受限的 `META_ABS` 改为无限制的 `META`；在 docstring 中补充"默认 META（无限制），高权限用户可显式传 FULL/META_ABS"说明。
+- 涉及文件：`src/uniarticles/sources/scopus.py`（`get_abstract_details` 默认值）、`src/uniarticles/sources/sciencedirect.py`（`retrieve_article` 默认值）。
+- **真实 API 验证（改前先测，不凭文档标记下结论）**，用 `.env` 中真实 `ELSEVIER_API_KEY`（基础非商业 Key、无 Insttoken）实测：
+  - `content/abstract/eid`（Scopus）：`view=META` → **HTTP 200**（返回 `abstracts-retrieval-response`）；`view=META_ABS` → **HTTP 401**（`AUTHORIZATION_ERROR`，视图受限）。→ 证实计划书假设，改 `META` 是真正的可用性修复。
+  - `content/article/doi`（ScienceDirect）：`view=META` → **HTTP 200**（`full-text-retrieval-response.coredata` 含真实 title/doi）；`view=META_ABS` → **该账号意外地也返回 200**。
+- 决策说明：`retrieve_article` 的 `META_ABS` 在本账号实测可用，与 abstract 端点不同；但按计划书"默认参数应为当前账号验证过能跑通的最小可用视图"原则，且为对更低权限账号更稳妥，仍统一改为 `META`（`META` 同样实测 200 且返回真实内容）。高权限用户可显式传 `META_ABS`/`FULL`，向后兼容不受影响。
+- 验证结果：改后 `get_abstract_details`（默认 META）、`retrieve_article`（默认 META）真实调用均返回 `ok:true`。
+
+### 步骤 4：新增 Serial Title（期刊信息查询）工具 `get_serial_title` —— 完成于 2026-08-02
+
+- 完成内容：在 `src/uniarticles/sources/scopus.py`（不新建文件）新增内部函数 `_get_serial_title()` 与 MCP 工具 `get_serial_title(issn, view="STANDARD")`，接入端点 `content/serial/title/issn/{issn}`。
+- **真实抓包确认的响应字段结构**（用 ISSN `0092-8674`=Cell 实测，`view=STANDARD` → 200）：根为 `serial-metadata-response.entry[]`，每个 entry 含：
+  - `dc:title`（期刊名，如 "Cell"）、`dc:publisher`（"Elsevier B.V."）、`prism:issn`、`prism:eIssn`、`prism:aggregationType`（"journal"）、`source-id`、`prism:url`
+  - `openaccess`（"0"/"1"）、`openaccessType`、`coverageStartYear`、`coverageEndYear`
+  - `subject-area[]`：每项 `{@code, @abbrev, $=名称}`
+  - `link[]`：`@ref` 取值 `scopus-source`/`homepage`/`coverimage`（注意：homepage 的 `@href` 可能为空串，归一化时空串转 `None`）
+  - 另有指标字段 `SNIPList`/`SJRList`/`citeScoreYearInfoList`（本工具未纳入归一化，保持精简）
+- 归一化输出字段：`title, publisher, issn, eissn, aggregation_type, openaccess, openaccess_type, coverage_start_year, coverage_end_year, subject_areas[], homepage_url, source_id, scopus_url`，全部用 `.get()` 容错。
+- 验证结果：
+  - 真实 ISSN `0092-8674` → `ok:true, count:1`，`title=Cell / publisher=Elsevier B.V. / issn=0092-8674 / eissn=1097-4172 / coverage 1974–2026`，`subject_areas=[{code:1300, abbrev:BIOC, name:...}]`，`homepage_url=None`（该刊 homepage href 为空串）。
+  - 无效 ISSN `0000-0000` → 端点返回 404（`RESOURCE_NOT_FOUND`），`raise_for_status()` 抛 `HTTPStatusError`，工具层 `try/except` 转为统一 `_err` 结构（`ok:false`）。
+
+### 步骤 5：新增 Object Retrieval（图表/补充材料）工具 `get_article_objects` —— 完成于 2026-08-02
+
+- 完成内容：在 `src/uniarticles/sources/sciencedirect.py`（不新建文件）新增内部函数 `_get_article_objects()` 与 MCP 工具 `get_article_objects(identifier, identifier_type="doi", view="META")`，接入端点 `content/object/{id_type}/{id}`。
+- **范围边界**：仅返回对象元信息（文件名/类型/下载链接）清单，**不下载二进制内容本身**（与 goal.md 目标一致）。
+- **真实抓包确认的响应字段结构**（用 DOI `10.1016/j.jmst.2026.07.003` 实测，`view=META` → 200）：根为 `attachment-metadata-response.{coredata, attachment[]}`。`attachment[]`（本例 25 个对象）每项字段**因对象类型而异、均为可选**：
+  - 完整字段（以 IMAGE-THUMBNAIL 类型为例）：`@_fa, prism:url(下载链接), eid, ref(如 "gr6"), filename(如 "gr6.sml"), mimetype, size, height, width, type`
+  - 部分类型（如 IMAGE-DOWNSAMPLED）仅有 `@_fa, prism:url, mimetype, type`（无 filename/eid/尺寸）→ 归一化必须全部 `.get()`
+  - `type` 实测取值集合：`ALTIMG / APPLICATION / IMAGE-DOWNSAMPLED / IMAGE-HIGH-RES / IMAGE-THUMBNAIL`
+  - `mimetype` 实测取值集合：`image/jpeg / image/gif / image/svg+xml / application/word`
+- 归一化输出字段：`filename, ref, type, mimetype, size, width, height, eid, download_url`（`download_url` 取自 `prism:url`）。
+- 验证结果：
+  - `identifier_type="doi"` → `ok:true, count:25`，全部对象含 `download_url`。
+  - `identifier_type="pii"`（PII `S100503022600486X`）→ `ok:true, count:25`，确认第二种标识符类型同样可用（计划书要求至少补测一种非 doi 类型）。
+  - 无效 DOI → 抛 `HTTPStatusError`，工具层转 `_err`（`ok:false`）。
+- 两个新工具均遵循项目统一返回结构 `{ok, source, query, count, items, error}`，复用各自模块已有的 `_ok`/`_err` 辅助函数。
+
+### 步骤 6：文档与元数据更新 —— 完成于 2026-08-02
+
+- `README.md` / `README_ZH.md`：在 "Available Tools / 可用工具列表" 章节 Scopus 分组下新增 `get_serial_title`、ScienceDirect 分组下新增 `get_article_objects`，中英文对等更新。
+- `pyproject.toml`：版本号 `1.5.0` → `2.0.0`（语义化主版本升级，含环境变量改名这一破坏性变更候选项）。
+- `uv.lock`：`uniarticles-mcp` 自身条目版本随之由 `1.5.0` → `2.0.0`（`uv lock` 自我纠偏，diff 仅此一行）。
+- 说明：`CHANGELOG.md` 已在此前被删除（见下方 bugfix 记录），变更说明改由本 buildlog.md 承载，故不再新增 `[2.0.0]` CHANGELOG 条目。教程文档（`tutorial/*`）按计划书要求无需为新工具单独补充内容。
+- 测试策略：延续项目"真实 API 手动验证"惯例，未引入 pytest 自动化用例。
+
+### 步骤 7：整体验证 —— 完成于 2026-08-02
+
+- 用 `create_server()` 构建 `FastMCP` 实例并 `list_tools()`，确认 `get_serial_title`、`get_article_objects` 两个新工具均已成功注册。
+- 现有工具回归：`get_abstract_details`（新默认 META）、`retrieve_article`（新默认 META）真实调用返回 `ok:true`，未因默认 view 调整而回归。
+- 所有真实 API 验证通过隔离脚本完成（脚本存于 scratchpad 临时目录，验证后已删除，未提交仓库）。
+- 遗留说明：`content/search/sciencedirect`（现有 `search_sciencedirect` 工具）在本基础订阅账号下实测返回 401（该账号无 ScienceDirect 全文搜索 entitlement），属账号权限层面限制、非本次代码改动引入；新增的 `get_article_objects` 因走 `content/object` 端点则可正常返回，两者权限边界不同。
+
 ### 下一步计划
 
-- 本次任务范围仅为 `project-plan.md` 的**第一步（收尾整理）**，即上述"步骤 1（buildlog 迁移）+ 步骤 2（环境变量改名）"，现已完成。
-- 尚未执行：`project-plan.md` 步骤 3（遗留 view 风险处置）、步骤 4/5（新增 `get_serial_title`、`get_article_objects` 工具）、步骤 6（文档与 `pyproject.toml` 版本号升级）、步骤 7（整体验证）。这些属于下一阶段任务，需另行启动。
-- **前置阻塞**：进入步骤 3～7 前，需先修复 `.venv` 中损坏的 `annotated_types`/`pydantic`（否则无法启动 MCP Server 或做真实 API 验证）。
+- `project-plan.md` 的**第一步（收尾整理）+ 第二步（goal.md 范围：view 修复 + 两个新工具 + 文档/版本收尾）已全部完成**。当前无待执行的计划步骤。
+- 如需进一步扩展（如"直接下载对象二进制内容"能力、接入更多 Elsevier 产品线），属新需求，需另行经 `project-planner-cn` 规划后再构建。
 
 ---
 

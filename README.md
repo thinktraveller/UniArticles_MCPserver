@@ -156,12 +156,14 @@ python tests/verify_server.py
 - `get_abstract_details(eid, view)`: Get detailed abstract information.
 - `get_author_profile(author_id, view)`: Get author profile information.
 - `search_authors(query, count, view)`: Search Scopus authors.
+- `get_serial_title(issn, view)`: Look up journal/serial metadata (publisher, Open Access status, coverage years, subject areas, homepage) by ISSN.
 - `get_quota_status()`: Check Elsevier API quota (via Scopus endpoint).
 
 ### ScienceDirect
 - `search_sciencedirect(query, count, start, view)`: Search ScienceDirect records.
 - `get_article_metadata(query, count, start, view)`: Search article metadata.
 - `retrieve_article(identifier, identifier_type, view)`: Retrieve full-text article record.
+- `get_article_objects(identifier, identifier_type, view)`: Retrieve metadata (filename, mimetype, type, download link) for an article's figures/tables/supplementary materials. Returns the object list and links only — does not download the binary content.
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: Search papers.

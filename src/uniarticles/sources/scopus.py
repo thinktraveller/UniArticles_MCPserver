@@ -119,6 +119,49 @@ async def _search_authors(query: str, count: int, view: str) -> dict:
     return _ok(query=query, items=normalized)
 
 
+async def _get_serial_title(issn: str, view: str) -> dict:
+    headers = _get_headers()
+    url = f"{BASE_URL}content/serial/title/issn/{issn}"
+    async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        response = await client.get(url, params={"view": view})
+        response.raise_for_status()
+        payload = response.json()
+    entries = payload.get("serial-metadata-response", {}).get("entry", []) or []
+    normalized = []
+    for entry in entries:
+        homepage = None
+        for link in entry.get("link", []) or []:
+            if link.get("@ref") == "homepage":
+                homepage = link.get("@href") or None
+                break
+        subject_areas = [
+            {
+                "code": area.get("@code"),
+                "abbrev": area.get("@abbrev"),
+                "name": area.get("$"),
+            }
+            for area in entry.get("subject-area", []) or []
+        ]
+        normalized.append(
+            {
+                "title": entry.get("dc:title"),
+                "publisher": entry.get("dc:publisher"),
+                "issn": entry.get("prism:issn"),
+                "eissn": entry.get("prism:eIssn"),
+                "aggregation_type": entry.get("prism:aggregationType"),
+                "openaccess": entry.get("openaccess"),
+                "openaccess_type": entry.get("openaccessType"),
+                "coverage_start_year": entry.get("coverageStartYear"),
+                "coverage_end_year": entry.get("coverageEndYear"),
+                "subject_areas": subject_areas,
+                "homepage_url": homepage,
+                "source_id": entry.get("source-id"),
+                "scopus_url": entry.get("prism:url"),
+            }
+        )
+    return _ok(query=issn, items=normalized)
+
+
 async def _get_quota() -> dict:
     headers = _get_headers()
     # Use search endpoint for quota check
@@ -150,8 +193,11 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_query, message=str(exc))
 
     @server.tool()
-    async def get_abstract_details(eid: str, view: str = "META_ABS") -> dict:
-        """Get detailed abstract information for a Scopus document (by EID)."""
+    async def get_abstract_details(eid: str, view: str = "META") -> dict:
+        """Get detailed abstract information for a Scopus document (by EID).
+        Default view is META (unrestricted). Pass view='FULL'/'META_ABS' for more
+        complete data if your subscription supports it.
+        """
         normalized_eid = eid.strip()
         if not normalized_eid:
             return _err(query=eid, message="eid must not be empty")
@@ -182,6 +228,20 @@ def register(server: FastMCP) -> None:
             return await _search_authors(query=normalized_query, count=bounded, view=view)
         except Exception as exc:
             return _err(query=normalized_query, message=str(exc))
+
+    @server.tool()
+    async def get_serial_title(issn: str, view: str = "STANDARD") -> dict:
+        """Get journal/serial metadata (title, publisher, Open Access status, coverage
+        years, subject areas, homepage) by ISSN.
+        Default view is STANDARD (verified working with a basic subscription tier).
+        """
+        normalized_issn = issn.strip()
+        if not normalized_issn:
+            return _err(query=issn, message="issn must not be empty")
+        try:
+            return await _get_serial_title(issn=normalized_issn, view=view)
+        except Exception as exc:
+            return _err(query=normalized_issn, message=str(exc))
 
     @server.tool()
     async def get_quota_status() -> dict:

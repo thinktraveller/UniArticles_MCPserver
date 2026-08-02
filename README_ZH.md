@@ -154,12 +154,14 @@ python tests/verify_server.py
 - `get_abstract_details(eid, view)`: 获取详细摘要信息。
 - `get_author_profile(author_id, view)`: 获取作者档案。
 - `search_authors(query, count, view)`: 搜索作者。
+- `get_serial_title(issn, view)`: 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。
 - `get_quota_status()`: 检查 Elsevier API 配额（通过 Scopus 端点）。
 
 ### ScienceDirect
 - `search_sciencedirect(query, count, start, view)`: 搜索 ScienceDirect 记录。
 - `get_article_metadata(query, count, start, view)`: 搜索文章元数据。
 - `retrieve_article(identifier, identifier_type, view)`: 检索全文文章记录。
+- `get_article_objects(identifier, identifier_type, view)`: 获取某篇文章的配图/表格/补充材料的元信息（文件名、MIME 类型、对象类型、下载链接）。仅返回对象清单与链接，不下载二进制内容本身。
 
 ### ArXiv
 - `search_arxiv(query, max_results)`: 搜索论文。
