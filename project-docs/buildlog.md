@@ -137,3 +137,58 @@
 - **前置阻塞**：进入步骤 3～7 前，需先修复 `.venv` 中损坏的 `annotated_types`/`pydantic`（否则无法启动 MCP Server 或做真实 API 验证）。
 
 ---
+
+## Bug 修复记录（project-bugfix-cn）
+
+## [2026-08-02 21:46] 修复：本地 .venv 环境损坏（annotated_types/pydantic 含空字节，导致 mcp 无法导入）
+
+### 问题描述
+- 现象：`import mcp` 报 `SyntaxError: source code string cannot contain null bytes`，追溯调用链为 `mcp/types.py` → `from pydantic import ...` → `pydantic/fields.py` → `import annotated_types` → 加载 `annotated_types/__init__.py` 时触发。单独 `import pydantic` 不报错（因 pydantic 用 `__getattr__` 做懒加载，未触发到坏文件）。
+- 影响范围：`mcp` 包（FastMCP 来源）在本地 `.venv` 中完全无法导入，阻塞"真实启动 MCP Server / 真实调用 API"的验证工作；不影响已完成的步骤 1、2 中纯字符串/配置逻辑层面的验证（`config.py` 的验证是用隔离脚本单独跑的，未依赖 `mcp` 导入）。
+
+### 根本原因
+用 Python 直接读取受损文件的字节内容确认：`.venv/Lib/site-packages/annotated_types/__init__.py` 全文件 13819 字节中前 12288 字节（3 个 4096 字节的磁盘簇整数倍）全部是 `\x00` 空字节，从第 12288 字节起才是正常的 Python 源码文本；`pydantic/fields.py` 本身完好（0 个空字节），是它依赖的 `annotated_types` 被破坏导致间接失败。进一步扫描整个 `.venv/Lib/site-packages` 下的 1258 个 `.py` 文件，发现 **40 个文件**受到同样模式的破坏（均是从文件开头起、按 4096 字节磁盘簇整数倍长度被清零，之后内容正常），且分布在互不相关的多个包中（如 `annotated_types`、`adodbapi` 等），并非仅限于 `mcp`/`pydantic` 依赖链。这种"按磁盘簇边界整块清零、非纯软件逻辑错误"的模式是典型的**磁盘/文件系统层面写入中断或稀疏文件损坏特征**（例如安装过程中被中断、杀毒软件/同步工具介入、磁盘写入异常等），而不是某次 pip/uv 安装的包版本冲突或单一依赖问题——因此判断为 `.venv` 整体环境层面的损坏，而非代码或配置逻辑缺陷。
+
+### 修复方案
+1. 先尝试影响最小的方式：`uv sync`（按 `pyproject.toml`/`uv.lock` 重新同步依赖）。执行后复测 `import mcp` 仍报相同错误——因为 `uv sync` 只在包版本/依赖关系不满足时才会重新安装，对"版本号匹配但文件内容已损坏"的包不会重装，无法修复本问题。
+2. 改用 `uv sync --reinstall`（强制重新安装所有已解析的包，从 uv 缓存重新落盘覆盖现有文件，不改变 `pyproject.toml`/`uv.lock` 中除自身包版本号外的依赖解析结果）。执行后受损的 40 个文件全部被覆盖为正常内容（复扫确认 0 个文件含空字节）。未采用"删除整个 `.venv` 目录再重建"的更重方案，因为 `--reinstall` 已能达到同等修复效果且成本更低（复用本地/uv 缓存，未重新联网下载大体积依赖如 scipy/pandas，仅少量新包走了网络下载）。
+3. 修复过程完全未触碰项目根目录的 `.env`（真实凭据文件）——`.venv` 是虚拟环境目录，与 `.env` 是两个不同的文件/目录，修复前后用 `ls -la .env` 核对其修改时间未变化，确认未被误删或改动。
+
+### 变更文件
+- `D:\Demo\UniArticles_MCPserver\.venv\**`：虚拟环境内的第三方包文件被 `uv sync --reinstall` 重新落盘覆盖（`.venv` 已被 `.gitignore` 排除，不产生 git 变更，仅记录于此供后续排查参考）。
+- `D:\Demo\UniArticles_MCPserver\uv.lock`：`uniarticles-mcp` 自身条目的 `version` 字段从残留的旧值 `1.2.0` 更正为 `pyproject.toml` 中的当前值 `1.5.0`（`uv sync` 重新解析时的正常副作用，属于锁文件自我纠偏，未涉及其他依赖版本变化，已用 `git diff uv.lock` 核对确认）。
+
+### 验证方法
+- `.venv/Scripts/python.exe -c "import mcp; print(mcp.__file__)"` 成功导入并打印路径（此前报 `SyntaxError`）。
+- `.venv/Scripts/python.exe -c "import pydantic; from pydantic import BaseModel; print(pydantic.__version__)"` 成功，输出 `2.12.5`。
+- 对 `.venv/Lib/site-packages` 全量 `.py` 文件复扫空字节，确认 0 个文件仍含空字节（修复前为 40 个）。
+- 编写一次性验证脚本（存放于 scratchpad 临时目录，验证完已删除，未提交仓库）：`from uniarticles.server import create_server; server = create_server()`，成功构建 `FastMCP` 实例（`name="uniarticles-mcp"`），确认不仅是依赖能 import，项目自身的 `create_server()`（含 `register_all_sources()` 注册全部数据源工具）也能正常构建，不需要真正阻塞式运行进程即完成验证。
+- `git status --short` 确认 `.env` 未出现在变更列表中（`.venv` 被 gitignore，`.env` 本就应被 gitignore 排除且未受影响）。
+
+---
+
+## [2026-08-02 21:46] 修复：删除过时的 CHANGELOG.md，改由 buildlog.md 作为唯一变更记录
+
+### 问题描述
+- 现象：用户明确要求删除项目根目录的 `CHANGELOG.md`。该文件已过时——其历史内容已在 v2.0 构建步骤 1（commit `14dc8bd`）完整迁移至 `project-docs/buildlog.md` 的"历史记录"章节，迁移时已如实处理了 `[1.3.0]` 重复记录合并、`1.4.0`/`1.5.0` 缺失记录标注空白两个已知数据问题。
+- 说明：这与 `project-docs/project-plan.md` 步骤 1/6 中"`CHANGELOG.md` 继续保留、作为对外发布说明，与 `buildlog.md` 分工"的原设计不同——用户在本次修复中明确改变主意，要求直接删除 `CHANGELOG.md`，只保留 `buildlog.md` 作为唯一变更记录。按 bugfix 职责边界，本次**不修改** `project-docs/project-plan.md` 本身（该文件历史设计表述保持原样，如需正式变更设计应走 `project-planner-cn` 重新规划），仅执行用户对本次操作的直接指示。
+
+### 根本原因
+不适用（非代码缺陷，为用户主动要求的文档结构调整）。
+
+### 修复方案
+1. 直接删除 `D:\Demo\UniArticles_MCPserver\CHANGELOG.md`（git 保留历史，可通过 `git log -- CHANGELOG.md` 找回，非不可逆丢失）。
+2. 全仓库（尊重 `.gitignore`，即排除 `.venv` 等）搜索 `CHANGELOG`/`changelog`/"更新日志" 关键词，核对是否存在指向该文件的死链接：
+   - `README.md`、`README_ZH.md`、`tutorial/step_by_step_guide_zh.md`、`tutorial/step_by_step_guide_en.md`、`pyproject.toml`（含 `[project.urls]`）、`claude_desktop_config.example.json`：均无引用，无需改动。
+   - `project-docs/project-plan.md`：存在多处历史设计表述引用 `CHANGELOG.md`（步骤 1、2、6 等），但该文件是历史构建计划书快照，按职责边界 bugfix 不得修改，予以保留原样（不算需要清理的"死链接"，而是历史决策记录的一部分）。
+   - 项目根目录 `CLAUDE.md`（未纳入 git 跟踪，但属于会被 Claude Code 读取的项目说明文档）第 51 行原文写着"`buildlog.md`（distinct from the user-facing `CHANGELOG.md`, which is kept as the public release-notes file）"，属于会产生误导的过时引用，已同步更新为"`CHANGELOG.md` was removed; its history was merged into this file's 历史记录 section"。
+
+### 变更文件
+- `D:\Demo\UniArticles_MCPserver\CHANGELOG.md`：已删除。
+- `D:\Demo\UniArticles_MCPserver\CLAUDE.md`：第 51 行更新，移除对已删除 `CHANGELOG.md` 的过时引用（该文件未纳入 git 跟踪，此次为随手同步修正，不在正式提交范围内）。
+
+### 验证方法
+- `ls CHANGELOG.md` 返回 "No such file or directory"，确认已删除。
+- 用 ripgrep 对整个仓库（遵循 `.gitignore`）不限文件类型搜索 `CHANGELOG`（大小写不敏感），仅命中 `CLAUDE.md`（已修正）与 `project-docs/project-plan.md`（历史文档，按职责边界保留原样，已在上文说明原因），确认 `README.md`/`README_ZH.md`/教程文档/`pyproject.toml`/`claude_desktop_config.example.json` 均无死链接残留。
+
+---
