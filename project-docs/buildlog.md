@@ -268,3 +268,67 @@
 - 打包产物已就绪，等待用户本人执行发布（PyPI）。构建侧无待执行步骤。
 
 ---
+
+## Bug 修复记录（project-bugfix-cn）· 第二轮
+
+## [2026-08-02 23:41] 修复：Cherry Studio 真实端到端测试报 `MCP error -32000: Connection closed`
+
+### 问题描述
+- 现象：用户按测试指南在 Cherry Studio 中配置指向本地构建的 wheel（`dist/uniarticles_mcp-2.0.0-py3-none-any.whl`），通过 `uvx --from <wheel路径> uniarticles-mcp` 启动时，`mcp:list-tools` 报 `McpError: MCP error -32000: Connection closed`。
+- 影响范围：v2.0 发布前的真实端到端可用性（Cherry Studio/Claude Desktop 等真实客户端场景），不影响此前"直接在 `.venv` 里 import/`create_server()`"这类进程内验证——问题只在"全新隔离环境启动独立子进程 + 走真实 stdio 协议"时才会暴露。
+- README.md 中记录的旧版已知问题（指向 Cherry Studio issue #3264）经排查判断为**同名不同因**：本次经过详细复现，确认是两个新的具体根因（见下），与该 issue 描述的 uvx 缓存/网络类问题无关，不应归为同一个坑。
+
+### 复现过程（含已排除的假设）
+1. **确认 Cherry Studio 实际调用的二进制**：协调方提醒 Cherry Studio 自带打包的 `uv.exe`/`uvx.exe`（`C:\Users\joyjo\.cherrystudio\bin\`），并非系统 PATH 里的通用 uv。经核实 `which uv`/`which uvx` 在本机环境下解析到的正是同一路径（`.cherrystudio\bin\uv.exe`/`uvx.exe`，版本 `uv 0.6.6`），用 `md5sum` 核对两个 exe 与目录下唯一的 uv/uvx 二进制一致，**排除"用错 uv 版本导致误判"的可能**——本次全程复现使用的就是 Cherry Studio 真实调用的那个二进制。
+2. **直接命令行复现**（比通过 Cherry Studio 间接看报错更容易拿到真实堆栈）：`"C:\Users\joyjo\.cherrystudio\bin\uv.exe" tool run --from "<wheel路径>" uniarticles-mcp`，stdin 传空、分别捕获 stdout/stderr。**立即复现**：进程以退出码 1 崩溃，stderr 输出：
+   ```
+   ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+   ```
+3. **排除 sdist exclude 改动（commit `8524d2f`）的嫌疑**：用 `zipfile` 检查 wheel 内容，确认全部 9 个 `uniarticles/*.py` 模块完整存在；且 `pyproject.toml` 中 `[tool.hatch.build.targets.wheel]`（`packages = ["src/uniarticles"]`）与 `[tool.hatch.build.targets.sdist]`（`exclude = [...]`）是 hatchling 两个完全独立的构建目标配置，sdist 的 exclude 规则不影响 wheel 打包范围——**排除这一假设，纯属时间上的巧合**。
+
+### 根本原因（两个独立问题，均需修复才能让 `list_tools` 真正跑通）
+
+**根因 1：`mcp` 依赖未设版本上限，全新环境解析到破坏性的 `mcp==2.0.0`**
+- `pyproject.toml` 中 `dependencies` 一直写的是 `"mcp>=1.0.0"`（自项目最早版本起就没有上限），本地 `.venv`/`uv.lock` 因为已经锁定在 `mcp==1.26.0`（`uv sync --reinstall` 只按 `uv.lock` 复原已锁定的版本，不会重新解析），所以此前在 `.venv` 里 `import mcp`/`create_server()` 一直能成功，掩盖了这个问题。
+- 但 `uvx --from <wheel>` / `uv tool run --from <wheel>` 是**全新隔离环境**，不读取项目的 `uv.lock`，而是按 `pyproject.toml`（进而是 wheel 的 METADATA）里的版本约束**重新解析**——现在这个约束在 PyPI 上解析到了官方 `mcp` SDK 最新发布的 `2.0.0`（`Model Context Protocol SDK`，`modelcontextprotocol/python-sdk`），该版本把 `FastMCP` 类**重命名为 `MCPServer` 并从 `mcp.server.fastmcp` 迁移到了 `mcp.server.mcpserver`**（新模块结构下 `mcp/server/` 内已不存在 `fastmcp.py`/`fastmcp/` 这个路径），导致 `src/uniarticles/server.py` 第一行 `from mcp.server.fastmcp import FastMCP` 直接 `ModuleNotFoundError`，进程启动即崩溃，Cherry Studio 收到的就是子进程秒退后的 "Connection closed"。
+- 这不是本次 v2.0 改动（新工具/改默认 view/env 改名/sdist exclude）引入的新回归，而是**项目从建立起就存在的版本约束债务**（依赖声明从未设上限），只是恰好在本次做"全新隔离环境端到端测试"这一步才第一次被真正验证到，此前的验证方式（进程内 `.venv` 直接调用）从未覆盖到这条路径。
+
+**根因 2：`paperscraper` 库在 import 阶段把 Python root logger 劫持到 stdout，污染 JSON-RPC 协议帧**
+- 排查根因 1 后重新打包验证时，用真实 MCP 客户端（`mcp` SDK 的 `ClientSession`/`stdio_client`）连接子进程，同时分别捕获 stdout/stderr 发现：即便根因 1 修好、进程正常启动，**stdout 仍会被写入 4 行 `WARNING:paperscraper.load_dumps: ...` 文本**，尽早于任何工具调用发生——因为 `src/uniarticles/sources/paperscraper.py` 顶层 `from paperscraper.pubmed.pubmed import get_pubmed_papers` 会触发 `paperscraper` 包的 `__init__.py`/`load_dumps.py` 等模块的顶层代码执行，其中包含 `logging.basicConfig(stream=sys.stdout, level=logging.WARNING)`（`paperscraper` 库自身的设计，非本项目代码），把 Python **root logger** 抢先配置到了 stdout，此后 `load_dumps()` 内部用 root logger 打的 4 条 WARNING 日志全部流向 stdout。
+- 这正是 `project-docs/project-plan.md` 步骤 2 中反复强调的红线："MCP Server 通过 stdio 与客户端通信，任何写入 stdout 的内容都会破坏 JSON-RPC 协议帧"——这 4 行纯文本混入 stdout，会让客户端在等待 JSON-RPC 响应时读到非法内容，直接判定协议损坏并断开连接，同样会表现为 "Connection closed"。
+- 这是自 `[1.2.0]`（引入 paperscraper 集成）起就存在的**预置缺陷**，此前项目"真实 API 验证"的方式全部是进程内直接 `await` 调用工具函数或调用 `create_server()`，**从未真正跑通完整的子进程 + stdio + 独立捕获 stdout/stderr 这条端到端路径**，因此此前所有轮次的验证（含步骤 7 整体验证、此前两轮 bugfix）都没有触发/发现这个问题；本次是第一次做这种级别的端到端验证，才第一次真正暴露它。
+
+### 修复方案
+**修复 1**：`pyproject.toml` 的 `mcp` 依赖加上版本上限，`"mcp>=1.0.0"` → `"mcp>=1.0.0,<2.0.0"`，与本项目当前代码实际适配的 `mcp` 1.x API（`mcp.server.fastmcp.FastMCP`）保持一致；执行 `uv lock` 刷新锁文件的约束元数据（解析结果仍是已验证过的 `mcp==1.26.0`，无其他依赖变化）。未选择"升级代码适配 `mcp` 2.0 新的 `MCPServer` API"这一方案——那属于对 `mcp` 主版本升级的功能性适配，改动面大（服务端类名、工具注册方式等 API 差异未知，需要专门的验证工作），超出"最小化修复单个 bug"范畴，如未来需要升级到 `mcp` 2.x，应走 `project-planner-cn` 单独规划。
+
+**修复 2**：在 `src/uniarticles/__init__.py`（包的最顶层入口，保证在 `from .server import create_server` 触发任何数据源模块导入之前执行）新增：
+```python
+import logging
+import sys
+logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
+```
+放在 `from .server import create_server` 之前。原理：`logging.basicConfig()` 只有在 root logger **尚未配置任何 handler** 时才会真正生效（Python 官方文档行为），本项目抢先在任何第三方库导入之前完成 root logger 配置（指向 stderr），使得 `paperscraper` 自己内部那几处 `logging.basicConfig(stream=sys.stdout, ...)` 调用全部变成无操作（no-op），日志正确流向 stderr，不再污染 stdout。未修改 `paperscraper` 第三方包本身（那是 site-packages 里的库文件，改了也会在下次重装时丢失，不是我们能维护的代码）。
+
+**未修改项（复核后确认无需改动）**：
+- `config.py` 的 `_resolve_elsevier_api_key()` 弃用警告路径：本机 `.env` 仍用旧名 `SCOPUS_API_KEY`（值非空，32 字符），会触发 `warnings.warn(..., DeprecationWarning, ...)`；但 Python 默认警告过滤器对**非 `__main__` 模块**触发的 `DeprecationWarning`默认静默丢弃（该 `warnings.warn` 调用发生在 `uniarticles.config` 模块而非 `__main__`），因此这条警告在真实运行时**根本不会被打印**（既不到 stdout 也不到 stderr）。这不影响本次要修的 "Connection closed"（不打印反而更安全），也不是新问题，故不在本次改动范围内，仅记录在案供后续参考。
+- sdist exclude 规则（commit `8524d2f`）：已用 `zipfile` 核实 wheel 内容完整、不受影响，排除嫌疑，未做任何改动。
+
+### 变更文件
+- `D:\Demo\UniArticles_MCPserver\pyproject.toml`：`mcp` 依赖约束由 `>=1.0.0` 改为 `>=1.0.0,<2.0.0`。
+- `D:\Demo\UniArticles_MCPserver\uv.lock`：随 `uv lock` 刷新 `mcp` 约束元数据（解析版本仍为已验证的 `1.26.0`，无其他依赖变化）。
+- `D:\Demo\UniArticles_MCPserver\src\uniarticles\__init__.py`：新增顶层 `logging.basicConfig(stream=sys.stderr, ...)`，抢占 root logger 配置，防止 `paperscraper` 污染 stdout。
+- `D:\Demo\UniArticles_MCPserver\dist\*`：本地重新执行 `uv build` 生成新的 wheel/sdist（`dist/` 已被 `.gitignore` 排除，不产生 git 变更，仅记录供后续参考；版本号仍为 `2.0.0`，未升版——因为这是修复"打包配置/代码防御性写法"层面的 bug，不是功能变更，是否需要在正式发布前升到 `2.0.1` 由用户/`project-builder-cn` 决定）。
+
+### 验证方法
+1. 用 Cherry Studio 实际调用的二进制 `C:\Users\joyjo\.cherrystudio\bin\uv.exe`（已核实与 `which uv`/`which uvx` 解析结果一致，排除"用错二进制"疑虑）执行 `uv tool run --reinstall --from "<新 wheel>" uniarticles-mcp`，stdin 传空：**exit code 0**，**stdout 完全为空**（此前复现时是 `ModuleNotFoundError` 崩溃或 4 行 WARNING 文本），stderr 正常显示安装日志与 `WARNING:paperscraper.load_dumps: ...`（已正确改道 stderr）。
+2. **最终定论性验证**：编写一次性脚本（用本地 `.venv` 里的 `mcp` SDK 客户端 `mcp.client.stdio.stdio_client` + `ClientSession`），以与 Cherry Studio 完全相同的方式（`uv.exe tool run --from <wheel> uniarticles-mcp`）拉起子进程，真实走 MCP `initialize` 握手 + `list_tools()` 调用（而非只看进程有没有崩溃/stdout 干不干净）。结果：**成功返回 17 个工具**，含 v2.0 新增的 `get_serial_title`、`get_article_objects`，无 `Connection closed`、无协议错误。脚本验证完已删除，未提交仓库。
+3. 用 `uv cache clean uniarticles-mcp` 确认清掉了旧的（含 bug 版本代码的）ephemeral 工具环境缓存后重测，排除"改了代码但 uv 缓存复用了旧环境、看起来像修好了实际没修"的假阳性（`uv tool run --from <path>` 在未换版本号/未加 `--reinstall` 时确实存在复用旧缓存环境、不感知本地文件内容变化的行为，已记录在此提醒后续同类调试注意）。
+
+### 给用户的提醒（非代码改动，需人工确认）
+- 用户本机之前已经用 Cherry Studio 触发过一次失败的启动，Cherry Studio 内部的 uv 工具缓存中可能残留了旧的（仍会 `ModuleNotFoundError`）解析结果。**重新在 Cherry Studio 里测试前，建议先执行一次缓存清理**，否则可能因为缓存复用而看不到修复效果（并非修复无效）：
+  ```powershell
+  & "C:\Users\joyjo\.cherrystudio\bin\uv.exe" cache clean uniarticles-mcp
+  ```
+- README.md 中原有的"遇到 Connection closed 参考 Cherry Studio issue #3264"提示保持不变（未改动 README，超出本次 bugfix 最小改动范围；该提示描述的是另一类 uvx 缓存/网络问题，与本次两个根因不是同一件事，是否需要在 README 中补充本次这两类根因的说明，属于文档增补，建议后续走 `project-builder-cn`/用户决定是否需要）。
+
+---
