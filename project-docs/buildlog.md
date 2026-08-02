@@ -246,3 +246,25 @@
 - 用 ripgrep 对整个仓库（遵循 `.gitignore`）不限文件类型搜索 `CHANGELOG`（大小写不敏感），仅命中 `CLAUDE.md`（已修正）与 `project-docs/project-plan.md`（历史文档，按职责边界保留原样，已在上文说明原因），确认 `README.md`/`README_ZH.md`/教程文档/`pyproject.toml`/`claude_desktop_config.example.json` 均无死链接残留。
 
 ---
+
+## 打包发布准备（project-builder-cn）
+
+## [2026-08-02 22:55] v2.0.0 打包 + sdist exclude 收敛（仅打包，不发布）
+
+### 执行的任务
+- 用项目工具链 `uv build`（hatchling backend）打包出 `dist/uniarticles_mcp-2.0.0-py3-none-any.whl` 与 `dist/uniarticles_mcp-2.0.0.tar.gz`。**仅打包，未执行任何发布/上传动作**（`twine`/`uv publish` 均未触碰，发布由用户本人执行）。
+- 首次打包后发现 sdist 把内部研发文档也打了进去（`project-docs/`、`.claude/settings.local.json`、`CLAUDE.md`），据此给 `pyproject.toml` 增加 `[tool.hatch.build.targets.sdist]` 的 `exclude` 规则并重新打包。
+
+### 关键变更
+- `pyproject.toml`：新增 `[tool.hatch.build.targets.sdist]`，`exclude = ["/project-docs", "/.claude", "/CLAUDE.md", "/docs", "/.env"]`（gitignore 风格锚定 glob）。未改动 `[tool.hatch.build.targets.wheel]`（wheel 早已用 `packages = ["src/uniarticles"]` 限定范围，本无此问题）。
+- `dist/`（gitignore 排除，不入库）：重新生成 wheel + sdist。
+
+### 验证结果
+- 重新打包后 sdist 已不含 `CLAUDE.md`/`.claude`/`project-docs`/`docs`；wheel 未被误伤，仍含全部 9 个 `uniarticles/*.py` 模块（含 `scopus.py`/`sciencedirect.py`）。
+- 版本号仍为 2.0.0（pyproject / wheel 文件名 / sdist 文件名 / METADATA 一致）。
+- **安全项**：`.env`（真实凭据）在 wheel 与 sdist 中均确认无泄漏（本就被 `.gitignore` 排除，exclude 再加双保险）；`docs/elsevier-documentation/` 等内部调研资料本已被 `.gitignore` 排除、未进任何产物，exclude 中同样列入做双保险。
+
+### 下一步计划
+- 打包产物已就绪，等待用户本人执行发布（PyPI）。构建侧无待执行步骤。
+
+---
