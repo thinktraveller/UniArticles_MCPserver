@@ -13,6 +13,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 2. 新增 Object Retrieval（图表/补充材料获取）MCP 工具：给定文献标识符（DOI/PII/EID/PubMed ID），返回该文献关联的图片、表格、视频、补充材料等对象的元信息（文件名、mimetype、类型、下载链接）。
 3. 两项新工具均以当前 SCOPUS_API_KEY 在真实调用中验证通过（HTTP 200）为前提落地，不实现已实测确认不可用或未经许可访问的功能。
 4. 明确记录并对外暴露"哪些 Elsevier 能力当前订阅不支持"，避免用户误以为 MCP Server 支持了实际调不通的功能。
+5.（v2.1.0，QA-R003）基于用户在真实 Cherry Studio 环境下对已发布 v2.0（2.0.1）全部 17 个工具的一轮完整实测（11 可用/6 不可用，见 `docs/调用错误分析报告.md`），删除 6 个确认不可用或超出产品定位的工具——`downloadPaper`、`searchAuthors`、`getAuthorProfile`、`searchSciencedirect`、`getArticleMetadata`、`searchScholarPapers`——将 MCP Server 收窄为 11 个稳定可用工具；同步修正 README.md / README_ZH.md 对 Elsevier Key 资质要求的描述，使其准确反映"非商业/无机构资质的基础 Elsevier Key 即可让删减后的全部剩余功能正常工作"这一实测结论，不做无实测依据的营销式表述。
 
 ## 目标用户
 使用 Claude Desktop / Cherry Studio 等 LLM 客户端、通过 UniArticles MCP Server 检索学术文献的科研人员/学生，且其机构订阅了基础级别的 Elsevier Scopus/ScienceDirect API 访问权限（非商业性质 Key，无 Insttoken）。
@@ -28,12 +29,29 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 3. 两项工具均遵循项目现有的 `_ok`/`_err` 统一响应结构，并有对应的空值/异常处理（无权限、未找到等情况返回清晰的 `error` 信息而非抛出未捕获异常）。
 4. `docs/elsevier-documentation` 对照出的"实测不可用"清单（Affiliation Retrieval/Search、Citation Overview/Count、Article Entitlement、SciVal、Embase、Engineering Village、Nonserial Title）均未被纳入 v2.0 代码改动。
 5. 项目内文档（如 README 或后续构建计划书）清晰说明这两项新工具的权限前提，避免使用了更高订阅等级 Key 的用户误以为功能上限止步于此。
+6.（v2.1.0，QA-R003）`downloadPaper`、`searchAuthors`、`getAuthorProfile`、`searchSciencedirect`、`getArticleMetadata`、`searchScholarPapers` 六个工具对应的 `@server.tool()` 注册、私有实现函数、以及 `arxiv.py`/`scopus.py`/`sciencedirect.py`/`paperscraper.py` 中不再被引用的辅助代码被完整移除，仓库内（含测试、README 工具清单）不再残留对这 6 个工具名的引用。
+7.（v2.1.0，QA-R003）删除后 MCP Server 实际注册的工具数量为 11 个，README.md / README_ZH.md 中的工具清单、表格、计数与代码实际注册的工具一一对应，不再出现"文档写了但代码没有/代码有但文档没写"的不一致。
+8.（v2.1.0，QA-R003）README.md / README_ZH.md 中 Elsevier Key 的说明段落不再包含"您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key，亦无法使用相关功能"这类与实测结论相悖的表述，改为准确反映实测结论：非商业、无机构资质的基础 Elsevier Key 可在 Elsevier Developer Portal 个人免费申请，且能让删减后的全部 11 个工具正常工作；改写内容不超出实测证据范围，不新增未经验证的申请步骤/链接/承诺。
+9.（v2.1.0，QA-R003）`pyproject.toml` 版本号更新为 `2.1.0`，`project-docs/buildlog.md` 记录本轮变更（工具删除 + README 修正）。
 
 ## 范围界定
 ### 包含
 - **Serial Title（期刊信息查询）**：接入 `content/serial/title/issn/{issn}`，实测 HTTP 200 可用，加入 `scopus.py`（或新建期刊相关模块，具体归属由后续构建计划书决定）。
 - **Object Retrieval（图表/补充材料获取）**：接入 `content/object/{identifier_type}/{id}`，实测 HTTP 200 可用，加入 `sciencedirect.py`（或新建模块）。
 - 以上两项对应的新 MCP 工具注册、参数校验、错误处理，遵循现有 `scopus.py`/`sciencedirect.py` 的代码风格（`_ok`/`_err`/`_get_headers` 等既有模式）。
+- **（v2.1.0，QA-R003）删除以下 6 个已发布工具的代码与文档引用**，依据是用户在真实 Cherry Studio 环境下对 v2.0（2.0.1）全部 17 个工具的实测结果（`docs/调用错误分析报告.md`）+ 用户明确指示：
+
+| 工具 | 所在文件 | 不可用/排除原因（用户确认） |
+|---|---|---|
+| `downloadPaper` | `src/uniarticles/sources/arxiv.py` | 代码层 AttributeError（`arxiv` 库 API 不兼容）；且用户明确将下载类功能排除出"以查询为主"的产品定位，即便修复也不恢复 |
+| `searchAuthors` | `src/uniarticles/sources/scopus.py` | 实测 HTTP 401，用户确认为 Elsevier API Key 权限问题 |
+| `getAuthorProfile` | `src/uniarticles/sources/scopus.py` | 实测 HTTP 401，用户确认为 Elsevier API Key 权限问题 |
+| `searchSciencedirect` | `src/uniarticles/sources/sciencedirect.py` | 实测 HTTP 401，用户确认为 Elsevier API Key 权限问题 |
+| `getArticleMetadata` | `src/uniarticles/sources/sciencedirect.py` | 实测 HTTP 401，用户确认为 Elsevier API Key 权限问题 |
+| `searchScholarPapers` | `src/uniarticles/sources/paperscraper.py` | 实测请求超时，用户确认为网络访问受限（非权限问题） |
+
+- **（v2.1.0，QA-R003）同步修改 README.md / README_ZH.md**：(1) Elsevier Key 资质要求说明段落，改为准确反映"非商业/无机构资质的基础 Key 即可让删减后的全部 11 个剩余工具正常工作"，并说明可在 Elsevier Developer Portal 个人免费申请；(2) 工具清单/表格/计数从 17 个同步更新为 11 个，覆盖 ArXiv(4)/Scopus(3)/ScienceDirect(2)/PubMed(1)/系统(1)。
+- **（v2.1.0，QA-R003）`pyproject.toml` 版本号提升为 `2.1.0`**，`project-docs/buildlog.md` 记录本轮变更。
 
 ### 排除
 | 功能 | 排除原因 |
@@ -54,6 +72,10 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - 该订阅等级下，Scopus Search 的 `COMPLETE` 视图也会返回 401（实测确认），意味着账号整体权限受限，不止是本次新增的两项功能。
 - 遗留风险（非本次 v2.0 范围改动，但需在后续构建计划书中知悉）：现有 `get_abstract_details` 默认 `view=META_ABS`、`retrieve_article` 默认 `view=META_ABS`，这两个默认 view 在 Elsevier 文档中被标记为需要机构订阅/entitlement 的受限视图，当前账号权限下调用可能拿不到完整内容。是否在 v2.0 中一并调整默认 view 或增加权限不足时的降级提示，留待构建计划阶段评估。
 - 若未来用户订阅等级提升（获得机构订阅/商业 Key/Insttoken），本文档"排除"清单中的功能可重新评估纳入，无需重新走一遍可行性摸底——已有的实测方法（临时脚本探测真实端点）可复用。
+- **（v2.1.0，QA-R003）`downloadPaper` 的删除是产品定位性约束，非临时性技术债**：即便未来 `arxiv` 库的 `AttributeError` 被修复，也不应仅因为"代码能跑了"就自动恢复该工具；如果要重新引入下载能力，需要作为一次新的、独立的目标澄清（说明为什么下载功能重新符合产品定位），而不是顺带恢复。
+- **（v2.1.0，QA-R003）`searchScholarPapers` 的删除原因是用户确认的网络访问受限**（不是 Elsevier API Key 权限问题），与其余 5 个工具的删除原因（`downloadPaper` 除外）不同，特此分开记录，避免后续误将其归因为"权限不足"。
+- **（v2.1.0，QA-R003）本轮目标（工具删除 + README 修正）对应的发布版本号为 `2.1.0`**（当前 `pyproject.toml` 为 `2.0.1`），采用新增功能/范围调整级别的版本号而非 patch 号，因为该变更包含移除已发布公开工具接口这一对使用者可见的破坏性变更。
+- **（v2.1.0，QA-R003）执行分工**：本 agent（project-creator-cn）仅负责将上述决策写入本文档；实际的代码删除（`arxiv.py`/`scopus.py`/`sciencedirect.py`/`paperscraper.py` 及对应测试）与 README.md/README_ZH.md 文案修改，需要移交给 `project-planner-cn` 制定构建计划书，再由 `project-builder-cn` 落地执行并更新 `project-docs/buildlog.md`。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -164,7 +186,31 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - 核心目标 / 目标用户 / 期望成果 / 成功标准 / 范围界定（包含/排除） / 约束条件
   <!-- GOAL-QA-R002-END -->
 
+### QA-R003：真实环境全量实测后的工具范围收缩与 README 准确性修正
+<!-- GOAL-QA-R003-START -->
+- **提问时间**：2026-08-03 13:44
+- **提问目的**：v2.0（2.0.1）发布后，用户在真实 Cherry Studio 环境下用同一枚基础/非商业 Elsevier Key，对全部 17 个已发布工具做了一轮完整可用性实测（报告见 `docs/调用错误分析报告.md`），结果 11 个可用、6 个不可用。用户明确要求：不论不可用原因是网络问题还是权限不足，一律舍弃这 6 个工具（并额外舍弃 `downloadPaper`，理由是下载类功能不属于"以查询为主"的产品定位）；同时修改 README，准确说明"非商业 Elsevier Key 即可让删减后的全部剩余功能正常工作"。这是对已发布 v2.0 范围的一次事后收缩，需要正式记录决策来源（用户实测报告 + 用户明确指示），并核实报告中哪些结论是实测事实、哪些是该次会话自行推测、不应直接采信。
+- **问题列表**
+  1. 确认删除范围＝以下 6 个工具全部删除、不做保留、不做"面向未来订阅升级/未来修复 bug 的预留代码"：`downloadPaper`（arxiv 库 API 不兼容，AttributeError）、`searchAuthors`（Scopus，401）、`getAuthorProfile`（Scopus，401）、`searchSciencedirect`（ScienceDirect，401）、`getArticleMetadata`（ScienceDirect，401）、`searchScholarPapers`（Google Scholar，请求超时）——是否认可这个范围，且 `downloadPaper` 是"产品定位性排除"（即便未来有人修好那个 AttributeError，也不因此恢复，因为下载不在查询类 MCP 的范围内），而非单纯的技术 bug 待修？
+  2. 需要向你指出两处疑点供你复核（但不影响默认执行删除的决定）：(a) `searchAuthors`/`getAuthorProfile`（401）与本项目 goal.md 此前 QA-R002 实测记录的 Affiliation Retrieval/Search（同为 401 AUTHORIZATION_ERROR）、以及 Scopus Search 的 COMPLETE view（同为 401）属于同一账号权限受限模式，可信度较高，不像偶发；`searchSciencedirect`/`getArticleMetadata`（401）也是同类模式。(b) `searchScholarPapers` 的"请求超时"证据强度相对更弱——超时可能是网络抖动/反爬/单次偶发，而不是结构性不可用，且本项目 buildlog.md 历史记录（[1.3.0]）显示 Google Scholar 一直被标注为"实验性、连通性不稳定"。是否仍按你原话，对 (a)(b) 一视同仁全部删除，不做"保留 searchScholarPapers 但加更强的不稳定警告"这类折中？另外报告中对 401 根因的具体解释（如"需联系机构管理员升级""需要机构订阅"）是撰写该报告的另一会话在未查看本项目代码/goal.md 前提下的推测，我不会把这些具体归因原文写入 goal.md，只记录客观现象（HTTP 状态码/超时），是否同意这个处理方式？
+  3. README 修改范围：除了 Elsevier Key 资质要求的说明段落外，README.md/README_ZH.md 中列举 17 个工具的清单/表格、工具计数等处是否也要同步改为 11 个工具（预期是必然联动），是否还有其他你希望一并核实准确性的措辞？是否需要在 goal.md 里指定这次改动对应的具体版本号（当前 `pyproject.toml` 为 2.0.1），还是版本号交给后续 project-planner-cn/project-builder-cn 决定？
+- **用户回答**
+  1. 是的
+  2. 一视同仁，全部删除，Googlescholar就是单纯网络受限用不了，Elsevier相关的删除都是apikey的权限问题
+  3. README同步改动，版本号提升为2.1.0
+- **提炼结论**
+  - 用户确认删除范围＝以下 6 个工具，全部删除，不保留，不做"面向未来订阅升级/未来修复 bug 的预留代码"：`downloadPaper`（arxiv 库 API 不兼容，AttributeError）、`searchAuthors`（Scopus，401）、`getAuthorProfile`（Scopus，401）、`searchSciencedirect`（ScienceDirect，401）、`getArticleMetadata`（ScienceDirect，401）、`searchScholarPapers`（Google Scholar，请求超时）。
+  - `downloadPaper` 明确为**产品定位性排除**：即便未来该 `AttributeError` 被修好，也不因此恢复，因为下载类功能不属于"以查询为主"的 MCP 产品定位，这是范围收缩而非技术债待还。
+  - 用户对疑点 (a)(b) 均确认"一视同仁，全部删除"，并补充了比该会话此前判断更明确的归因：`searchScholarPapers` 的不可用，用户确认是**单纯的网络访问受限**（而非该会话所猜测的"可能是偶发抖动"），态度是确定性的不可用，只是归因方式和该会话此前的"证据强度较弱、疑似偶发"判断不同——用户判断是网络层面确定受限，删除决策本身不受此差异影响。4 个 Elsevier 401（`searchAuthors`/`getAuthorProfile`/`searchSciencedirect`/`getArticleMetadata`）用户确认是 **API Key 权限问题**，与本文档 QA-R002 实测记录的 Affiliation Retrieval/Search（401）、Scopus Search COMPLETE view（401）属于同一账号权限受限模式，判断一致。
+  - 报告 `docs/调用错误分析报告.md` 中对 401 根因的具体推测性表述（如"需联系机构管理员升级""需要机构订阅"）不作为 goal.md 的定论收录，goal.md 只记录客观现象（HTTP 状态码/请求超时）与用户本人的归因判断。
+  - README.md / README_ZH.md 需要同步修改：(1) Elsevier Key 资质要求说明段落，改为准确反映"非商业/无机构资质的基础 Key 即可让删减后的全部 11 个剩余工具正常工作"；(2) 工具清单/表格/计数从 17 个同步改为 11 个（`docs/调用错误分析报告.md` 已给出清晰的可用/不可用工具分类，可直接作为改写依据）。
+  - 版本号明确定为 **2.1.0**（新增功能/范围调整级别的版本号，而非 2.0.2 这类纯 patch 号），因为这次改动同时包含"移除已发布的公开工具接口"（对使用者是破坏性/范围性变更）和"文档准确性修正"，用 2.0.x patch 号不足以体现变更性质。
+  - 用户明确认可本 agent（project-creator-cn）提出的分工：本轮由 project-creator-cn 完成 goal.md 的目标记录；实际的代码删除（`src/uniarticles/sources/arxiv.py`、`scopus.py`、`sciencedirect.py`、`paperscraper.py` 中对应函数及其 `@server.tool()` 注册、相关测试）与 README.md/README_ZH.md 文案修改，移交给 project-planner-cn 制定构建计划书、再由 project-builder-cn 落地执行，本 agent 不直接改动这些文件。
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定（包含/排除） / 成功标准 / 约束条件
+  <!-- GOAL-QA-R003-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
-[其他重要信息]
+- （v2.1.0，QA-R003，2026-08-03）目标澄清已完成，用户确认无需继续追问。下一步建议调用 `project-planner-cn` 基于本文档制定构建计划书，覆盖两块工作：① 删除 6 个工具（`downloadPaper`/`searchAuthors`/`getAuthorProfile`/`searchSciencedirect`/`getArticleMetadata`/`searchScholarPapers`）的代码、注册与测试引用；② 同步修改 README.md / README_ZH.md 的 Elsevier Key 说明与工具清单。目标发布版本号为 `2.1.0`，构建计划书应涵盖 `pyproject.toml` 版本号更新与 `project-docs/buildlog.md` 变更记录，再交由 `project-builder-cn` 落地执行。
