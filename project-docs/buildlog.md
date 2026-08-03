@@ -474,3 +474,19 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 待用户决定是否发布 2.1.0 到 PyPI（`uv publish`，由用户手动执行）；如需处理 README 简介中残留的 "Google Scholar" 提及与 `tests/` 目录描述失真，建议作为独立事项走 `project-planner-cn` 圈定范围后再执行。
 
 ---
+
+### 补充清理：README 简介 Google Scholar 提及 + tests/ 目录描述失真 —— 完成于 2026-08-03 14:34
+
+对 commit `0c70b07`（v2.1.0 范围收缩）遗留的两处范围外事项做补充清理，经用户明确授权，本次授权范围仅限这两处 README 修正，未牵连其他章节。
+
+- **遗留事项 1（Google Scholar 简介提及）**：`search_scholar_papers` 已在 v2.1.0 删除（网络访问受限），但两版 README 简介首段仍将 "Google Scholar" 列为集成的文献 API。已删除该提及，与已改过的 Features/功能特性、Available Tools/可用工具列表保持一致。PubMed 仍保留（`search_pubmed_papers` 未删）。
+  - `README.md` 第 12 行：`literature APIs (**PubMed**, **Google Scholar**)` → `literature APIs (**PubMed**)`。
+  - `README_ZH.md` 第 12 行：`文献 API（**PubMed**, **Google Scholar**）` → `文献 API（**PubMed**）`。
+- **遗留事项 2（tests/ 目录描述失真）**：实际核实项目根目录**不存在** `tests/` 目录，全项目也无 `verify_server.py`（仅 `.venv` 第三方包内有测试文件）。原 README 的 `python -m unittest discover tests`、`python tests/verify_server.py` 两条命令均会直接失败，属凭空描述。已按实际情况修正，未臆造 tests/ 目录：
+  - 项目结构代码块删除 `tests/  # Integration and verification tests` / `tests/  # 集成与验证测试` 一行。
+  - "Testing / 测试" 小节整体替换为 "Verifying the Installation / 验证安装"，改为实测可用的验证方式——通过 `uv run uniarticles-mcp` 或 `python -m uniarticles` 启动服务（stdio 传输，启动成功后静默等待客户端 JSON-RPC 输入，无导入/配置报错即安装正常）。该方式已用本地 `.venv` 实测 `create_server()` 可正常构建 `FastMCP` 实例。
+- **涉及文件**：`README.md`、`README_ZH.md`。
+- **验证结果**：两版 README 全文检索 `Google Scholar` / `tests/` / `unittest` / `verify_server` 均零残留。
+- **下一步计划**：重新打包 2.1.0（清 dist 后 `uv build`），复核 sdist exclude 规则仍生效，供用户手动 `uv publish` 发布（发布由用户执行，不代为操作）。
+
+---

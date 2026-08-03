@@ -9,7 +9,7 @@
 
 ## Overview
 
-UniArticles(亿文通) is a unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**) and literature APIs (**PubMed**, **Google Scholar**) into a single, standardized API for LLM agents (like Claude).
+UniArticles(亿文通) is a unified academic literature retrieval server implementing the Model Context Protocol (MCP). Integrates multiple scholarly databases (**Scopus**, **ArXiv**) and literature APIs (**PubMed**) into a single, standardized API for LLM agents (like Claude).
           
 ## Features
 
@@ -129,23 +129,20 @@ src/
         ├── paperscraper.py
         ├── scopus.py
         └── ...
-tests/                   # Integration and verification tests
 pyproject.toml           # Project metadata and dependencies
 ```
 
-#### Testing
+#### Verifying the Installation
 
-Run automated integration tests:
-
-```bash
-python -m unittest discover tests
-```
-
-Verify MCP protocol handshake:
+This project does not ship a separate test suite; verify the installation by launching the server. It communicates over stdio, so on a successful start it stays running and waits silently for JSON-RPC input from a client (press `Ctrl+C` to exit):
 
 ```bash
-python tests/verify_server.py
+uv run uniarticles-mcp     # if installed via uv
+# or
+python -m uniarticles      # if installed via pip
 ```
+
+If the process starts without import or configuration errors, the installation is working.
 
 ## Available Tools
 

@@ -9,7 +9,7 @@
 
 ## 总览
 
-亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**）和文献 API（**PubMed**, **Google Scholar**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
+亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**）和文献 API（**PubMed**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
 
 ## 功能特性
 
@@ -127,23 +127,20 @@ src/
         ├── paperscraper.py
         ├── scopus.py
         └── ...
-tests/                   # 集成与验证测试
 pyproject.toml           # 项目元数据与依赖
 ```
 
-#### 测试
+#### 验证安装
 
-运行自动化集成测试:
-
-```bash
-python -m unittest discover tests
-```
-
-验证 MCP 协议握手:
+本项目未附带独立的测试套件；请通过启动服务来验证安装是否成功。服务通过 stdio 通信，启动成功后会保持运行并静默等待客户端发来的 JSON-RPC 输入（按 `Ctrl+C` 退出）：
 
 ```bash
-python tests/verify_server.py
+uv run uniarticles-mcp     # 使用 uv 安装时
+# 或
+python -m uniarticles      # 使用 pip 安装时
 ```
+
+若进程启动过程中没有出现导入或配置错误，即表示安装正常。
 
 ## 可用工具列表
 
