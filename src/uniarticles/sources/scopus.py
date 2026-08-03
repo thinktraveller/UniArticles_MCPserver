@@ -29,6 +29,38 @@ def _err(query: str, message: str) -> dict:
     }
 
 
+def _as_list(value) -> list:
+    """Elsevier returns a single object (dict) when there is one element and a
+    list when there are several; coerce to a list for uniform iteration."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _author_name(author: dict) -> str | None:
+    """Extract a readable author name from a Scopus abstract author object,
+    tolerating the several shapes Elsevier uses."""
+    if not isinstance(author, dict):
+        return None
+    for key in ("ce:indexed-name", "$"):
+        name = author.get(key)
+        if name:
+            return name
+    preferred = author.get("preferred-name")
+    if isinstance(preferred, dict):
+        for key in ("ce:indexed-name", "$"):
+            name = preferred.get(key)
+            if name:
+                return name
+    surname = author.get("ce:surname")
+    given = author.get("ce:given-name")
+    if surname or given:
+        return " ".join(p for p in (surname, given) if p)
+    return None
+
+
 def _get_headers() -> dict[str, str]:
     api_key = settings.elsevier_api_key
     if not api_key:
@@ -79,7 +111,57 @@ async def _get_abstract(eid: str, view: str) -> dict:
     async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
         response = await client.get(url, params={"view": view})
         response.raise_for_status()
-        return _ok(query=eid, items=[response.json()])
+        payload = response.json()
+    # Field structure confirmed by real probe (step 14, view=META): root
+    # `abstracts-retrieval-response` has `coredata` (dict) + `affiliation` (list);
+    # authors live under `coredata.dc:creator.author`. META does not include the
+    # abstract body (`dc:description`); higher views (FULL) may add it.
+    response_root = payload.get("abstracts-retrieval-response", {}) or {}
+    coredata = response_root.get("coredata", {}) or {}
+
+    creator = coredata.get("dc:creator")
+    author_objs: list = []
+    if isinstance(creator, dict):
+        author_objs = _as_list(creator.get("author"))
+    elif isinstance(creator, list):
+        author_objs = creator
+    authors = [name for name in (_author_name(a) for a in author_objs) if name]
+
+    affiliations = [
+        {
+            "name": aff.get("affilname"),
+            "city": aff.get("affiliation-city"),
+            "country": aff.get("affiliation-country"),
+        }
+        for aff in _as_list(response_root.get("affiliation"))
+        if isinstance(aff, dict)
+    ]
+
+    # `dc:description` only present in richer views; include it when available.
+    abstract_text = coredata.get("dc:description")
+
+    normalized = {
+        "title": coredata.get("dc:title"),
+        "eid": coredata.get("eid"),
+        "doi": coredata.get("prism:doi"),
+        "scopus_id": coredata.get("dc:identifier"),
+        "publication_name": coredata.get("prism:publicationName"),
+        "issn": coredata.get("prism:issn"),
+        "aggregation_type": coredata.get("prism:aggregationType"),
+        "document_type": coredata.get("subtypeDescription"),
+        "cover_date": coredata.get("prism:coverDate"),
+        "volume": coredata.get("prism:volume"),
+        "issue": coredata.get("prism:issueIdentifier"),
+        "page_range": coredata.get("prism:pageRange"),
+        "cited_by_count": coredata.get("citedby-count"),
+        "publisher": coredata.get("dc:publisher"),
+        "openaccess": coredata.get("openaccess"),
+        "abstract": abstract_text,
+        "authors": authors,
+        "affiliations": affiliations,
+        "scopus_url": coredata.get("prism:url"),
+    }
+    return _ok(query=eid, items=[normalized])
 
 
 async def _get_serial_title(issn: str, view: str) -> dict:
@@ -144,7 +226,7 @@ async def _get_quota() -> dict:
 
 def register(server: FastMCP) -> None:
     @server.tool()
-    async def search_scopus(query: str, count: int = 5, sort: str = "coverDate", view: str = "STANDARD") -> dict:
+    async def scopus_document_search_by_query(query: str, count: int = 5, sort: str = "coverDate", view: str = "STANDARD") -> dict:
         """Search for documents in Scopus using a query string."""
         normalized_query = query.strip()
         bounded = max(1, min(count, 25))
@@ -156,10 +238,12 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_query, message=str(exc))
 
     @server.tool()
-    async def get_abstract_details(eid: str, view: str = "META") -> dict:
+    async def scopus_abstract_detail_by_eid(eid: str, view: str = "META") -> dict:
         """Get detailed abstract information for a Scopus document (by EID).
-        Default view is META (unrestricted). Pass view='FULL'/'META_ABS' for more
-        complete data if your subscription supports it.
+        Returns a normalized record (title, authors, affiliations, journal,
+        identifiers, etc.). Default view is META (unrestricted); the abstract
+        body is only populated under richer views such as FULL/META_ABS if your
+        subscription supports them.
         """
         normalized_eid = eid.strip()
         if not normalized_eid:
@@ -170,7 +254,7 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_eid, message=str(exc))
 
     @server.tool()
-    async def get_serial_title(issn: str, view: str = "STANDARD") -> dict:
+    async def scopus_serial_title_by_issn(issn: str, view: str = "STANDARD") -> dict:
         """Get journal/serial metadata (title, publisher, Open Access status, coverage
         years, subject areas, homepage) by ISSN.
         Default view is STANDARD (verified working with a basic subscription tier).
@@ -184,8 +268,8 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_issn, message=str(exc))
 
     @server.tool()
-    async def get_quota_status() -> dict:
-        """Check current Elsevier API quota status (via Scopus endpoint)."""
+    async def scopus_api_usage_status() -> dict:
+        """Check current Elsevier API usage/rate-limit status (via Scopus endpoint)."""
         try:
             return await _get_quota()
         except Exception as exc:

@@ -46,7 +46,7 @@ def _search_pubmed(query: str, max_results: int) -> dict:
 
 def register(server: FastMCP) -> None:
     @server.tool()
-    async def search_pubmed_papers(query: str, max_results: int = 10) -> dict:
+    async def pubmed_paper_search_by_query(query: str, max_results: int = 10) -> dict:
         """Search for papers in PubMed using a query string and return normalized results."""
         normalized_query = query.strip()
         bounded = max(1, min(max_results, 9998))

@@ -1,7 +1,31 @@
 import asyncio
+import re
 
 import arxiv
 from mcp.server.fastmcp import FastMCP
+
+
+# arXiv official category codes: a lowercase archive (optionally hyphenated, e.g.
+# "astro-ph", "cond-mat", "q-bio") optionally followed by a "." and a subcategory
+# (letters, optionally hyphenated, e.g. "AI", "optics", "acc-ph", "stat-mech").
+# See https://arxiv.org/category_taxonomy for the authoritative list.
+_ARXIV_CATEGORY_RE = re.compile(r"^[a-z][a-z-]*(\.[A-Za-z][A-Za-z-]*)?$")
+
+
+def _build_category_query(category: str) -> str:
+    """Turn a comma-separated list of arXiv category codes into arXiv's official
+    ``cat:`` query syntax, e.g. ``'cs.AI,cs.LG' -> 'cat:cs.AI OR cat:cs.LG'``.
+
+    Raises ValueError on empty input or a malformed category code (so the tool
+    layer can return a clear _err instead of forwarding a confusing remote error).
+    """
+    parts = [c.strip() for c in category.split(",") if c.strip()]
+    if not parts:
+        raise ValueError("category must not be empty")
+    for part in parts:
+        if not _ARXIV_CATEGORY_RE.match(part):
+            raise ValueError(f"invalid arXiv category code: {part!r}")
+    return " OR ".join(f"cat:{p}" for p in parts)
 
 
 def _ok(query: str, items: list[dict]) -> dict:
@@ -63,7 +87,7 @@ def _get_paper_details(paper_id: str) -> dict:
 
 def register(server: FastMCP) -> None:
     @server.tool()
-    async def search_arxiv(query: str, max_results: int = 10) -> dict:
+    async def arxiv_paper_search_by_query(query: str, max_results: int = 10) -> dict:
         """Search for papers in ArXiv using a query string."""
         normalized_query = query.strip()
         bounded = max(1, min(max_results, 25))
@@ -75,25 +99,22 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_query, message=str(exc))
 
     @server.tool()
-    async def list_papers(max_results: int = 10) -> dict:
-        """List recent papers from ArXiv (defaults to CS category if no query specified)."""
-        # Since 'list' implies no specific query, we might need a default query.
-        # However, arxiv API requires a query or id_list.
-        # We'll use a broad query like "cat:cs.AI" or just "all" but "all" is too broad.
-        # Let's use "electron" or similar, or just allow user to pass query in search_paper.
-        # But if the user wants "list_papers", maybe they mean "list papers I have downloaded"?
-        # Or "list recent papers"?
-        # Given the context of "original arxiv-mcp", list_papers likely lists papers based on some criteria.
-        # I will default to a broad category search or similar. 
-        # Actually, let's just search for "cat:cs.AI" as a default example, or error if no concept of 'list' exists without query.
-        # Better: Search for most recent papers in general? "all" might work with limit.
+    async def arxiv_latest_paper_list_by_category(category: str, max_results: int = 10) -> dict:
+        """List the most recently submitted arXiv papers in a given category
+        (e.g. 'cs.AI'). Multiple categories may be comma-separated (e.g.
+        'cs.AI,cs.LG'). Uses arXiv's official `cat:` query syntax."""
+        bounded = max(1, min(max_results, 25))
         try:
-            return await asyncio.to_thread(_run_arxiv_search, "all", max_results)
+            category_query = _build_category_query(category)
+        except ValueError as exc:
+            return _err(query=category, message=str(exc))
+        try:
+            return await asyncio.to_thread(_run_arxiv_search, category_query, bounded)
         except Exception as exc:
-            return _err(query="list_papers", message=str(exc))
+            return _err(query=category, message=str(exc))
 
     @server.tool()
-    async def read_paper(paper_id: str) -> dict:
+    async def arxiv_paper_detail_by_id(paper_id: str) -> dict:
         """Get detailed information (abstract/metadata) for a specific ArXiv paper."""
         normalized_id = paper_id.strip()
         if not normalized_id:

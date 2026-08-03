@@ -502,4 +502,50 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **本步骤独立先行执行**，与步骤 15（arxiv.py 改名 + `list_papers` 功能补全）分开操作，避免两类改动混在一次编辑中难以定位。
 - **验证结果**：`src/*.py` 全局搜索确认 `search_paper` 不再作为函数名/`@server.tool()` 出现（仅 `list_papers` 内一行历史注释残留，步骤 15 重写时清除）；`search_arxiv` 未被误删；导入 `create_server()` + `list_tools()` 实际返回 **10 个工具**，`search_paper` 不在其中。
 
+### 步骤 14：真实探测 `get_abstract_details`/`retrieve_article` 响应体结构（归一化前置）—— 完成于 2026-08-03
+- **性质**：QA-R006 要求的强制前置步骤。此前 v2.0 阶段只记录过这两个端点在 `view=META` 下的 HTTP 200 与响应根对象名，未记录字段级结构。用一次性探测脚本（scratchpad，GET-only，验证后即弃、未提交）以真实 `ELSEVIER_API_KEY`（基础非商业 Key）抓取完整响应体。
+- **样本**：Scopus 侧先用 `content/search/scopus?query=TITLE(graphene)` 取得有效 EID `2-s2.0-105041544043`；ScienceDirect 侧用已知有效 Elsevier DOI `10.1016/j.jmst.2026.07.003`（*Journal of Materials Science & Technology*）。两端点 `view=META` 均返回 **HTTP 200**。
+- **`content/abstract/eid/{eid}?view=META` 真实字段结构**（根 `abstracts-retrieval-response`）：
+  - 顶层仅 2 个 key：`coredata`（dict）、`affiliation`（list of `{affilname, affiliation-city, affiliation-country}`）。
+  - `coredata` 字段：`dc:title`、`eid`、`prism:doi`（本样本无 DOI，字段可缺）、`dc:identifier`（如 `SCOPUS_ID:...`）、`prism:publicationName`、`prism:issn`、`prism:aggregationType`、`subtypeDescription`、`prism:coverDate`、`prism:volume`、`prism:issueIdentifier`、`prism:pageRange`、`prism:startingPage`、`prism:endingPage`、`citedby-count`、`dc:publisher`、`openaccess`/`openaccessFlag`（可能为 `null`）、`prism:url`、`srctype`、`subtype`、`dc:creator`。
+  - 作者路径：`coredata.dc:creator.author`（list）；各 author 对象字段形态多样（`ce:indexed-name`/`ce:surname`/`ce:given-name`/`preferred-name`/`$` 等），归一化按多 key 容错提取显示名。
+  - **META 视图不含摘要正文** `dc:description`（实测确认 `has dc:description = False`），更高视图（FULL）可能补充——归一化保留 `abstract` 字段但 META 下为 `None`。
+- **`content/article/{idtype}/{id}?view=META` 真实字段结构**（根 `full-text-retrieval-response`）：
+  - 顶层 key：`coredata`（dict）、`scopus-id`、`scopus-eid`、`link`、`originalText`（全文正文，仅高权限视图有内容，META 下不用）。
+  - `coredata` 字段：`dc:title`、`prism:doi`、`pii`、`eid`、`dc:identifier`、`prism:publicationName`、`prism:publisher`、`prism:aggregationType`、`pubType`、`prism:issn`、`prism:volume`、`prism:startingPage`、`prism:endingPage`、`prism:pageRange`、`prism:coverDate`、`prism:coverDisplayDate`、`prism:copyright`、`dc:format`、`openaccess`/`openaccessArticle`/`openaccessType`/`openArchiveArticle`/`openaccessSponsorName`/`openaccessSponsorType`/`openaccessUserLicense`、`prism:url`。
+  - 作者路径：`coredata.dc:creator`（list of `{@_fa, $}`，与 abstract 端点的 `dc:creator.author` 嵌套形态不同）；主题路径：`coredata.dcterms:subject`（list of `{@_fa, $}`）。
+- **可选性/形态差异结论**：所有字段均按 `.get()` 容错；Elsevier"单元素返回 dict、多元素返回 list"的惯例用 `_as_list()` 统一；两端点 `dc:creator` 形态不同，各自单独提取。字段方案严格来自本探测，无凭空定义。
+
+### 步骤 15：全部 10 个工具一次性重命名 + `list_papers` 功能补全 + 两处归一化 —— 完成于 2026-08-03
+- **完成内容**：对步骤 13 删除 `search_paper` 后剩余的 10 个工具，按方案 A"数据源\_对象\_动作(\_by\_限定词)"风格一次性彻底重命名（无过渡期、无别名），并顺带完成 `list_papers` 的 category 过滤补全与两个工具的归一化。
+- **10 个工具新旧名字对照**：
+
+  | # | 旧名 | 新名 | 备注 |
+  |---|---|---|---|
+  | 1 | `search_arxiv` | `arxiv_paper_search_by_query` | 仅改名 |
+  | 2 | `list_papers` | `arxiv_latest_paper_list_by_category` | 改名 + 功能补全（新增必填 `category`） |
+  | 3 | `read_paper` | `arxiv_paper_detail_by_id` | 仅改名 |
+  | 4 | `search_scopus` | `scopus_document_search_by_query` | 仅改名 |
+  | 5 | `get_abstract_details` | `scopus_abstract_detail_by_eid` | 改名 + 归一化 |
+  | 6 | `get_serial_title` | `scopus_serial_title_by_issn` | 仅改名 |
+  | 7 | `get_quota_status` | `scopus_api_usage_status` | 仅改名（QA-R006 指定 usage 而非 quota） |
+  | 8 | `search_pubmed_papers` | `pubmed_paper_search_by_query` | 仅改名 |
+  | 9 | `retrieve_article` | `sciencedirect_article_retrieve_by_identifier` | 改名 + 归一化 |
+  | 10 | `get_article_objects` | `sciencedirect_article_object_by_identifier` | 仅改名 |
+
+- **`list_papers` → `arxiv_latest_paper_list_by_category` 功能补全**：新增必填参数 `category: str`；新增 `_build_category_query()` 把逗号分隔分类码转为 arXiv 官方 `cat:` 查询语法（如 `'cs.AI,cs.LG' -> 'cat:cs.AI OR cat:cs.LG'`），传给现有 `_run_arxiv_search(sort_by=SubmittedDate)`，不改库、不做客户端二次过滤。清除了原第 85-93 行的历史决策注释。
+  - **分类码校验正则**采用比计划书示例更健壮的 `^[a-z][a-z-]*(\.[A-Za-z][A-Za-z-]*)?$`——覆盖 `cs.AI`/`math.NA`/`physics.optics`/`physics.acc-ph`/`astro-ph.HE`/`q-bio.PE`/`cond-mat.stat-mech` 等真实格式（计划书示例正则 `(\.[A-Za-z]{2})?` 会误拒 `physics.optics` 等 2 字母以上或含连字符的子分类，故据实调整，符合计划书"以 arXiv 官方分类列表为准、必要时调整正则"的授权）。非法/空分类由工具层捕获 `ValueError` 返回 `_err`，不透传给 arXiv API。
+- **`get_abstract_details` → `scopus_abstract_detail_by_eid` 归一化**（基于步骤 14 探测，`_get_abstract` 由 `items=[response.json()]` 整体透传改为逐字段提取）。最终 `items[0]` 字段：`title, eid, doi, scopus_id, publication_name, issn, aggregation_type, document_type, cover_date, volume, issue, page_range, cited_by_count, publisher, openaccess, abstract, authors[], affiliations[{name,city,country}], scopus_url`。
+- **`retrieve_article` → `sciencedirect_article_retrieve_by_identifier` 归一化**（基于步骤 14 探测，`_retrieve_article` 同样改为逐字段提取）。最终 `items[0]` 字段：`title, doi, pii, eid, identifier, publication_name, publisher, aggregation_type, pub_type, issn, volume, page_range, cover_date, cover_display_date, copyright, openaccess, openaccess_type, authors[], subjects[], url`。
+- **涉及文件**：`src/uniarticles/sources/arxiv.py`（+`re`、`_build_category_query`、3 工具改名+补全）、`scopus.py`（+`_as_list`/`_author_name` 助手、`_get_abstract` 归一化、4 工具改名）、`sciencedirect.py`（import `_as_list`、+`_sd_creator_names`/`_sd_subjects` 助手、`_retrieve_article` 归一化、2 工具改名）、`paperscraper.py`（1 工具改名）。
+- **验证结果**：
+  - `create_server()` + `list_tools()` 返回恰好 **10 个新名字**，无旧名残留、无 `search_paper` 泄漏。
+  - 归一化两工具真实调用（EID `2-s2.0-105041544043`；DOI `10.1016/j.jmst.2026.07.003`）均 `ok:true`，`items[0]` 为逐字段结构（`is normalized (not raw blob): True`），作者/机构/主题正确提取（如 authors=`['Yang, Yulong','Yin, Zhenye','Wu, Boan']`、subjects=`['Zinc-ion capacitors','Hierarchical pore','Flexible electrode']`）；无效 EID 走 `_err`（404 → `ok:false`）。
+  - category 过滤：查询字符串构造正确（`cat:cs.AI`，URL `search_query=cat%3Acs.AI`，完全符合 arXiv 官方语法）；空 `category` 与非法格式 `cs..AI` 均被 `_build_category_query` 正确拒绝并返回清晰 `_err`。合法分类的真实拉取确认见步骤 20（本环境对 export.arxiv.org 的连续请求会触发 HTTP 429 限流，需较长冷却后单次调用确认——限流为环境网络因素，非代码缺陷）。
+
+### 步骤 16：调整 `sources/__init__.py` 注册顺序（文件级）—— 完成于 2026-08-03
+- **完成内容**：`register_all_sources()` 调用顺序由 `arxiv → scopus → paperscraper → sciencedirect` 改为 `scopus → sciencedirect → arxiv → paperscraper`（QA-R006 明确"只要求文件级顺序"，各文件内部工具相对顺序不变）。顶部 4 行 import 顺序一并调整以保持可读性一致。
+- **涉及文件**：`src/uniarticles/sources/__init__.py`。
+- **验证结果**：`list_tools()` 工具顺序为 Scopus(4)→ScienceDirect(2)→ArXiv(3)→Paperscraper(1)：`scopus_document_search_by_query, scopus_abstract_detail_by_eid, scopus_serial_title_by_issn, scopus_api_usage_status, sciencedirect_article_retrieve_by_identifier, sciencedirect_article_object_by_identifier, arxiv_paper_search_by_query, arxiv_latest_paper_list_by_category, arxiv_paper_detail_by_id, pubmed_paper_search_by_query`，符合预期。
+
 ---
