@@ -14,6 +14,18 @@
 
 v2.0（2.0.1）发布后，用户在真实 Cherry Studio 环境下对已发布的全部 17 个工具做了一轮完整可用性实测（11 可用/6 不可用），并据此在 `project-docs/goal.md` QA-R003 锁定了 v2.1.0 的范围：**删除 6 个已确认不可用或超出产品定位的工具**（`download_paper`/`search_authors`/`get_author_profile`/`search_sciencedirect`/`get_article_metadata`/`search_scholar_papers`），将 MCP Server 从 17 个工具收窄为 11 个稳定可用工具；同步修正 README.md/README_ZH.md 中的 Elsevier Key 资质说明与工具清单/计数；`pyproject.toml` 版本号提升至 `2.1.0`。这是一次事后范围收缩（非新增功能），对应开发计划见下方"步骤 8～12"。
 
+### v2.2.0 范围补充（QA-R004～QA-R006，2026-08-03）
+
+源自 `docs/TODO.md` 两条待办 + 用户后续多轮澄清，`project-docs/goal.md` QA-R004～QA-R006 已完整锁定本轮范围与决策，本计划书只需转化为可执行构建步骤，不再重新决策。目标发布版本号为用户明确拍板的 **`2.2.0`**（否决了本 agent 曾建议的 `3.0.0`，理由是本轮改动未净增加工具数量，不再讨论版本号）。本轮是对已发布 v2.1.0（11 个已注册工具，含未公开列出的别名 `search_paper`）的一次**无过渡期破坏性变更**，包含五块内容：
+
+1. **删除 `search_paper`**（`src/uniarticles/sources/arxiv.py`）：它是 `search_arxiv` 的纯别名，功能正常但从未公开列入 README；v2.1.0 曾特意保留，本轮用户主动放弃，无过渡期直接删除代码与注册，MCP Server 实际注册工具数由 11 降至 10。
+2. **对删除后剩余的全部 10 个工具一次性彻底重命名**，风格为方案 A"数据源_对象_动作(_by_限定词)"（如 `arxiv_paper_search_by_query`），不设新旧名字过渡期，旧名字直接消失，不做 deprecated 别名/兼容层。
+3. **`list_papers`（重命名后 `arxiv_latest_paper_list_by_category`）功能补全**：不是纯改名，借这次改名之机把实现从"无筛选拉取最新论文"补全为真正支持按 arXiv category 过滤——复用 arXiv 官方查询语法的 `cat:` 字段前缀拼接进 `query` 字符串，不新增 `arxiv.Search` 不支持的原生 `category` 参数，也不做客户端侧二次过滤。
+4. **`get_abstract_details`/`retrieve_article`（重命名后 `scopus_abstract_detail_by_eid`/`sciencedirect_article_retrieve_by_identifier`）归一化**：从"Elsevier 原始 JSON 整体透传"改为逐字段提取，与 `get_serial_title`/`get_article_objects` 的现有风格对齐。**关键前提**：这两个端点此前从未被记录过真实响应体字段样例（只确认过 HTTP 200 与响应根对象名），归一化字段方案必须先做真实 API 探测（见步骤 14）才能确定，不得在本计划书中凭空预设字段名。
+5. **调整 `src/uniarticles/sources/__init__.py` 中 `register_all_sources()` 的文件级调用顺序**：从 `arxiv → scopus → paperscraper → sciencedirect` 改为 `scopus → sciencedirect → arxiv → paperscraper`。仅要求文件级顺序（QA-R006 已明确澄清），各文件内部工具的相对注册顺序不需要调整。
+
+对应开发计划见下方"步骤 13～20"。步骤 1～12（v2.0/v2.1.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
 ## 可行性分析
 
 ### 技术可行性评估
@@ -546,6 +558,250 @@ settings = Settings()
 
 ---
 
+### 步骤 13：删除 `search_paper`（`src/uniarticles/sources/arxiv.py`）
+
+#### 目标说明
+`project-docs/goal.md` QA-R004/QA-R005 已确认核实：`search_paper`（`arxiv.py` 现第 77-80 行）是 `search_arxiv` 的纯别名（函数体仅 `return await search_arxiv(query, max_results)`），无独立校验/异常处理逻辑，功能正常但从未公开列入 README。v2.1.0 清理 6 个不可用工具那一轮曾特意保留它；本轮用户在明知"无法 100% 排除有用户在文档外凭经验用过这个工具名"这一低概率兼容性风险的前提下，主动放弃该别名。这与步骤 8 删除的 6 个工具性质不同：那 6 个是**实测确认不可用**（401/403/超时），删除是"清理故障"；`search_paper` 是**能正常工作**的别名，删除是"主动做破坏性简化"。删除后 MCP Server 实际注册工具数由 11 降至 10。
+
+#### 具体操作
+1. 删除 `arxiv.py` 的 `register()` 内 `search_paper` 工具定义（现第 77-80 行）。
+2. 全局搜索确认无其他 `src/` 代码引用 `search_paper`（已预先核实：仅 `arxiv.py` 本体 + `project-docs/goal.md`/`teach.md`/`buildlog.md`/`project-plan.md` 历史文档提及；历史文档保持原样，不修改）。
+3. 本步骤独立先行执行并验证，与步骤 15（arxiv.py 改名 + `list_papers` 功能补全）分开操作，避免两类改动混在一次编辑中难以定位问题。
+
+#### 验证方法
+- 全局搜索 `search_paper` 确认仅存于历史文档（`goal.md`/`teach.md`/`buildlog.md`/`project-plan.md`）中，`src/` 目录下不再出现。
+- 真实调用其余 ArXiv 工具（此时仍为旧名 `search_arxiv`/`list_papers`/`read_paper`，改名在步骤 15 执行）确认未受影响，返回结构正常。
+
+#### 风险提示
+- `search_paper` 与保留的 `search_arxiv` 名字接近，删除时务必按精确函数名操作，不要误删 `search_arxiv`。
+
+---
+
+### 步骤 14：真实探测 `get_abstract_details`（Scopus）与 `retrieve_article`（ScienceDirect）响应体结构 —— 归一化前置步骤
+
+#### 目标说明
+`project-docs/goal.md` QA-R006 核实确认：这两个端点此前（v2.0 阶段，`buildlog.md` 133-141 行）只记录过 `view=META` 下的 HTTP 200 与响应根对象名（Scopus 侧 `abstracts-retrieval-response`，ScienceDirect 侧 `full-text-retrieval-response.coredata`），**未记录完整字段级结构**。这与步骤 4/5（`get_serial_title`/`get_article_objects`）当年"先抓包确认字段、再写归一化"的做法一致，本步骤是步骤 15.2/15.3 归一化编码的**显式前置步骤**——必须先做真实探测拿到完整响应体样例，才能确定要提取的字段，不得跳过探测直接编码，不得在本计划书或代码中凭空定义字段名。
+
+#### 具体操作
+1. 使用本地 `.env` 中的真实 `ELSEVIER_API_KEY`，对一个已知有效的 Scopus EID 发起真实请求 `content/abstract/eid/{eid}?view=META`（可临时复用现有 `_get_abstract()` 逻辑写一次性探测脚本，放在 scratchpad，验证完即弃、不提交仓库——延续 `goal.md` 阶段"临时探测脚本"的一贯做法）。
+2. 打印/查看完整响应体 JSON，记录 `abstracts-retrieval-response` 根对象下实际存在的字段路径（标题、作者列表、摘要正文、DOI、期刊名、EID、出版日期、关键词、引用数等——具体以实测为准，不得预设）。
+3. 对一个已知有效的 DOI 或 PII，发起真实请求 `content/article/{identifier_type}/{identifier}?view=META`，记录 `full-text-retrieval-response.coredata` 下实际存在的字段路径。
+4. 将两份真实字段样例整理成清单，作为步骤 15.2（`scopus.py`）、步骤 15.3（`sciencedirect.py`）编写归一化逻辑的直接依据；并按 `buildlog.md` 步骤 4/5"真实抓包确认的响应字段结构"的既有写法，把清单记入步骤 19 的 buildlog.md 条目。
+5. 若探测中发现权限不足（如当前 Key 对某些字段不可见）或响应结构与预期差异较大，如实记录，不得为"看起来完整"而编造字段。
+
+#### 验证方法
+- 两个端点的探测请求均返回 HTTP 200，且能看到具体字段名清单（而非仅确认状态码）。
+- 探测记录已整理成可直接用于编码的字段列表，供步骤 15.2/15.3 直接引用。
+
+#### 风险提示
+- 这是本轮唯一一个"探测优先于编码"的强制前置步骤——若跳过直接假设字段名编码，等同于重演 `goal.md` 已明确警示过的"文档存在 vs 实际可用"风险的变体（这次是"猜测字段名 vs 真实字段名"），同样不可接受。
+- 探测脚本务必只发 GET 请求，不对 Elsevier 账号产生任何写副作用。
+
+---
+
+### 步骤 15：全部 10 个工具一次性重命名（含 6 维度改动清单表格）+ 逐文件实现
+
+#### 目标说明
+`project-docs/goal.md` QA-R004～QA-R006 确认的核心变更：对步骤 13 删除 `search_paper` 后剩余的 10 个工具，按方案 A"数据源_对象_动作(_by_限定词)"命名风格一次性彻底重命名，不设新旧名字过渡期、不做兼容别名。同时顺带完成 `list_papers` 的功能补全（真实 category 过滤）与 `get_abstract_details`/`retrieve_article` 的归一化（基于步骤 14 探测结果）。以下 6 维度表格是用户在 `goal.md` 约束条件中明确要求的交付格式，逐一覆盖删除 `search_paper` 后剩余的全部 10 个工具，不得省略或简化维度。
+
+#### 6 维度工具改动清单表格
+
+| # | ①改动前工具名 | ②改动后工具名 | ③请求体（参数列表） | ④预期返回体（`items` 字段结构变化） | ⑤作用 | ⑥允许的参数 |
+|---|---|---|---|---|---|---|
+| 1 | `search_arxiv` | `arxiv_paper_search_by_query` | `query: str`、`max_results: int = 10` | 不变：`id, title, authors[], abstract, published, categories[], pdf_url` | 按关键词全文检索 arXiv 论文；对接 arXiv 官方 API（`arxiv` 库） | `query` 必填、非空字符串；`max_results` 默认 10，服务端 clamp 到 `[1,25]` |
+| 2 | `list_papers` | `arxiv_latest_paper_list_by_category` | `category: str`（**新增，必填**）、`max_results: int = 10` | 序列化结构不变（同上），但内容语义改变：由"无筛选最新论文"变为"该分类下最新论文" | 按 arXiv 分类代码列出该分类下最新提交论文；对接 arXiv 官方 API，通过 `cat:` 查询语法拼接过滤（非库原生参数，非客户端二次过滤） | `category` **新增参数**，必填、非空，需匹配 arXiv 官方分类码格式（如 `cs.AI`），支持逗号分隔多个分类；格式非法时工具层直接报错，不透传给 API；`max_results` 默认 10，clamp `[1,25]`（不变） |
+| 3 | `read_paper` | `arxiv_paper_detail_by_id` | `paper_id: str` | 不变：同 `_serialize_paper` 结构 | 按 arXiv ID 精确获取单篇论文详情；对接 arXiv 官方 API 的 `id_list` 查询 | `paper_id` 必填、非空字符串 |
+| 4 | `search_scopus` | `scopus_document_search_by_query` | `query: str`、`count: int = 5`、`sort: str = "coverDate"`、`view: str = "STANDARD"` | 不变：`title, eid, doi, coverDate, publicationName, creator, citedbyCount, openaccess` | 按关键词检索 Scopus 文献；对接 `content/search/scopus` | `query` 必填非空；`count` 默认 5，clamp `[1,25]`；`sort`/`view` 默认值不变，无强校验、透传 API |
+| 5 | `get_abstract_details` | `scopus_abstract_detail_by_eid` | `eid: str`、`view: str = "META"` | **归一化变化**：由 `items=[response.json()]` 原始整体透传改为逐字段提取；具体字段清单待步骤 14 真实探测 `content/abstract/eid/{eid}` 响应体后填充（占位，探测后确定，禁止凭空预设） | 按 EID 获取 Scopus 文献摘要详情；对接 `content/abstract/eid/{eid}` | `eid` 必填非空；`view` 默认 `"META"`，无强校验、透传 API |
+| 6 | `get_serial_title` | `scopus_serial_title_by_issn` | `issn: str`、`view: str = "STANDARD"` | 不变：`title, publisher, issn, eissn, aggregation_type, openaccess, openaccess_type, coverage_start_year, coverage_end_year, subject_areas[], homepage_url, source_id, scopus_url` | 按 ISSN 查询期刊元数据（出版商/OA 状态/收录年份等）；对接 `content/serial/title/issn/{issn}` | `issn` 必填非空；`view` 默认 `"STANDARD"`，无强校验、透传 API |
+| 7 | `get_quota_status` | `scopus_api_usage_status` | 无参数 | 不变：`limit, remaining, reset, status` | 探测当前 Elsevier API Key 的用量/速率限制状态（借用 Scopus search 响应头模拟，非官方专用端点）；对接 `content/search/scopus` 响应头 | 无参数 |
+| 8 | `search_pubmed_papers` | `pubmed_paper_search_by_query` | `query: str`、`max_results: int = 10` | 不变：透传 `paperscraper` 库 `get_pubmed_papers` 返回记录 | 按关键词检索 PubMed 文献；对接 `paperscraper` 库 PubMed 检索能力 | `query` 必填非空；`max_results` 默认 10，clamp `[1,9998]` |
+| 9 | `retrieve_article` | `sciencedirect_article_retrieve_by_identifier` | `identifier: str`、`identifier_type: str = "pii"`、`view: str = "META"` | **归一化变化**：由 `items=[response.json()]` 原始整体透传（根为 `full-text-retrieval-response.coredata`）改为逐字段提取；具体字段清单待步骤 14 真实探测后填充（占位，探测后确定，禁止凭空预设） | 按标识符（pii/doi/pubmed_id/eid）检索全文文章记录；对接 `content/article/{identifier_type}/{identifier}` | `identifier` 必填非空；`identifier_type` 默认 `"pii"`，无强校验、透传 API 判定；`view` 默认 `"META"` |
+| 10 | `get_article_objects` | `sciencedirect_article_object_by_identifier` | `identifier: str`、`identifier_type: str = "doi"`、`view: str = "META"` | 不变：`filename, ref, type, mimetype, size, width, height, eid, download_url` | 获取文献配图/表格/补充材料对象元信息清单（不下载二进制内容）；对接 `content/object/{identifier_type}/{identifier}` | `identifier` 必填非空；`identifier_type` 默认 `"doi"`（doi/pii 已验证可用，scopus_id/pubmed_id 未验证）；`view` 默认 `"META"` |
+
+#### 具体操作（按文件分组执行，注意保留跨文件依赖 `from .scopus import _get_headers, BASE_URL` 不受影响）
+
+**15.1 `src/uniarticles/sources/arxiv.py` —— 3 个工具仅改名 + `list_papers` 改名同时功能补全**
+- `search_arxiv` → `arxiv_paper_search_by_query`：仅改函数名与 `@server.tool()` 绑定名，函数体/参数/docstring 内容不变。
+- `read_paper` → `arxiv_paper_detail_by_id`：仅改名，函数体不变。
+- `list_papers` → `arxiv_latest_paper_list_by_category`：改名 **同时** 补全实现：
+  - 新增必填参数 `category: str`。
+  - 新增内部校验/拼接函数，例如：
+    ```python
+    import re
+
+    _ARXIV_CATEGORY_RE = re.compile(r"^[a-z][a-z-]*(\.[A-Za-z]{2})?$")
+
+    def _build_category_query(category: str) -> str:
+        """将逗号分隔的分类码转换为 arXiv 官方 query 语法，如
+        'cs.AI,cs.LG' -> 'cat:cs.AI OR cat:cs.LG'。"""
+        parts = [c.strip() for c in category.split(",") if c.strip()]
+        if not parts:
+            raise ValueError("category must not be empty")
+        for part in parts:
+            if not _ARXIV_CATEGORY_RE.match(part):
+                raise ValueError(f"invalid arXiv category code: {part!r}")
+        return " OR ".join(f"cat:{p}" for p in parts)
+    ```
+    正则示例覆盖常见格式（如 `cs.AI`/`math.NA`/`physics.optics`），但实际 arXiv 分类码规则以 arXiv 官方分类列表（`https://arxiv.org/category_taxonomy`）为准；构建时应对照该列表核实正则是否有遗漏（如 `econ.GN`/`q-bio.PE` 等含连字符的子分类前缀），必要时调整正则或改用一份内置分类白名单集合做更严格的校验，具体取舍由 `project-builder-cn` 结合实测决定。
+  - `arxiv_latest_paper_list_by_category` 工具体内先调用 `_build_category_query(category)` 得到查询字符串，再传给现有 `_run_arxiv_search(query=query, max_results=bounded)`（复用现有函数与 `arxiv.Search(sort_by=SubmittedDate)` 调用方式，不改 `_run_arxiv_search` 本身，只改传入的 `query` 内容）。
+  - `category` 参数为空或格式非法时，工具层直接捕获 `_build_category_query` 抛出的 `ValueError` 并返回 `_err`（不透传给 arXiv API 产生难以理解的远程错误）。
+  - 清理原代码第 85-93 行大段"决策过程注释"（`# Since 'list' implies...` 等历史思考痕迹），替换为准确描述新行为的简洁 docstring，例如："List the most recently submitted arXiv papers in a given category (e.g. 'cs.AI'). Uses arXiv's official `cat:` query syntax."。
+
+**15.2 `src/uniarticles/sources/scopus.py` —— 3 个工具仅改名 + `get_abstract_details` 改名同时归一化**
+- `search_scopus` → `scopus_document_search_by_query`：仅改名，函数体不变。
+- `get_serial_title` → `scopus_serial_title_by_issn`：仅改名，函数体不变。
+- `get_quota_status` → `scopus_api_usage_status`：仅改名（**注意**：按 QA-R006 用户明确要求为 `scopus_api_usage_status`，不是此前拟定的 `scopus_api_quota_status`），函数体不变。
+- `get_abstract_details` → `scopus_abstract_detail_by_eid`：改名 **同时** 归一化：
+  - `_get_abstract()` 从 `return _ok(query=eid, items=[response.json()])`（整体透传）改为基于步骤 14 真实探测结果做逐字段提取，写法风格对齐 `_get_serial_title()`（`.get()` 容错、可选字段允许为 `None`）。
+  - 归一化目标字段清单以步骤 14 探测记录为准，此处不预设字段名，避免重蹈 QA-R006 指出的"凭空编字段"问题。
+
+**15.3 `src/uniarticles/sources/sciencedirect.py` —— 1 个工具仅改名 + `retrieve_article` 改名同时归一化**
+- `get_article_objects` → `sciencedirect_article_object_by_identifier`：仅改名，函数体不变。
+- `retrieve_article` → `sciencedirect_article_retrieve_by_identifier`：改名 **同时** 归一化：
+  - `_retrieve_article()` 从 `return _ok(query=identifier, items=[response.json()])` 改为基于步骤 14 真实探测结果做逐字段提取，写法风格对齐 `_get_article_objects()`。
+  - 归一化目标字段清单以步骤 14 探测记录为准。
+
+**15.4 `src/uniarticles/sources/paperscraper.py` —— 1 个工具仅改名**
+- `search_pubmed_papers` → `pubmed_paper_search_by_query`：仅改名，函数体不变。
+
+#### 验证方法
+- 在 `src/` 全目录全局搜索，确认 10 个旧工具名（`search_arxiv`/`list_papers`/`read_paper`/`search_scopus`/`get_abstract_details`/`get_serial_title`/`get_quota_status`/`search_pubmed_papers`/`retrieve_article`/`get_article_objects`）不再作为函数名或 `@server.tool()` 出现；10 个新工具名均能找到对应的 `@server.tool()` 定义。
+- 启动服务并通过真实 stdio 客户端连接（或 `mcp` 库提供的工具枚举接口）确认实际注册工具数为 10，名称与表格一致。
+- 用本地 `.env` 中真实 `ELSEVIER_API_KEY` 手动调用 `arxiv_latest_paper_list_by_category`，分别测试合法分类（如 `cs.AI`）、非法格式分类（如空字符串、`cs..AI`）、多分类逗号分隔（如 `cs.AI,cs.LG`）三种情况，确认合法请求返回该分类下的最新论文（`categories` 字段中应能看到对应分类码），非法格式请求返回清晰 `_err` 而非未捕获异常。
+- 手动调用 `scopus_abstract_detail_by_eid`、`sciencedirect_article_retrieve_by_identifier`，确认 `items` 中是逐字段结构而非原始 JSON blob，字段与步骤 14 探测记录一致。
+- 手动调用其余 6 个仅改名工具，确认功能与改名前完全一致（不应有任何行为差异）。
+
+#### 风险提示
+- 这是无过渡期的破坏性变更，任何硬编码旧工具名的外部提示词/工作流会在本轮发布后立即失效——这是用户在 `goal.md` QA-R004 中已明确知情并接受的风险，不属于本步骤需要"补救"的问题，但执行时应确保 10 个新名字与表格完全一致，不要在实现过程中随手做二次调整（如缩写不一致）。
+- `list_papers` 补全为真正的 category 过滤是"命名+功能开发"，风险高于纯改名的另外 8 个工具，务必按验证方法中的三种分类输入分别测试，不要只测合法输入。
+- 归一化的两个工具（`scopus_abstract_detail_by_eid`/`sciencedirect_article_retrieve_by_identifier`）必须严格依赖步骤 14 的真实探测记录，不得在没有先完成步骤 14 的情况下开始编码。
+- `search_arxiv`/`arxiv_paper_search_by_query` 与新分类过滤工具容易在实现时被误合并逻辑（如误把 category 过滤混入 `arxiv_paper_search_by_query`），保持两者职责边界清晰。
+
+---
+
+### 步骤 16：调整 `src/uniarticles/sources/__init__.py` 注册顺序（文件级）
+
+#### 目标说明
+`project-docs/goal.md` QA-R006 已明确"只要求文件级顺序"，不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独调用。当前 `register_all_sources()` 调用顺序为 `arxiv → scopus → paperscraper → sciencedirect`，改为 `scopus → sciencedirect → arxiv → paperscraper`。
+
+#### 具体操作
+```python
+def register_all_sources(server: FastMCP) -> None:
+    register_scopus_source(server)
+    register_sciencedirect_source(server)
+    register_arxiv_source(server)
+    register_paperscraper_source(server)
+```
+文件顶部 4 行 `from .xxx import register as register_xxx_source` 的书写顺序可一并调整以保持可读性一致（非强制，只影响代码风格，不影响实际调用顺序，实际顺序以函数体内调用顺序为准）。
+
+#### 验证方法
+- 阅读改动后的 `__init__.py`，确认 `register_all_sources()` 函数体内调用顺序为 `scopus → sciencedirect → arxiv → paperscraper`。
+- 启动服务后通过 MCP 工具枚举确认工具列表按"Scopus 4 个 → ScienceDirect 2 个 → ArXiv 3 个 → Paperscraper 1 个"的文件级分组出现，每个文件内部工具的相对顺序与改名前一致（不需要跨文件精确匹配全局顺序，QA-R006 已明确此为轻量方案）。
+
+#### 风险提示
+- 这是纯顺序调整，不改变任何工具的功能/参数，风险很低。
+- 应在步骤 15（工具已完成改名）之后执行，避免用旧名字验证顺序造成混淆——建议按本计划书步骤编号顺序整体执行，不要跳步。
+
+---
+
+### 步骤 17：README.md / README_ZH.md 同步修正
+
+#### 目标说明
+v2.1.0 已把 README 的工具清单改到"11 个工具"的旧名字状态；本轮要在此基础上把工具名继续换成新名字，同步说明 `list_papers`（重命名后 `arxiv_latest_paper_list_by_category`）新增的 `category` 必填参数，并修正因删除 `search_paper` 导致的注册工具计数变化（11 → 10）。
+
+#### 具体操作
+对 `README.md` 与 `README_ZH.md` 同步执行，字段一一对应翻译：
+
+1. **`## Available Tools`/`## 可用工具列表` 章节**（现分别位于 `README.md` 第 147-165 行、`README_ZH.md` 第 145-163 行）：按步骤 15 的表格逐行替换为新工具名与新参数签名。重点是 ArXiv 小节的 `list_papers(max_results)` 一行，改为 `arxiv_latest_paper_list_by_category(category, max_results)`，并在描述中写清 `category` 为**必填**参数、需符合 arXiv 官方分类码格式（给出示例如 `cs.AI`）。`search_paper` 此前从未在该章节列出，删除后无需改动这里。
+
+2. **Elsevier Key 说明章节的工具计数修正**（`README.md` 第 31 行、`README_ZH.md` 第 31 行）：现文案分别为 `"Verified against the current 11 tools using a real non-commercial key."` / `"该结论已用真实的非商业 Key 对当前全部 11 个工具做过实测验证。"`——这个"11"是 v2.1.0 阶段的**实际注册工具数**（含未公开列出的 `search_paper`），删除 `search_paper` 后注册工具数变为 **10**，这两处需同步改为 "10 tools" / "10 个工具"。**不得跳过这一处**，它不在 `Available Tools` 表格里，容易被漏改。
+
+3. **`## Features`/`## 功能特性` 章节**：核实该章节是否直接点名具体旧工具名；若只是功能性描述（未点名具体函数名），无需改动；若发现有点名旧工具名的地方，同步替换为新名字。
+
+4. **明确不在本次改动范围内**：`.env.example`、`tutorial/step_by_step_guide_zh.md`、`tutorial/step_by_step_guide_en.md`、`CLAUDE.md` —— 已用全局搜索核实这些文件均**不包含**任何旧工具名引用（`Grep` 结果仅命中 `project-docs/goal.md`/`teach.md`/`buildlog.md`/`project-plan.md`/`README.md`/`README_ZH.md` 与 4 个 `src/uniarticles/sources/*.py` 源文件），本轮无需改动这些文件，不要顺手扩大范围。
+
+#### 验证方法
+- 全文检索 `README.md`、`README_ZH.md`，确认 10 个旧工具名不再出现在 `Available Tools` 章节任何位置，10 个新工具名均能找到。
+- 确认 "11 tools"/"11 个工具" 的表述已改为 "10 tools"/"10 个工具"（仅限第 31 行这一处工具计数陈述，不要误改其他含"11"的无关数字，如若有版本号/年份等字符串需排除）。
+- 中英文两版逐段比对，确保内容对等。
+
+#### 风险提示
+- 该项目历史上多次出现"只更新一个语言版本"的模式（`buildlog.md` 历史记录已多次提及类似问题），本轮务必同步检查两个文件。
+- Elsevier Key 说明段落的"实测验证"表述改写时，不要把工具计数之外的其他内容一并改动（如不要因为改了数字就顺带重写整段措辞），保持改动最小化、可追溯。
+
+---
+
+### 步骤 18：`pyproject.toml` 版本号提升至 2.2.0
+
+#### 目标说明
+`project-docs/goal.md` QA-R005 明确指定本轮对应版本号 `2.2.0`（用户已否决 `3.0.0`，不再讨论版本号）。
+
+#### 具体操作
+- `pyproject.toml` 第 7 行 `version = "2.1.0"` → 改为 `version = "2.2.0"`。
+- 无需改动 `dependencies`/`classifiers`/`optional-dependencies` 等其他字段，本轮不引入新依赖（`re` 为 Python 标准库，无需加入 `dependencies`），不涉及 Python 版本要求变化。
+
+#### 验证方法
+- `python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"` 输出 `2.2.0`。
+- 若本地为 editable install（`pip install -e .`），确认 `python -c "import importlib.metadata as m; print(m.version('uniarticles-mcp'))"` 与新版本号一致（如因 editable 安装机制未即时刷新，可重新执行 `pip install -e .`，不算功能性 bug）。
+
+#### 风险提示
+- 版本号是发布到 PyPI 的关键字段，建议放在步骤 13～17 全部验证通过之后再改，避免代码未改完就先改版本号导致误发布不完整版本。
+
+---
+
+### 步骤 19：`project-docs/buildlog.md` 记录本轮变更
+
+#### 目标说明
+记录本轮 v2.2.0 变更，链接到 `project-docs/goal.md` 的 `QA-R004`/`QA-R005`/`QA-R006`，延续该文件既有的"版本号一级章节 + 步骤条目"格式。
+
+#### 具体操作
+- 在 `project-docs/buildlog.md` 的 `## v2.1.0 构建记录` 章节之后新增 `## v2.2.0 构建记录` 一级章节。
+- 章节开头一段简述本轮背景：引用 `project-docs/goal.md` 的 `QA-R004`（删除 `search_paper` + 全量重命名的可行性核实与决策）、`QA-R005`（版本号确认为 `2.2.0`）、`QA-R006`（`scopus_api_usage_status` 命名微调 + 归一化前置探测要求 + 注册顺序文件级调整），说明本轮是"删除 + 破坏性重命名 + 功能补全 + 归一化 + 顺序调整"五合一改动。
+- 逐条记录：
+  - `search_paper` 删除（步骤 13）。
+  - 步骤 14 的真实探测结果：`get_abstract_details`/`retrieve_article` 两个端点的完整字段清单（格式参考现有 `buildlog.md` 步骤 4/5"真实抓包确认的响应字段结构"写法）。
+  - 10 个工具的新旧名字对照表（可直接复用步骤 15 的 6 维度表格前两列）。
+  - `list_papers` → `arxiv_latest_paper_list_by_category` 的 category 过滤实现方式摘要。
+  - `get_abstract_details`/`retrieve_article` 归一化后的最终字段清单。
+  - `sources/__init__.py` 注册顺序变更摘要。
+  - README.md / README_ZH.md 修改摘要（含"11→10 个工具"计数修正）。
+  - 版本号变更：`2.1.0` → `2.2.0`。
+- 每完成一个开发步骤追加一条，格式延续该文件既有约定（`### 步骤 N：<步骤名称> —— 完成于 <日期>`）。
+
+#### 验证方法
+- `project-docs/buildlog.md` 中能找到明确指向 `goal.md` `QA-R004`/`QA-R005`/`QA-R006` 的引用文字。
+- 步骤 14 的真实探测字段清单、10 个工具的新旧名字对照均在 buildlog.md 中有完整记录。
+
+#### 风险提示
+- 归一化字段清单必须是步骤 14 真实探测的结果，不得在 buildlog.md 中补记不曾探测过的字段。
+
+---
+
+### 步骤 20：整体回归验证
+
+#### 目标说明
+确认删除 + 重命名 + 功能补全 + 归一化 + 顺序调整五类改动叠加后，MCP Server 整体仍然稳定可用，协议层（stdio/JSON-RPC）未受影响。
+
+#### 具体操作
+1. 全局搜索复核（`src/` 全目录 + `README.md`/`README_ZH.md`）：确认 `search_paper` 与 10 个旧工具名均无残留引用（`project-docs/goal.md`、`project-docs/teach.md`、`CHANGELOG.md`/`buildlog.md` 历史条目除外——这些是历史记录，须保留原样）。
+2. 用 `uv run uniarticles-mcp` 或 `python -m uniarticles` 启动服务，确认进程正常启动，`stdout` 未被污染（重点关注步骤 15 中新增的 `_build_category_query` 校验逻辑是否有意外的 `print`/未捕获异常）。
+3. 若条件允许，在真实 Claude Desktop/Cherry Studio 中实际加载一次，确认工具列表恰好显示 10 个工具、名称与 README 一致、且按"Scopus 4 → ScienceDirect 2 → ArXiv 3 → Paperscraper 1"的文件级分组呈现。
+4. 用真实 `.env`（`ELSEVIER_API_KEY`）手动调用全部 10 个新工具各至少 1 次，确认均正常返回 `ok: true` 或结构清晰的 `_err`：
+   - `arxiv_paper_search_by_query`、`arxiv_latest_paper_list_by_category`（含合法/非法 category 两种输入）、`arxiv_paper_detail_by_id`
+   - `scopus_document_search_by_query`、`scopus_abstract_detail_by_eid`、`scopus_serial_title_by_issn`、`scopus_api_usage_status`
+   - `sciencedirect_article_retrieve_by_identifier`、`sciencedirect_article_object_by_identifier`
+   - `pubmed_paper_search_by_query`
+
+#### 验证方法
+- 上述 4 项操作均通过，无 `ImportError`/`NameError`/未捕获异常。
+- MCP 客户端加载后工具计数为 10，与 README 描述一致，且名称与步骤 15 表格完全一致。
+
+#### 风险提示
+- 本项目没有自动化测试套件，回归验证只能靠手动/真实调用完成；本轮改动量（删除+重命名+功能+归一化+顺序）是历次版本中最大的一次，务必完整走完 10 个工具的逐一验证，不要因为"只是改名字"而跳过功能类改动（`list_papers`/`get_abstract_details`/`retrieve_article`）的实际调用验证。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -563,3 +819,9 @@ settings = Settings()
 - （v2.1.0，2026-08-03）步骤 8～12 基于 `project-docs/goal.md` QA-R003（commit f57416d）追加，是对已发布 v2.0（2.0.1）的一次事后范围收缩：删除 6 个已确认不可用/超出产品定位的工具，同步修正 README 的 Elsevier Key 说明与工具清单，版本号提升至 `2.1.0`。步骤 1～7（v2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
 - 步骤 8 中"清理 `ARXIV_DOWNLOAD_DIR` 死配置"是本计划书基于"不做面向未来预留代码"原则做出的衍生决策，`goal.md` QA-R003 未逐字列出该配置项，已在步骤 8 中明确标注该决策来源，避免 `project-builder-cn` 误以为超出授权范围而跳过，或反过来误以为是临场发挥。
 - 步骤 9 中明确排除了 README `tests/` 目录相关描述的修正——该失真先于本轮改动已存在，不属于 QA-R003 圈定范围，留待未来独立事项处理，避免本轮范围蔓延。
+
+---
+
+- （v2.2.0，2026-08-03）步骤 13～20 基于 `project-docs/goal.md` QA-R004/QA-R005/QA-R006（源自 `docs/TODO.md` 两条待办）追加，是对已发布 v2.1.0（11 个已注册工具，含未公开列出的别名 `search_paper`）的一次无过渡期破坏性变更：删除 `search_paper`、剩余 10 个工具一次性彻底重命名（方案 A 风格）、`list_papers` 功能补全为真正的 category 过滤、`get_abstract_details`/`retrieve_article` 归一化、`sources/__init__.py` 注册顺序文件级调整，版本号提升至 `2.2.0`（用户已在 QA-R005 明确否决 `3.0.0`，不再讨论版本号）。步骤 1～12（v2.0/v2.1.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+- 步骤 14（真实探测 `get_abstract_details`/`retrieve_article` 响应体）是应 QA-R006 明确要求新增的强制前置步骤——此前从未记录过这两个端点的真实字段级结构，归一化编码必须以该步骤的探测结果为依据，不得凭空定义字段名，步骤 15.2/15.3 已在"具体操作"中明确标注这一依赖关系。
+- 步骤 17 中"11 tools/11 个工具"→"10 tools/10 个工具"的计数修正（`README.md`/`README_ZH.md` 第 31 行）是本计划书核实源码后发现的必要改动点：该数字统计的是"实际注册工具数"（含此前未公开列出的 `search_paper`），删除 `search_paper` 后必须同步下修，否则会与代码实际注册数不一致——此处不在 `Available Tools` 表格内，容易被遗漏，已在步骤 17 中特别标注。
