@@ -28,7 +28,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 11 个工具做过实测验证。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 10 个工具做过实测验证。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -145,22 +145,22 @@ python -m uniarticles      # 使用 pip 安装时
 ## 可用工具列表
 
 ### Scopus
-- `search_scopus(query, count, sort, view)`: 搜索文档。
-- `get_abstract_details(eid, view)`: 获取详细摘要信息。
-- `get_serial_title(issn, view)`: 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。
-- `get_quota_status()`: 检查 Elsevier API 配额（通过 Scopus 端点）。
+- `scopus_document_search_by_query(query, count, sort, view)`: 搜索文档。
+- `scopus_abstract_detail_by_eid(eid, view)`: 按 EID 获取归一化的摘要记录（标题、作者、机构、期刊、标识符）。摘要正文仅在更高级别、受订阅限制的视图下才会返回。
+- `scopus_serial_title_by_issn(issn, view)`: 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。
+- `scopus_api_usage_status()`: 检查 Elsevier API 用量/速率限制状态（通过 Scopus 端点）。
 
 ### ScienceDirect
-- `retrieve_article(identifier, identifier_type, view)`: 检索全文文章记录。
-- `get_article_objects(identifier, identifier_type, view)`: 获取某篇文章的配图/表格/补充材料的元信息（文件名、MIME 类型、对象类型、下载链接）。仅返回对象清单与链接，不下载二进制内容本身。
+- `sciencedirect_article_retrieve_by_identifier(identifier, identifier_type, view)`: 按标识符检索归一化的文章记录（标题、作者、期刊、标识符、主题）。
+- `sciencedirect_article_object_by_identifier(identifier, identifier_type, view)`: 获取某篇文章的配图/表格/补充材料的元信息（文件名、MIME 类型、对象类型、下载链接）。仅返回对象清单与链接，不下载二进制内容本身。
 
 ### ArXiv
-- `search_arxiv(query, max_results)`: 搜索论文。
-- `list_papers(max_results)`: 列出最新论文。
-- `read_paper(paper_id)`: 获取论文元数据。
+- `arxiv_paper_search_by_query(query, max_results)`: 搜索论文。
+- `arxiv_latest_paper_list_by_category(category, max_results)`: 列出指定 arXiv 分类下最新提交的论文。`category` 为**必填**参数，须符合 arXiv 官方分类码格式（如 `cs.AI`）；多个分类用逗号分隔（如 `cs.AI,cs.LG`）。
+- `arxiv_paper_detail_by_id(paper_id)`: 获取论文元数据。
 
 ### Paperscraper
-- `search_pubmed_papers(query, max_results)`: 在 PubMed 检索论文。
+- `pubmed_paper_search_by_query(query, max_results)`: 在 PubMed 检索论文。
 
 ---
 

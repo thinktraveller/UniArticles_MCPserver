@@ -28,7 +28,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 11 tools using a real non-commercial key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 10 tools using a real non-commercial key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -147,22 +147,22 @@ If the process starts without import or configuration errors, the installation i
 ## Available Tools
 
 ### Scopus
-- `search_scopus(query, count, sort, view)`: Search for documents.
-- `get_abstract_details(eid, view)`: Get detailed abstract information.
-- `get_serial_title(issn, view)`: Look up journal/serial metadata (publisher, Open Access status, coverage years, subject areas, homepage) by ISSN.
-- `get_quota_status()`: Check Elsevier API quota (via Scopus endpoint).
+- `scopus_document_search_by_query(query, count, sort, view)`: Search for documents.
+- `scopus_abstract_detail_by_eid(eid, view)`: Get a normalized abstract record (title, authors, affiliations, journal, identifiers) by EID. The abstract body is only populated under richer, subscription-gated views.
+- `scopus_serial_title_by_issn(issn, view)`: Look up journal/serial metadata (publisher, Open Access status, coverage years, subject areas, homepage) by ISSN.
+- `scopus_api_usage_status()`: Check Elsevier API usage/rate-limit status (via Scopus endpoint).
 
 ### ScienceDirect
-- `retrieve_article(identifier, identifier_type, view)`: Retrieve full-text article record.
-- `get_article_objects(identifier, identifier_type, view)`: Retrieve metadata (filename, mimetype, type, download link) for an article's figures/tables/supplementary materials. Returns the object list and links only — does not download the binary content.
+- `sciencedirect_article_retrieve_by_identifier(identifier, identifier_type, view)`: Retrieve a normalized article record (title, authors, journal, identifiers, subjects) by identifier.
+- `sciencedirect_article_object_by_identifier(identifier, identifier_type, view)`: Retrieve metadata (filename, mimetype, type, download link) for an article's figures/tables/supplementary materials. Returns the object list and links only — does not download the binary content.
 
 ### ArXiv
-- `search_arxiv(query, max_results)`: Search papers.
-- `list_papers(max_results)`: List recent papers.
-- `read_paper(paper_id)`: Get paper metadata.
+- `arxiv_paper_search_by_query(query, max_results)`: Search papers.
+- `arxiv_latest_paper_list_by_category(category, max_results)`: List the most recently submitted papers in a given arXiv category. `category` is **required** and must be a valid arXiv category code (e.g. `cs.AI`); comma-separate multiple categories (e.g. `cs.AI,cs.LG`).
+- `arxiv_paper_detail_by_id(paper_id)`: Get paper metadata.
 
 ### Paperscraper
-- `search_pubmed_papers(query, max_results)`: Search papers from PubMed.
+- `pubmed_paper_search_by_query(query, max_results)`: Search papers from PubMed.
 
 ---
 

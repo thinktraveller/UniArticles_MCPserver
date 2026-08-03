@@ -548,4 +548,13 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **涉及文件**：`src/uniarticles/sources/__init__.py`。
 - **验证结果**：`list_tools()` 工具顺序为 Scopus(4)→ScienceDirect(2)→ArXiv(3)→Paperscraper(1)：`scopus_document_search_by_query, scopus_abstract_detail_by_eid, scopus_serial_title_by_issn, scopus_api_usage_status, sciencedirect_article_retrieve_by_identifier, sciencedirect_article_object_by_identifier, arxiv_paper_search_by_query, arxiv_latest_paper_list_by_category, arxiv_paper_detail_by_id, pubmed_paper_search_by_query`，符合预期。
 
+### 步骤 17：README.md / README_ZH.md 同步修正 —— 完成于 2026-08-03
+- **完成内容**：中英文两版同步更新。
+  - `Available Tools`/`可用工具列表`：10 行工具全部改为新名字与新参数签名；`arxiv_latest_paper_list_by_category(category, max_results)` 明确标注 `category` **必填**、须符合 arXiv 分类码格式（示例 `cs.AI`、多分类逗号分隔）；两个归一化工具的描述补充"归一化记录"字样。分组顺序沿用现有 Scopus→ScienceDirect→ArXiv→Paperscraper（恰与步骤 16 新文件级顺序一致）。
+  - Elsevier Key 说明段落（两版第 31 行）工具计数 `11 tools`/`11 个工具` → `10 tools`/`10 个工具`（删除 `search_paper` 后实际注册数下修；该处不在 Available Tools 表格内，易漏，已专门处理）。仅改数字，未改写整段其他表述。
+  - `Features`/`功能特性` 章节经核实未点名任何具体工具函数名，无需改动。
+- **涉及文件**：`README.md`、`README_ZH.md`。
+- **范围外（未改动）**：`.env.example`、`tutorial/*`、`CLAUDE.md` 经全局搜索确认不含任何旧工具名引用，本轮不改。
+- **验证结果**：两版 README 全文检索确认 10 个旧工具名零残留、10 个新工具名齐全、`11 tools`/`11 个工具` 无残留；中英文两版逐段对等。
+
 ---
