@@ -490,3 +490,16 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **下一步计划**：重新打包 2.1.0（清 dist 后 `uv build`），复核 sdist exclude 规则仍生效，供用户手动 `uv publish` 发布（发布由用户执行，不代为操作）。
 
 ---
+
+## v2.2.0 构建记录
+
+本轮背景：源自 `docs/TODO.md` 两条待办 + 用户多轮澄清，已在 `project-docs/goal.md` 的 **QA-R004 / QA-R005 / QA-R006** 中完整锁定范围。本轮是对已发布 v2.1.0（11 个已注册工具，含未公开列出的别名 `search_paper`）的一次**无过渡期破坏性变更**，五合一：①删除 `search_paper`（QA-R004）；②剩余 10 个工具一次性彻底重命名（方案 A"数据源\_对象\_动作(\_by\_限定词)"风格，QA-R004/R005）；③`list_papers` 功能补全为真正的 arXiv category 过滤（QA-R004）；④`get_abstract_details`/`retrieve_article` 从"原始 JSON 整体透传"改为逐字段归一化（QA-R006，字段方案须先真实探测）；⑤`sources/__init__.py` 注册顺序文件级调整（QA-R006）。目标版本号 **`2.2.0`**（用户在 QA-R005 明确否决 `3.0.0`）。决策依据详见 `project-docs/goal.md` QA-R004~R006 与 `project-docs/project-plan.md` 步骤 13~20。
+
+### 步骤 13：删除 `search_paper`（`arxiv.py`）—— 完成于 2026-08-03 20:43
+- **完成内容**：删除 `arxiv.py` `register()` 内 `search_paper` 工具定义（`search_arxiv` 的纯别名，函数体仅 `return await search_arxiv(...)`，无独立校验/异常逻辑，从未公开列入 README）。删除后 MCP Server 实际注册工具数由 11 降至 **10**。
+- **性质说明**：与 v2.1.0 步骤 8 删除的 6 个工具（实测确认不可用，401/403/超时）性质不同——`search_paper` 能正常工作，删除是用户在 QA-R004 中主动做的"破坏性简化"，已知情并接受"无法 100% 排除文档外有用户凭经验用过该工具名"的低概率兼容性风险。
+- **涉及文件**：`src/uniarticles/sources/arxiv.py`。
+- **本步骤独立先行执行**，与步骤 15（arxiv.py 改名 + `list_papers` 功能补全）分开操作，避免两类改动混在一次编辑中难以定位。
+- **验证结果**：`src/*.py` 全局搜索确认 `search_paper` 不再作为函数名/`@server.tool()` 出现（仅 `list_papers` 内一行历史注释残留，步骤 15 重写时清除）；`search_arxiv` 未被误删；导入 `create_server()` + `list_tools()` 实际返回 **10 个工具**，`search_paper` 不在其中。
+
+---

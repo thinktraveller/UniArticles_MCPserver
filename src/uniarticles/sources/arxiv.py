@@ -75,11 +75,6 @@ def register(server: FastMCP) -> None:
             return _err(query=normalized_query, message=str(exc))
 
     @server.tool()
-    async def search_paper(query: str, max_results: int = 10) -> dict:
-        """Search for papers in ArXiv (alias for search_arxiv)."""
-        return await search_arxiv(query, max_results)
-
-    @server.tool()
     async def list_papers(max_results: int = 10) -> dict:
         """List recent papers from ArXiv (defaults to CS category if no query specified)."""
         # Since 'list' implies no specific query, we might need a default query.
