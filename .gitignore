@@ -48,3 +48,5 @@ arxiv_downloads/
 *.pdf
 tests/__pycache__/
 docs/
+reference-projects
+
