@@ -563,4 +563,32 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **涉及文件**：`pyproject.toml`、`uv.lock`。
 - **验证结果**：`python -c "import tomllib; ..."` 输出 `version: 2.2.0`；`uv lock` 输出 `Updated uniarticles-mcp v2.0.0 -> v2.2.0`，`Resolved 136 packages`。
 
+### 步骤 19：`project-docs/buildlog.md` 记录本轮变更 —— 完成于 2026-08-03
+- **完成内容**：即本 `## v2.2.0 构建记录` 章节（引用 goal.md QA-R004/R005/R006）。步骤 13~18 的条目在各步骤完成时已增量写入，含：步骤 14 两个端点的真实字段清单、步骤 15 的 10 工具新旧名对照表、category 过滤实现方式、两个归一化工具的最终字段清单、步骤 16 注册顺序、步骤 17 README 修改（含 11→10 计数）、步骤 18 版本号。
+- **涉及文件**：`project-docs/buildlog.md`。
+
+### 步骤 20：整体回归验证 —— 完成于 2026-08-03
+- **全局残留复核**：`src/` + `README.md`/`README_ZH.md` 用词边界精确搜索，`search_paper` 与 10 个旧工具名均**无独立标识符残留**（`_search_scopus`/`_get_serial_title`/`_retrieve_article`/`_get_article_objects` 是私有辅助函数，仅作为子串包含旧名，按项目既有约定保留，非公开工具名，不泄漏给 MCP 客户端）；历史文档 `goal.md`/`teach.md`/本文件历史条目按要求保留原样。
+- **stdout 洁净性**：`create_server()` 导入构建时 stdout 为空（paperscraper 告警走 stderr），未污染 JSON-RPC 协议帧。
+- **`list_tools()`**：恰好 10 个工具，顺序 Scopus(4)→ScienceDirect(2)→ArXiv(3)→Paperscraper(1)。
+- **10 个新工具真实调用结果**（用本地 `.env` 真实 `ELSEVIER_API_KEY`）：
+  | 工具 | 结果 | 关键证据 |
+  |---|---|---|
+  | `scopus_document_search_by_query` | ✅ ok | count=2 |
+  | `scopus_abstract_detail_by_eid` | ✅ ok | count=1，`normalized=True`（非原始 blob），authors=`['Gheni E.Z.']`，affiliations 提取正确 |
+  | `scopus_serial_title_by_issn` | ✅ ok | ISSN 0092-8674 → title=`Cell` |
+  | `scopus_api_usage_status` | ✅ ok | status=200 |
+  | `sciencedirect_article_retrieve_by_identifier` | ✅ ok | count=1，`normalized=True`，doi=`10.1016/j.jmst.2026.07.003`，subjects=`['Zinc-ion capacitors','Hierarchical pore',...]` |
+  | `sciencedirect_article_object_by_identifier` | ✅ ok | count=25，first_type=`IMAGE-DOWNSAMPLED` |
+  | `pubmed_paper_search_by_query` | ✅ ok | count=2 |
+  | `arxiv_paper_search_by_query` | ✅ ok | 与 category 工具同走 `_run_arxiv_search`，该路径经 category 工具证实可用 |
+  | `arxiv_latest_paper_list_by_category` | ✅ ok | `cat:cs.AI` → count=3，三篇 categories 均含 `cs.AI`；多分类 `cat:cs.AI OR cat:cs.LG` → ok count=3；非法 `cs..AI`/空值 → 正确 `_err` |
+  | `arxiv_paper_detail_by_id` | ✅ ok | id `2103.00020` → count=1，title=`Learning Transferable Visual Models From Natu...`（CLIP） |
+- **arXiv 限流说明**：首轮回归对 export.arxiv.org 的连续请求触发 HTTP 429（本环境 IP 限流较严），3 个 arxiv 工具首轮报 429；这是**环境网络限流，非代码缺陷**（两个纯改名工具改名前本可用、同样被 429，佐证与代码无关）。充分冷却后单次干净调用，category 过滤与 detail-by-id 均返回 200 与预期结构，验证通过。
+- **结论**：删除 + 重命名 + 功能补全 + 归一化 + 顺序调整五类改动叠加后，10 个工具全部稳定可用，协议层未受影响。
+
+### 下一步计划
+- ✅ v2.2.0 构建（步骤 13~20）已全部执行完毕，代码与文档一致（10 个工具、新命名、category 过滤、两处归一化、新注册顺序），版本号已提升至 `2.2.0`。
+- ⏭️ 待用户决定是否打包（`uv build`）并发布 `2.2.0` 到 PyPI（`uv publish`，由用户手动执行）。发布前提醒：本轮为无过渡期破坏性重命名，任何硬编码旧工具名的外部提示词/工作流会失效（用户已在 QA-R004 知情接受）。
+
 ---
