@@ -557,4 +557,10 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **范围外（未改动）**：`.env.example`、`tutorial/*`、`CLAUDE.md` 经全局搜索确认不含任何旧工具名引用，本轮不改。
 - **验证结果**：两版 README 全文检索确认 10 个旧工具名零残留、10 个新工具名齐全、`11 tools`/`11 个工具` 无残留；中英文两版逐段对等。
 
+### 步骤 18：`pyproject.toml` 版本号提升至 2.2.0 —— 完成于 2026-08-03
+- **完成内容**：`pyproject.toml` 第 7 行 `version = "2.1.0"` → `version = "2.2.0"`（QA-R005 用户拍板，已否决 `3.0.0`）。未改动 dependencies/classifiers 等其他字段（`re` 为标准库，无需新增依赖）。
+- **uv.lock 同步**：执行 `uv lock` 后，`uniarticles-mcp` 自身条目 `version` 由残留旧值 `2.0.0` 自纠偏为 `2.2.0`，diff 仅此 1 行，无其他依赖版本变化。
+- **涉及文件**：`pyproject.toml`、`uv.lock`。
+- **验证结果**：`python -c "import tomllib; ..."` 输出 `version: 2.2.0`；`uv lock` 输出 `Updated uniarticles-mcp v2.0.0 -> v2.2.0`，`Resolved 136 packages`。
+
 ---
