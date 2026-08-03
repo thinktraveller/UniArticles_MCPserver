@@ -332,3 +332,59 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - README.md 中原有的"遇到 Connection closed 参考 Cherry Studio issue #3264"提示保持不变（未改动 README，超出本次 bugfix 最小改动范围；该提示描述的是另一类 uvx 缓存/网络问题，与本次两个根因不是同一件事，是否需要在 README 中补充本次这两类根因的说明，属于文档增补，建议后续走 `project-builder-cn`/用户决定是否需要）。
 
 ---
+
+## [2026-08-03 10:15] 诊断：`claude_desktop_config.example.json`（走 PyPI `--refresh`）复现同一个 "Connection closed"，非新 bug
+
+### 问题描述
+- 现象：用户反馈——用直接指向本地已修复 wheel 的 Cherry Studio 配置（`uvx --from D:\...\dist\uniarticles_mcp-2.0.0-py3-none-any.whl uniarticles-mcp`）能正常启动；但改用仓库内 `claude_desktop_config.example.json` 的配置（`uvx --refresh uniarticles-mcp`，从 PyPI 拉取）导入 Cherry Studio，复现出与修复前**一模一样**的超时/"Connection closed"故障。
+- 待验证假设（用户提出）：PyPI 上 `uniarticles-mcp` 当前发布的最新版本仍是修复前的旧版（如 1.5.0 或更早，带 `mcp>=1.0.0` 无上限约束），`--refresh` 强制重新解析依赖时命中了 PyPI 上最新的 `mcp==2.0.0`（该版本把 `FastMCP` 迁移/重命名，`mcp.server.fastmcp` 模块不复存在），从而复现与 e625944 修复前完全相同的 `ModuleNotFoundError` → 进程崩溃 → "Connection closed"。
+
+### 核实过程（未凭猜测下结论）
+1. `pip index versions uniarticles-mcp`（`index-url` 已核实为官方 `https://pypi.org/simple`，非镜像/缓存）：
+   ```
+   Available versions: 2.0.0, 1.5.0, 1.4.0, 1.3.0, 1.2.0, 1.1.0, 1.0.0
+   LATEST: 2.0.0
+   ```
+   **与用户假设不符的关键发现**：PyPI 上早已存在 `2.0.0`，并非还停留在 `1.5.0`——用户"我来发布，目前应该还没发"的预期与实际不符，`2.0.0` 事实上已经被发布过一次。
+2. 用 PyPI JSON API（`https://pypi.org/pypi/uniarticles-mcp/json`）核对 `2.0.0` 的 `requires_dist` 与发布时间：
+   ```
+   requires_dist: arxiv>=2.1.0 / httpx>=0.27.0 / mcp>=1.0.0 / paperscraper / python-dotenv>=1.0.0 / pytest>=8.0.0(dev)
+   2.0.0 upload_time_iso_8601: 2026-08-02T15:00:34Z  (= 2026-08-02 23:00:34 +0800)
+   ```
+   `requires_dist` 里的 `mcp` **确认仍是无上限的 `mcp>=1.0.0`**，未包含 e625944 里加的 `<2.0.0` 上限，也不含 `__init__.py` 的 stdout 防污染修复（该修复不影响依赖声明，但同批次改动）。
+3. 用本地 `git log --format="%h %ad %s" --date=iso` 核对相关三个提交的时间：
+   ```
+   34f5c25  2026-08-02 22:29:09 +0800  构建步骤 2(v2.0): ... 升版 2.0.0
+   8524d2f  2026-08-02 22:56:30 +0800  构建(打包): sdist 排除内部文档/配置
+   e625944  2026-08-02 23:45:07 +0800  fix: 修复 ... Connection closed（两处独立根因）
+   ```
+   对照 PyPI `2.0.0` 的发布时间 `2026-08-02 23:00:34 +0800`：**晚于** `34f5c25`/`8524d2f`（版本号已改成 2.0.0、打包配置也已就绪），**早于** `e625944`（Connection closed 的两处根因修复）。即：用户在版本号刚改成 2.0.0、打包完成之后就发布到了 PyPI，此时连接关闭这个 bug 还没被发现，PyPI 上的 `2.0.0` 因而是修复前的坏版本。
+4. 用 `pip index versions mcp` 复核官方 `mcp` SDK 当前最新版仍是 `2.0.0`（`LATEST: 2.0.0`），与 e625944 记录的根因描述一致，确认"PyPI 最新 `mcp` SDK 是不兼容的 2.0.0"这一环节现在仍然成立。
+
+### 结论：不是新 bug，是"PyPI 上已发布的 2.0.0 是修复前的坏版本"（比用户原假设更准确的一种情况）
+- **本地仓库代码本身没有问题**——`e625944` 已经把 `pyproject.toml` 的 `mcp` 依赖改成 `mcp>=1.0.0,<2.0.0` 并加了 stdout 防污染的 `logging.basicConfig`，本地 `.venv`、本地重新打包的 wheel（Cherry Studio 直连 wheel 路径那份配置）都已验证正常。
+- 但用户的具体假设（"PyPI 还没发布 2.0.0，只是发布节奏问题"）**核实后发现与事实有出入**：PyPI 上不是"没发过 2.0.0"，而是"发过一次 2.0.0，但发布时间点早于 Connection closed 的修复提交"，导致这个已发布的 `2.0.0` 本身就是带 bug 的版本。走 `claude_desktop_config.example.json`（`uvx --refresh uniarticles-mcp`）会解析到 PyPI 上这个坏的 `2.0.0`，命中与修复前完全相同的两处根因（`mcp` 无上限约束解析到破坏性的官方 `mcp==2.0.0`；`paperscraper` 污染 stdout），复现出一模一样的 "Connection closed"，这是**预期内的行为**，不是新问题、不是代码回归。
+- **需要用户注意的后续影响（重要，超出"发布节奏"的单纯等待）**：由于 PyPI 上版本号是不可变的（同一版本号不能重新上传覆盖），而本地 `pyproject.toml` 当前 `version` 字段**仍是 `"2.0.0"`**（未变更），用户后续直接对当前代码执行 `uv publish` **会失败**（PyPI 会拒绝重复上传已存在的 `2.0.0` 版本文件，返回 409/"File already exists" 类错误），而不是"覆盖"生效。用户需要先把 `pyproject.toml` 里的 `version` 号提升（例如 `2.0.1`）才能把 e625944 的修复真正发布出去。**本次未擅自修改 `version` 字段**——版本号提升属于发布/版本管理范畴，按职责边界应由用户或 `project-builder-cn` 决定新版本号并执行，bugfix 代理不主动改动。
+
+### 根本原因
+与 e625944 记录的两处根因完全相同（`mcp` 依赖无上限约束、`paperscraper` 污染 stdout），只是触发路径不同：本次是通过"PyPI 上已发布但发布时间早于修复提交的旧版 2.0.0"触发，而非用户原假设的"PyPI 还没发布"。
+
+### 修复方案
+无需改动代码——本地仓库代码已是修复后状态，问题出在 PyPI 上已发布的制品陈旧，属发布管理范畴而非代码 bug。
+
+### 变更文件
+（无代码变更，仅本条诊断记录）
+- `D:\Demo\UniArticles_MCPserver\project-docs\buildlog.md`：追加本条诊断结论。
+
+### 验证方法
+- `pip index versions uniarticles-mcp` → PyPI 最新为 `2.0.0`（非用户预期的 `1.5.0`）。
+- `pip index versions mcp` → 官方 `mcp` SDK 最新仍为 `2.0.0`（不兼容本项目 1.x API）。
+- PyPI JSON API 核实 `2.0.0` 的 `requires_dist` 仍含无上限 `mcp>=1.0.0`，且 `upload_time_iso_8601` 换算为 `+0800` 后早于 `e625944` 提交时间、晚于版本号提升提交 `34f5c25`，时间线自洽。
+- 结论不依赖猜测，全部基于 PyPI 官方索引数据 + 本地 git 提交时间戳交叉核对。
+
+### 给用户的提醒（非代码改动，需人工决策）
+1. 这不是需要修的 bug——本地代码没问题，`claude_desktop_config.example.json` 报错是因为它指向的 PyPI 包本身还没被替换成修复后的版本。
+2. 但也不是单纯"再等等就好"：由于 PyPI 版本号不可覆盖，**必须先把 `pyproject.toml` 的 `version` 从 `2.0.0` 提升到一个新号（如 `2.0.1`）**，重新 `uv build` 打包后再 `uv publish`，否则上传会直接被 PyPI 拒绝。这一步本次未代为执行（版本号决策 + 发布操作均超出 bugfix 代理的职责边界），建议切换至 `project-builder-cn` 或用户自行完成。
+3. 版本号提升并重新发布之后，`claude_desktop_config.example.json` 这类走 PyPI 的配置会自动解析到新版本，问题即消失，无需再改这份示例配置文件本身。
+
+---
