@@ -27,34 +27,6 @@ def _err(query: str, message: str) -> dict:
     }
 
 
-async def _search_sciencedirect(query: str, count: int, start: int, view: str) -> dict:
-    headers = _get_headers()
-    params = {
-        "query": query,
-        "count": count,
-        "start": start,
-        "view": view,
-    }
-    async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
-        response = await client.get(f"{BASE_URL}content/search/sciencedirect", params=params)
-        response.raise_for_status()
-        return _ok(query=query, items=[response.json()])
-
-
-async def _get_article_metadata(query: str, count: int, start: int, view: str) -> dict:
-    headers = _get_headers()
-    params = {
-        "query": query,
-        "count": count,
-        "start": start,
-        "view": view,
-    }
-    async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
-        response = await client.get(f"{BASE_URL}content/metadata/article", params=params)
-        response.raise_for_status()
-        return _ok(query=query, items=[response.json()])
-
-
 async def _retrieve_article(identifier: str, identifier_type: str, view: str) -> dict:
     headers = _get_headers()
     url = f"{BASE_URL}content/article/{identifier_type}/{identifier}"
@@ -91,30 +63,6 @@ async def _get_article_objects(identifier: str, identifier_type: str, view: str)
 
 
 def register(server: FastMCP) -> None:
-    @server.tool()
-    async def search_sciencedirect(query: str, count: int = 25, start: int = 0, view: str = "STANDARD") -> dict:
-        """Search ScienceDirect records using the query syntax."""
-        normalized_query = query.strip()
-        bounded_count = max(1, min(count, 200))
-        if not normalized_query:
-            return _err(query=query, message="query must not be empty")
-        try:
-            return await _search_sciencedirect(query=normalized_query, count=bounded_count, start=start, view=view)
-        except Exception as exc:
-            return _err(query=normalized_query, message=str(exc))
-
-    @server.tool()
-    async def get_article_metadata(query: str, count: int = 25, start: int = 0, view: str = "STANDARD") -> dict:
-        """Search ScienceDirect article metadata."""
-        normalized_query = query.strip()
-        bounded_count = max(1, min(count, 200))
-        if not normalized_query:
-            return _err(query=query, message="query must not be empty")
-        try:
-            return await _get_article_metadata(query=normalized_query, count=bounded_count, start=start, view=view)
-        except Exception as exc:
-            return _err(query=normalized_query, message=str(exc))
-
     @server.tool()
     async def retrieve_article(identifier: str, identifier_type: str = "pii", view: str = "META") -> dict:
         """Retrieve a full-text article record by identifier type (pii, doi, pubmed_id, eid) and value.

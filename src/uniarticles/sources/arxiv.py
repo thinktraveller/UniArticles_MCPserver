@@ -1,10 +1,7 @@
 import asyncio
-import os
 
 import arxiv
 from mcp.server.fastmcp import FastMCP
-
-from ..config import settings
 
 
 def _ok(query: str, items: list[dict]) -> dict:
@@ -64,38 +61,6 @@ def _get_paper_details(paper_id: str) -> dict:
         return _err(query=paper_id, message="Paper not found")
 
 
-def _download_paper(paper_id: str, filename: str | None = None, output_dir: str | None = None) -> dict:
-    client = arxiv.Client()
-    search = arxiv.Search(id_list=[paper_id])
-    try:
-        paper = next(client.results(search))
-    except StopIteration:
-        return _err(query=paper_id, message="Paper not found")
-
-    target_dir = output_dir or settings.arxiv_download_dir
-    
-    # Ensure directory exists
-    os.makedirs(target_dir, exist_ok=True)
-    
-    try:
-        # arxiv library's download_pdf returns the filename
-        if filename is None:
-            downloaded_path = paper.download_pdf(dirpath=target_dir)
-        else:
-            downloaded_path = paper.download_pdf(dirpath=target_dir, filename=filename)
-        return _ok(
-            query=paper_id, 
-            items=[{
-                "id": paper.get_short_id(), 
-                "title": paper.title, 
-                "file_path": downloaded_path,
-                "status": "downloaded"
-            }]
-        )
-    except Exception as e:
-        return _err(query=paper_id, message=f"Download failed: {str(e)}")
-
-
 def register(server: FastMCP) -> None:
     @server.tool()
     async def search_arxiv(query: str, max_results: int = 10) -> dict:
@@ -140,22 +105,5 @@ def register(server: FastMCP) -> None:
             return _err(query=paper_id, message="paper_id must not be empty")
         try:
             return await asyncio.to_thread(_get_paper_details, normalized_id)
-        except Exception as exc:
-            return _err(query=normalized_id, message=str(exc))
-
-    @server.tool()
-    async def download_paper(paper_id: str, filename: str | None = None, output_dir: str | None = None) -> dict:
-        """Download an ArXiv paper as PDF.
-        
-        Args:
-            paper_id: The ArXiv ID of the paper.
-            filename: Optional custom filename (e.g., "paper.pdf").
-            output_dir: Optional directory to save the file. Defaults to configured ARXIV_DOWNLOAD_DIR.
-        """
-        normalized_id = paper_id.strip()
-        if not normalized_id:
-            return _err(query=paper_id, message="paper_id must not be empty")
-        try:
-            return await asyncio.to_thread(_download_paper, normalized_id, filename, output_dir)
         except Exception as exc:
             return _err(query=normalized_id, message=str(exc))

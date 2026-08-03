@@ -37,7 +37,6 @@ def _resolve_elsevier_api_key() -> str | None:
 class Settings:
     elsevier_api_key: str | None = field(default_factory=_resolve_elsevier_api_key)
     elsevier_insttoken: str | None = os.getenv("ELSEVIER_INSTTOKEN")
-    arxiv_download_dir: str = os.getenv("ARXIV_DOWNLOAD_DIR", os.path.join(os.getcwd(), "arxiv_downloads"))
 
 
 settings = Settings()

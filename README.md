@@ -15,11 +15,10 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
 
 - **Unified Interface**: Single search structure for all sources.
 - **Multi-Source Support**:
-  - **Scopus**: Search, abstract details, author profiles, author search, quota check.
-  - **ScienceDirect**: Article search, metadata search, full-text retrieval (requires entitlement).
-  - **ArXiv**: Search papers, search by ID, list recent papers, download PDF.
-  - **Paperscraper APIs**: PubMed search and Google Scholar title search.
-  - **Google Scholar Stability Notice**: Google Scholar access may be unstable or temporarily unavailable; this part is experimental/test-only.
+  - **Scopus**: Search, abstract details, journal/serial title lookup by ISSN, quota check.
+  - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
+  - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
+  - **Paperscraper APIs**: PubMed search.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
@@ -29,7 +28,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: Your institution must have a subscription to Elsevier's services; otherwise, you cannot use related functions even with an API Key.
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 11 tools using a real non-commercial key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -117,7 +116,6 @@ Create a `.env` file in the project root:
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
-ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 
 #### Project Structure
@@ -154,14 +152,10 @@ python tests/verify_server.py
 ### Scopus
 - `search_scopus(query, count, sort, view)`: Search for documents.
 - `get_abstract_details(eid, view)`: Get detailed abstract information.
-- `get_author_profile(author_id, view)`: Get author profile information.
-- `search_authors(query, count, view)`: Search Scopus authors.
 - `get_serial_title(issn, view)`: Look up journal/serial metadata (publisher, Open Access status, coverage years, subject areas, homepage) by ISSN.
 - `get_quota_status()`: Check Elsevier API quota (via Scopus endpoint).
 
 ### ScienceDirect
-- `search_sciencedirect(query, count, start, view)`: Search ScienceDirect records.
-- `get_article_metadata(query, count, start, view)`: Search article metadata.
 - `retrieve_article(identifier, identifier_type, view)`: Retrieve full-text article record.
 - `get_article_objects(identifier, identifier_type, view)`: Retrieve metadata (filename, mimetype, type, download link) for an article's figures/tables/supplementary materials. Returns the object list and links only — does not download the binary content.
 
@@ -169,11 +163,9 @@ python tests/verify_server.py
 - `search_arxiv(query, max_results)`: Search papers.
 - `list_papers(max_results)`: List recent papers.
 - `read_paper(paper_id)`: Get paper metadata.
-- `download_paper(paper_id, filename, output_dir)`: Download PDF.
 
 ### Paperscraper
 - `search_pubmed_papers(query, max_results)`: Search papers from PubMed.
-- `search_scholar_papers(title)`: Search paper metadata from Google Scholar by title (experimental; may fail when Google Scholar is unstable).
 
 ---
 

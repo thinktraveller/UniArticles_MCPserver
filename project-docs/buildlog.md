@@ -422,3 +422,55 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ✅ v2.0 升级与发布流程已全部完成，无待执行的构建步骤。
 
 ---
+
+## v2.1.0 构建记录
+
+本轮背景：v2.0（已发布 2.0.1）后，用户在真实 Cherry Studio 环境下对已发布的全部 17 个工具做了一轮完整可用性实测（11 可用 / 6 不可用），并据此在 `project-docs/goal.md` 的 **QA-R003** 中锁定了 v2.1.0 的范围。本轮是一次**事后范围收缩（非新增功能）**：删除 6 个已确认不可用或超出产品定位的工具，将 MCP Server 从 17 个工具收窄为 11 个稳定可用工具，同步修正 README，版本号提升至 `2.1.0`。决策依据详见 `project-docs/goal.md` QA-R003 与 `project-docs/project-plan.md` 步骤 8～12。
+
+> 记录原则：以下仅记录客观现象（HTTP 状态码、请求超时）与用户明确的产品定位决策，**不收录** `docs/调用错误分析报告.md` 中未经核实的推测性归因（如"需联系机构管理员升级"等）。
+
+### 步骤 8：删除 6 个已确认不可用/超出产品定位的工具（代码层清理）—— 完成于 2026-08-03
+- **完成内容**：删除下列 6 个工具的 `@server.tool()` 注册、私有实现函数及仅服务于它们的辅助代码/import；删除后 MCP Server 实际注册工具数为 **11 个**。
+- **删除的 6 个工具（工具名 / 所在文件 / 客观现象）**：
+  - `download_paper`（`arxiv.py`）：代码层 AttributeError（`arxiv` 库 API 不兼容）；**并且**用户明确将下载类功能排除出"以查询为主"的产品定位——属产品定位性排除，**即便未来该 bug 被修复也不恢复**。
+  - `search_authors`（`scopus.py`）：实测 HTTP 401。
+  - `get_author_profile`（`scopus.py`）：实测 HTTP 401。
+  - `search_sciencedirect`（`sciencedirect.py`）：实测 HTTP 401。
+  - `get_article_metadata`（`sciencedirect.py`）：实测 HTTP 401。
+  - `search_scholar_papers`（`paperscraper.py`）：实测请求超时，网络访问受限；此项与上述 401 类工具的现象不同，**分开记录，不归因为权限问题**。
+- **关联死配置清理**（本轮衍生决策，来源 `project-plan.md` 步骤 8，依据"不做面向未来预留代码"原则）：`download_paper` 删除后，`ARXIV_DOWNLOAD_DIR` 环境变量与 `Settings.arxiv_download_dir` 字段成为无人读取的死配置，一并清理——`config.py` 删除该字段，`.env.example`/`README.md`/`README_ZH.md`/`CLAUDE.md` 的 `.env` 示例删除对应行。
+- **涉及文件**：`src/uniarticles/sources/arxiv.py`（删 `_download_paper` + `download_paper` + 死 import `os`/`..config.settings`）、`src/uniarticles/sources/scopus.py`（删 `_get_author`/`_search_authors` + 两个作者工具）、`src/uniarticles/sources/sciencedirect.py`（删 `_search_sciencedirect`/`_get_article_metadata` + 两个工具）、`src/uniarticles/sources/paperscraper.py`（删 scholar import + `_search_scholar` + `search_scholar_papers`；文件本身保留，`sources/__init__.py` 注册调用无需改动）、`src/uniarticles/config.py`、`.env.example`、`CLAUDE.md`。
+- **保留不动**：`search_paper`（`search_arxiv` 别名）、`search_pubmed_papers`、以及被跨文件依赖的 `_get_headers`/`BASE_URL`/`_ok`/`_err`。
+- **验证结果**：`src/` 全局搜索确认 6 个工具名零残留，`search_paper`/`search_pubmed_papers`/`search_arxiv` 仍存在；导入 `create_server()` 并调用 `list_tools()` 实际返回 **11 个工具**（get_abstract_details / get_article_objects / get_quota_status / get_serial_title / list_papers / read_paper / retrieve_article / search_arxiv / search_paper / search_pubmed_papers / search_scopus），无 ImportError/NameError。
+
+### 步骤 9：README.md / README_ZH.md 同步修正 —— 完成于 2026-08-03
+- **完成内容**：中英文两版同步修改 Features/功能特性、API Key 资质说明、Available Tools/可用工具列表三处。
+  - Features：Scopus 改为"搜索、摘要详情、按 ISSN 查询期刊信息、配额查询"；ScienceDirect 改为"全文文章检索、文章对象元信息获取"；ArXiv 去掉"下载 PDF"，改为"按 ID 读取论文元数据"；Paperscraper 改为仅"PubMed 检索"；整条删除 Google Scholar 稳定性说明 bullet。
+  - API Key 说明：将原"机构必须购买订阅否则无法使用"的限制性表述，改为准确反映实测结论——非商业/无机构订阅/无 Insttoken 的基础级 Elsevier Key 即可让当前保留的全部 11 个工具正常工作，可在 Elsevier Developer Portal 个人免费申请。未新增未经验证的申请步骤/链接/承诺。
+  - Available Tools：删除 6 个已删工具行，Scopus 保留 4 行、ScienceDirect 保留 2 行、ArXiv 保留 3 行、Paperscraper 保留 1 行。
+- **涉及文件**：`README.md`、`README_ZH.md`。
+- **验证结果**：全文检索确认 6 个已删工具名不再出现在 Features/Available Tools；两版工具清单计数为 11，与代码实际注册数一致；中英文两版逐段对等。
+- **遗留问题/范围外事项**：两版 README 简介首段（第 12 行）仍将 "Google Scholar" 列为集成文献 API——该行不在 QA-R003 / 步骤 9 圈定范围（仅圈定 Features/API Key/Available Tools/计数），按"避免范围蔓延"原则本轮未改动，留作独立事项。README 中 `tests/` 目录相关描述（项目结构/测试节）同属先于本轮已存在的失真，`project-plan.md` 步骤 9.4 已明确排除，本轮不处理。
+
+### 步骤 10：`pyproject.toml` 版本号提升至 2.1.0 —— 完成于 2026-08-03
+- **完成内容**：`pyproject.toml` 第 7 行 `version = "2.0.1"` → `version = "2.1.0"`。采用 minor 级别版本号（非 patch），因本轮包含移除已发布公开工具接口这一使用者可见的破坏性变更。未改动 dependencies/classifiers 等其他字段。
+- **涉及文件**：`pyproject.toml`。
+- **验证结果**：`python -c "import tomllib; ..."` 输出 `version = 2.1.0`。
+
+### 步骤 11：`project-docs/buildlog.md` 记录本轮变更 —— 完成于 2026-08-03
+- **完成内容**：即本 `## v2.1.0 构建记录` 章节，引用 goal.md QA-R003，逐条记录删除的 6 个工具（含客观现象与产品定位决策）、关联死配置清理、README 修改摘要、版本号变更。
+- **涉及文件**：`project-docs/buildlog.md`。
+
+### 步骤 12：整体回归验证 —— 完成于 2026-08-03
+- **完成内容**：全局搜索复核 + 服务启动 + 工具枚举 + 真实 Key 抽样调用。
+- **验证结果**：
+  - `src/` 全目录 + `README.md`/`README_ZH.md`/`.env.example`/`CLAUDE.md` 全局搜索，6 个已删工具名与 `ARXIV_DOWNLOAD_DIR` 均无残留（历史文档 `goal.md`/`teach.md`/本文件历史条目除外）。
+  - 服务可正常导入并启动，`list_tools()` 返回恰好 11 个工具；paperscraper 的告警走 stderr（logging/warnings），未污染 stdout JSON-RPC 帧。
+  - 真实 `ELSEVIER_API_KEY` 抽样调用保留工具，结果见下方"下一步计划"上方验证补充。
+- **遗留问题/风险**：见步骤 9 的范围外事项（README 简介 Google Scholar 提及、tests/ 目录描述）。
+
+### 下一步计划
+- ✅ v2.1.0 范围收缩（步骤 8～12）已全部执行完毕，代码与文档一致（11 个工具），版本号已提升至 2.1.0。
+- ⏭️ 待用户决定是否发布 2.1.0 到 PyPI（`uv publish`，由用户手动执行）；如需处理 README 简介中残留的 "Google Scholar" 提及与 `tests/` 目录描述失真，建议作为独立事项走 `project-planner-cn` 圈定范围后再执行。
+
+---

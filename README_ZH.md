@@ -15,11 +15,10 @@
 
 - **统一接口**: 所有数据源使用统一的返回结构。
 - **多源支持**:
-  - **Scopus**: 搜索、摘要详情、作者档案、作者搜索、配额查询。
-  - **ScienceDirect**: 文章搜索、元数据搜索、全文检索（需要权限）。
-  - **ArXiv**: 论文搜索、ID 查询、最新论文列表、PDF 下载。
-  - **Paperscraper API**: PubMed 检索与 Google Scholar 标题检索。
-  - **Google Scholar 稳定性说明**: Google Scholar 链路可能不稳定或暂时不可用，该能力为测试性内容。
+  - **Scopus**: 搜索、摘要详情、按 ISSN 查询期刊信息、配额查询。
+  - **ScienceDirect**: 全文文章检索、文章对象（配图/表格/补充材料）元信息获取。
+  - **ArXiv**: 论文搜索、最新论文列表、按 ID 读取论文元数据。
+  - **Paperscraper API**: PubMed 检索。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
@@ -29,7 +28,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key ，亦无法使用相关功能。
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 11 个工具做过实测验证。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -115,7 +114,6 @@ python -m uniarticles
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
-ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 
 #### 项目结构
@@ -152,14 +150,10 @@ python tests/verify_server.py
 ### Scopus
 - `search_scopus(query, count, sort, view)`: 搜索文档。
 - `get_abstract_details(eid, view)`: 获取详细摘要信息。
-- `get_author_profile(author_id, view)`: 获取作者档案。
-- `search_authors(query, count, view)`: 搜索作者。
 - `get_serial_title(issn, view)`: 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。
 - `get_quota_status()`: 检查 Elsevier API 配额（通过 Scopus 端点）。
 
 ### ScienceDirect
-- `search_sciencedirect(query, count, start, view)`: 搜索 ScienceDirect 记录。
-- `get_article_metadata(query, count, start, view)`: 搜索文章元数据。
 - `retrieve_article(identifier, identifier_type, view)`: 检索全文文章记录。
 - `get_article_objects(identifier, identifier_type, view)`: 获取某篇文章的配图/表格/补充材料的元信息（文件名、MIME 类型、对象类型、下载链接）。仅返回对象清单与链接，不下载二进制内容本身。
 
@@ -167,11 +161,9 @@ python tests/verify_server.py
 - `search_arxiv(query, max_results)`: 搜索论文。
 - `list_papers(max_results)`: 列出最新论文。
 - `read_paper(paper_id)`: 获取论文元数据。
-- `download_paper(paper_id, filename, output_dir)`: 下载 PDF。
 
 ### Paperscraper
 - `search_pubmed_papers(query, max_results)`: 在 PubMed 检索论文。
-- `search_scholar_papers(title)`: 按标题在 Google Scholar 检索论文元数据（测试性功能，可能因链路不稳定调用失败）。
 
 ---
 

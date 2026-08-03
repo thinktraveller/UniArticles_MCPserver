@@ -26,7 +26,6 @@ python tests/verify_server.py   # verifies the MCP protocol handshake
 Configuration lives in a `.env` file at the project root (loaded via `python-dotenv`):
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
-ARXIV_DOWNLOAD_DIR=./arxiv_downloads
 ```
 `SCOPUS_API_KEY` is still read as a deprecated fallback for `ELSEVIER_API_KEY` — see `src/uniarticles/config.py`.
 

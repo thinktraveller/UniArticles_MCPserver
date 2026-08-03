@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniarticles-mcp"
-version = "2.0.1"
+version = "2.1.0"
 description = "Unified MCP server for multi-source academic literature retrieval"
 readme = "README.md"
 license = { text = "MIT" }

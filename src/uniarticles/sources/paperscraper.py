@@ -2,7 +2,6 @@ import asyncio
 
 from mcp.server.fastmcp import FastMCP
 from paperscraper.pubmed.pubmed import get_pubmed_papers
-from paperscraper.scholar.scholar import get_scholar_papers
 
 
 def _ok(query: str, items: list[dict]) -> dict:
@@ -45,11 +44,6 @@ def _search_pubmed(query: str, max_results: int) -> dict:
     return _ok(query=query, items=_to_items(data))
 
 
-def _search_scholar(title: str) -> dict:
-    data = get_scholar_papers(title=title)
-    return _ok(query=title, items=_to_items(data))
-
-
 def register(server: FastMCP) -> None:
     @server.tool()
     async def search_pubmed_papers(query: str, max_results: int = 10) -> dict:
@@ -62,14 +56,3 @@ def register(server: FastMCP) -> None:
             return await asyncio.to_thread(_search_pubmed, normalized_query, bounded)
         except Exception as exc:
             return _err(query=normalized_query, message=str(exc))
-
-    @server.tool()
-    async def search_scholar_papers(title: str) -> dict:
-        """Search Google Scholar by title and return normalized paper metadata results."""
-        normalized_title = title.strip()
-        if not normalized_title:
-            return _err(query=title, message="title must not be empty")
-        try:
-            return await asyncio.to_thread(_search_scholar, normalized_title)
-        except Exception as exc:
-            return _err(query=normalized_title, message=str(exc))
