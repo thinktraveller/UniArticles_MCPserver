@@ -34,8 +34,8 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 8.（v2.1.0，QA-R003）README.md / README_ZH.md 中 Elsevier Key 的说明段落不再包含"您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key，亦无法使用相关功能"这类与实测结论相悖的表述，改为准确反映实测结论：非商业、无机构资质的基础 Elsevier Key 可在 Elsevier Developer Portal 个人免费申请，且能让删减后的全部 11 个工具正常工作；改写内容不超出实测证据范围，不新增未经验证的申请步骤/链接/承诺。
 9.（v2.1.0，QA-R003）`pyproject.toml` 版本号更新为 `2.1.0`，`project-docs/buildlog.md` 记录本轮变更（工具删除 + README 修正）。
 10.（QA-R004/QA-R005/QA-R006，源自 `docs/TODO.md` 两条待办）删除能正常工作但未公开宣传的兼容别名 `search_paper`；对删除后剩余的全部 10 个工具，按"数据源_对象_动作(_by_限定词)"语义化命名风格（用户选定的方案 A，如 `arxiv_paper_search_by_query`）做一次性彻底重命名（不设新旧名字并存的过渡期，旧工具名直接消失），其中 `get_quota_status` 的新名字按 QA-R006 用户要求由 `scopus_api_quota_status` 改为 `scopus_api_usage_status`；并把 `list_papers` 的实现从"无筛选拉取最新论文"补全为**真正支持按 arXiv category 过滤**，使其重命名后的新工具名（暗示 category 过滤能力）与实际功能一致。目标版本号已由用户在 QA-R005 确认为 **`2.2.0`**（否决了本 agent 建议的 3.0.0，理由是工具数量未净增加）。
-11.（QA-R006，待用户确认细节）新增 `get_abstract_details`（`scopus.py`）与 `retrieve_article`（`sciencedirect.py`）两个工具的 JSON 归一化任务——当前两者均为 Elsevier 原始响应整体透传（`items=[response.json()]`），不像 `search_scopus`/`get_serial_title`/`get_article_objects` 那样做逐字段提取；归一化字段方案本身**不在本文档中给出**，需 `project-builder-cn` 先做真实 API 探测确认响应体字段结构（原因见约束条件），再由 `project-planner-cn` 在构建计划书中据实拟定提取字段。
-12.（QA-R006，问题未决，需用户先回应）调整 MCP 工具注册顺序为"scopus → sciencedirect → arxiv → pubmed → 用量查询"，但该顺序要求涉及"文件级顺序"与"全局工具注册顺序"两种不同粒度的实现方案，两者对代码改动范围影响不同，已在 QA-R006 问题 3 中向用户正式提问，本文档暂不认定具体实现方式，待用户回应后再补全。
+11.（QA-R006，范围已确认，字段方案留待构建阶段真实探测）新增 `get_abstract_details`（`scopus.py`）与 `retrieve_article`（`sciencedirect.py`）两个工具的 JSON 归一化任务——当前两者均为 Elsevier 原始响应整体透传（`items=[response.json()]`），不像 `search_scopus`/`get_serial_title`/`get_article_objects` 那样做逐字段提取；归一化字段方案本身**不在本文档中给出**，需 `project-builder-cn` 先做真实 API 探测确认响应体字段结构（原因见约束条件），再由 `project-planner-cn` 在构建计划书中据实拟定提取字段。
+12.（QA-R006，已确认）调整 `src/uniarticles/sources/__init__.py` 中 `register_all_sources()` 的文件级调用顺序，从当前的 `arxiv → scopus → paperscraper → sciencedirect` 改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）；用户已明确选择"只要求文件级顺序"，不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独注册，`scopus.py` 内部各工具相对顺序维持不变。
 
 ## 范围界定
 ### 包含
@@ -55,12 +55,12 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 
 - **（v2.1.0，QA-R003）同步修改 README.md / README_ZH.md**：(1) Elsevier Key 资质要求说明段落，改为准确反映"非商业/无机构资质的基础 Key 即可让删减后的全部 11 个剩余工具正常工作"，并说明可在 Elsevier Developer Portal 个人免费申请；(2) 工具清单/表格/计数从 17 个同步更新为 11 个，覆盖 ArXiv(4)/Scopus(3)/ScienceDirect(2)/PubMed(1)/系统(1)。
 - **（v2.1.0，QA-R003）`pyproject.toml` 版本号提升为 `2.1.0`**，`project-docs/buildlog.md` 记录本轮变更。
-- **（QA-R004/QA-R005/QA-R006）删除 `search_paper` + 全部剩余 10 个工具一次性彻底重命名 + `list_papers` 功能补全 + 新增两处归一化任务 + 待定的注册顺序调整**，依据是用户在 `docs/TODO.md` 提出的两条待办 + goal.md QA-R004/QA-R005/QA-R006 的澄清确认，目标版本号 **`2.2.0`**：
+- **（QA-R004/QA-R005/QA-R006，全部已确认）删除 `search_paper` + 全部剩余 10 个工具一次性彻底重命名 + `list_papers` 功能补全 + 新增两处归一化任务 + 工具注册顺序调整**，依据是用户在 `docs/TODO.md` 提出的两条待办 + goal.md QA-R004/QA-R005/QA-R006 的澄清确认，目标版本号 **`2.2.0`**：
   1. **删除 `search_paper`**（`src/uniarticles/sources/arxiv.py`）：它是 `search_arxiv` 的纯别名，功能正常但从未公开列入 README，v2.1.0 曾被有意保留；本轮用户主动放弃该兼容别名，无过渡期，直接删除代码、注册与测试引用。
   2. **删除后剩余 10 个工具（`search_arxiv`/`list_papers`/`read_paper`/`search_scopus`/`get_abstract_details`/`get_serial_title`/`get_quota_status`/`search_pubmed_papers`/`retrieve_article`/`get_article_objects`）全部按方案 A 命名风格重命名**，一次性切换，旧名字不保留、不设别名过渡期。具体的新工具名、每个工具改动前后的请求体/返回体/参数/作用，由 project-planner-cn 在构建计划书中以表格形式逐一给出（要求详见"备注"交接说明）；其中 **`get_quota_status` 按 QA-R006 用户要求，新名字为 `scopus_api_usage_status`**（不是此前拟定的 `scopus_api_quota_status`），其余 9 个工具新名字维持已交付表格的方案 A 结果不变。
   3. **`list_papers` 功能补全**：新增真实的 arXiv category 过滤能力（不是仅改名字），实现方式需复用 arXiv 官方查询语法的 `cat:` 字段前缀拼接进 `query`，而不是新增 `arxiv.Search` 不存在的原生 `category` 参数，也不是客户端侧对全量结果做二次过滤（技术依据见备注）。
   4. **（QA-R006 新增）`get_abstract_details`/`retrieve_article` 归一化**：本轮范围扩大到把这两个工具的返回体从"Elsevier 原始 JSON 整体透传"改为像 `get_serial_title`/`get_article_objects` 一样做逐字段提取归一化，具体字段方案留待 `project-builder-cn` 做真实探测后由 `project-planner-cn` 补充（不在本文档中凭空定义字段，理由见约束条件）。
-  5. **（QA-R006，实现方式未决）工具注册顺序调整为"scopus → sciencedirect → arxiv → pubmed → 用量查询"**：是否要求全局工具注册顺序精确匹配（需要把 `scopus_api_usage_status` 的注册从 `scopus.py` 的 `register()` 中拆出、由 `sources/__init__.py` 最后单独调用），还是只要求文件级 `register_xxx_source()` 调用顺序即可，已在 QA-R006 中正式提问，待用户回应后补全本节。
+  5. **（QA-R006，已确认）工具注册顺序调整为文件级顺序**：`sources/__init__.py` 中 `register_all_sources()` 内四个 `register_xxx_source()` 调用顺序改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）。用户已明确选择"只要求文件级顺序"，不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独最后调用，`scopus.py` 内部各工具（`search_scopus`/`get_abstract_details`/`get_serial_title`/`scopus_api_usage_status`）相对顺序维持文件内原有顺序不变，不需要跨文件拆分注册逻辑。
 
 ### 排除
 | 功能 | 排除原因 |
@@ -98,7 +98,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   project-planner-cn 在制定构建计划书时不得省略此表格或简化维度，这是用户在本轮 QA 中明确提出的交付格式要求。
 - **（QA-R006）`scopus_api_usage_status` 命名确认**：`get_quota_status` 的新名字最终确认为 `scopus_api_usage_status`（用 usage 替代此前拟定的 quota），交付表格中其余 9 个工具的新名字维持不变。
 - **（QA-R006，前置事实核实：归一化任务不能凭空编字段）`get_abstract_details`/`retrieve_article` 归一化缺少真实响应体字段样例，需先做真实探测**：核实 `project-docs/buildlog.md` 136-141 行，此前 v2.0 阶段的实测只确认了这两个端点在 `view=META` 下返回 **HTTP 200** 及**响应根对象名**（Scopus 侧为 `abstracts-retrieval-response`，ScienceDirect 侧为 `full-text-retrieval-response.coredata`），并未记录完整的字段级结构；对比之下 `get_article_objects` 的归一化在 `buildlog.md` 161-163 行有完整的真实抓包字段清单（`attachment[]` 各字段及可选性）可直接复用。因此 `get_abstract_details`/`retrieve_article` 的归一化字段方案**当前无法在 goal.md 或构建计划书中直接凭空定义**，必须先由 `project-builder-cn`（或构建前的探测步骤）用真实 `ELSEVIER_API_KEY` 对两个端点各发起真实请求、拿到完整响应体样例后，才能确定要提取哪些字段、哪些字段是可选的——这是本项目一贯的"真实验证优先"原则（同 QA-R001/QA-R002 对 Elsevier 端点可行性的处理方式）的延续。project-planner-cn 编写构建计划书时应把"真实探测 → 确定字段 → 编写归一化代码"列为该任务的显式前置步骤，不能跳过探测直接写归一化实现。
-- **（QA-R006，未决问题，需用户先回应才能定稿）工具注册顺序调整的实现粒度存在歧义，已正式提问，尚未获得用户回应**：用户要求全局顺序为"scopus → sciencedirect → arxiv → pubmed → 用量查询"，但当前 `src/uniarticles/sources/__init__.py` 是文件级注册（`arxiv → scopus → paperscraper → sciencedirect`），而"用量查询"工具是在 `scopus.py` 的 `register()` 函数内部与其他 Scopus 工具一起注册的，不是独立的注册单元。若用户要求全局顺序精确匹配（用量查询必须是全部工具中最后注册的一个），需要把该工具的注册逻辑从 `scopus.py` 的 `register()` 中拆出，改为由 `sources/__init__.py` 最后单独调用——这是比"只调整文件级调用顺序"更大的代码结构改动。project-planner-cn 在用户于 QA-R006 问题 3 明确回应之前，不应预先假设并实现某一种方案。
+- **（QA-R006，已确认）工具注册顺序调整的实现粒度已由用户明确选择为"文件级顺序"**：`src/uniarticles/sources/__init__.py` 的 `register_all_sources()` 内四个 `register_xxx_source()` 调用顺序改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）即可；用户明确不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独调用，`scopus.py` 内部工具相对顺序不变，不需要跨文件拆分注册逻辑。这是比"全局工具注册顺序精确匹配"更轻量的方案，project-planner-cn/project-builder-cn 按此实现即可，无需再评估拆分注册逻辑的方案。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -274,7 +274,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - **版本号确认为 `2.2.0`**，用户否决了本 agent 倾向的主版本号（3.0.0）建议，理由是本轮改动没有净增加工具数量（删除 `search_paper` 后剩余 10 个工具原地重命名+功能补全，不是新增工具集）。本 agent 的判断依据（重命名是破坏性变更、按 SemVer 惯例应提主版本号）已如实记录在问题描述中供后续参考，但版本号最终以用户决定为准，`project-planner-cn`/`project-builder-cn` 后续执行时应统一使用 `2.2.0`，不再沿用本 agent 建议的 `3.0.0`。
 - **影响的目标文档章节**
   - 核心目标 / 约束条件
-<!-- GOAL-QA-R005-END -->
+  <!-- GOAL-QA-R005-END -->
 
 ### QA-R006：交付重命名表格后追加的三项决策（quota→usage改名微调 / 归一化新任务 / 工具注册顺序调整）
 <!-- GOAL-QA-R006-START -->
@@ -285,16 +285,25 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   2. 用户要求新增：把 `get_abstract_details`（`scopus.py`）与 `retrieve_article`（`sciencedirect.py`）也纳入 JSON 归一化范围。本 agent 核实代码确认：`scopus.py` 第 76-82 行 `_get_abstract()` 与 `sciencedirect.py` 第 30-36 行 `_retrieve_article()` 目前均为 `items=[response.json()]`——把 Elsevier 原始响应整体透传，没有像 `search_scopus`/`get_serial_title`/`get_article_objects` 那样做逐字段提取。核实 `project-docs/goal.md`/`buildlog.md`/`teach.md` 是否已记录过这两个端点的真实响应体样例，以判断归一化方案能否直接编写、还是需要先做真实探测。
   3. 用户要求工具注册顺序从当前"杂乱"改为 **scopus → sciencedirect → arxiv → pubmed → 用量查询** 的顺序。本 agent 核实 `src/uniarticles/sources/__init__.py` 当前 `register_all_sources()` 调用顺序为 `arxiv → scopus → paperscraper → sciencedirect`（文件级）；而"用量查询"工具（`scopus_api_usage_status`）是在 `scopus.py` 的 `register()` 函数内部、与 `search_scopus`/`get_abstract_details`/`get_serial_title` 同一个函数体里通过 `@server.tool()` 注册的，不是独立的跨文件注册单元。这产生一个必须向用户澄清、不能自行假设的实现分歧：用户要的"scopus-sciencedirect-arxiv-pubmed-用量查询"顺序，是**只要求文件级顺序**（`sources/__init__.py` 里四个 `register_xxx_source()` 调用顺序改为 scopus→sciencedirect→arxiv→paperscraper 即可，`scopus.py` 内部各工具的相对顺序不强求"用量查询"必须排在全局最后），还是**要求全局工具注册顺序精确匹配**（"用量查询"必须是全部 10 个工具里最后一个被注册的，因为 `scopus.py` 是最先被调用的文件，若不做特殊处理，其内部注册的 `scopus_api_usage_status` 会先于 `sciencedirect`/`arxiv`/`pubmed` 的工具被注册，与"最后"的要求矛盾，需要把该工具的注册逻辑从 `scopus.py` 的 `register()` 中拆出，改为由 `sources/__init__.py` 最后单独调用）？— 请用户明确选择其一，避免 `project-builder-cn` 做无用功或理解错方向。
 - **用户回答**
-  1. [等待用户回答]
-  2. [等待用户回答]
-  3. [等待用户回答]
+  1. 保持不变
+  2. 没有记录过真实响应案例
+  3. 只要求文件级别的顺序
 - **提炼结论**
-  - [收到回答后补充]
+  - **`scopus_api_usage_status` 改名最终确认**：其余 9 个工具的新名字维持已交付表格的方案 A 结果不变，只有 `get_quota_status` 一处从原拟 `scopus_api_quota_status` 改为 `scopus_api_usage_status`。
+  - **归一化任务前提已获用户确认**：用户确认 `get_abstract_details`/`retrieve_article` 的真实响应体样例此前确实未被记录过，印证了本 agent 的核实结论——归一化字段方案不能在本文档或构建计划书中凭空定义，必须先由 `project-builder-cn` 做真实探测拿到字段样例后再定，这一前提已无争议、可直接执行。
+  - **注册顺序歧义最终澄清为"只要求文件级顺序"**：用户明确选择较轻量的方案——只需把 `src/uniarticles/sources/__init__.py` 中 `register_all_sources()` 内四个 `register_xxx_source()` 调用顺序，从当前的 `arxiv → scopus → paperscraper → sciencedirect` 改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）即可；**不要求**把 `scopus_api_usage_status` 的注册逻辑从 `scopus.py` 的 `register()` 函数中拆出、单独挪到 `sources/__init__.py` 末尾调用。也就是说，`scopus.py` 内部 `search_scopus`/`get_abstract_details`/`get_serial_title`/`scopus_api_usage_status` 四个工具之间的相对注册顺序**保持文件内原有顺序不变**，不需要跨文件拆分注册逻辑；"用量查询排在最后"这一表述在最终实现上，只在"scopus.py 是文件级顺序中最先被调用的模块、其内部工具自然先于其他三个文件被注册"的意义上得到满足，不代表 `scopus_api_usage_status` 会是全部 10 个工具里字面意义上最后一个被注册的工具。此理解已经过用户本人明确选择确认，不是本 agent 的猜测性简化。
 - **影响的目标文档章节**
   - 核心目标 / 范围界定 / 约束条件
-<!-- GOAL-QA-R006-END -->
+  <!-- GOAL-QA-R006-END -->
 
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
 - （v2.1.0，QA-R003，2026-08-03）目标澄清已完成，用户确认无需继续追问。下一步建议调用 `project-planner-cn` 基于本文档制定构建计划书，覆盖两块工作：① 删除 6 个工具（`downloadPaper`/`searchAuthors`/`getAuthorProfile`/`searchSciencedirect`/`getArticleMetadata`/`searchScholarPapers`）的代码、注册与测试引用；② 同步修改 README.md / README_ZH.md 的 Elsevier Key 说明与工具清单。目标发布版本号为 `2.1.0`，构建计划书应涵盖 `pyproject.toml` 版本号更新与 `project-docs/buildlog.md` 变更记录，再交由 `project-builder-cn` 落地执行。
+- （v2.2.0，QA-R004/QA-R005/QA-R006，2026-08-03）本轮目标澄清（源自 `docs/TODO.md` 两条待办：移除 `search_paper` + 全量工具语义化重命名）已全部闭环，QA-R004~QA-R006 三轮问题均已获用户明确回答，文档中不再有"待定/待用户确认"的占位状态。下一步建议调用 `project-planner-cn` 基于本文档最终版制定 v2.2.0 构建计划书，覆盖五块工作：
+  1. 删除 `search_paper`（`src/uniarticles/sources/arxiv.py`），无过渡期。
+  2. 对删除后剩余的全部 10 个工具做一次性彻底重命名（方案 A 风格，`get_quota_status` 特别改为 `scopus_api_usage_status`），旧名字不保留、不设别名过渡期。
+  3. `list_papers` 新增真正的 arXiv category 过滤能力（复用 `cat:` 查询语法，而非新增库参数或客户端二次过滤）。
+  4. 新增 `get_abstract_details`/`retrieve_article` 的 JSON 归一化，**必须先由 project-builder-cn 做真实 API 探测确认响应体字段结构，再确定提取字段**，不得凭空编写归一化方案。
+  5. 调整 `src/uniarticles/sources/__init__.py` 的 `register_all_sources()` 文件级调用顺序为 `scopus → sciencedirect → arxiv → paperscraper`，`scopus.py` 内部工具相对顺序不变，无需拆分注册逻辑。
+  构建计划书必须包含用户明确要求的"6 维度工具改动清单表格"（要求详见"约束条件"章节，此处不重复），目标发布版本号为 **`2.2.0`**，构建计划书应涵盖 `pyproject.toml` 版本号更新与 `project-docs/buildlog.md` 变更记录，再交由 `project-builder-cn` 落地执行。
