@@ -10,6 +10,10 @@
   4. 对 goal.md 中记录的遗留风险（`get_abstract_details`/`retrieve_article` 默认 view 为受限视图）给出明确处理结论并落地。
 - **目标用户或使用场景**：通过 Claude Desktop / Cherry Studio 等 LLM 客户端使用 UniArticles MCP Server 检索学术文献的科研人员/学生，机构订阅了基础级别（非商业、无 Insttoken）Elsevier Scopus/ScienceDirect API 访问权限。
 
+### v2.1.0 范围收缩补充（QA-R003，2026-08-03）
+
+v2.0（2.0.1）发布后，用户在真实 Cherry Studio 环境下对已发布的全部 17 个工具做了一轮完整可用性实测（11 可用/6 不可用），并据此在 `project-docs/goal.md` QA-R003 锁定了 v2.1.0 的范围：**删除 6 个已确认不可用或超出产品定位的工具**（`download_paper`/`search_authors`/`get_author_profile`/`search_sciencedirect`/`get_article_metadata`/`search_scholar_papers`），将 MCP Server 从 17 个工具收窄为 11 个稳定可用工具；同步修正 README.md/README_ZH.md 中的 Elsevier Key 资质说明与工具清单/计数；`pyproject.toml` 版本号提升至 `2.1.0`。这是一次事后范围收缩（非新增功能），对应开发计划见下方"步骤 8～12"。
+
 ## 可行性分析
 
 ### 技术可行性评估
@@ -388,6 +392,160 @@ settings = Settings()
 
 ---
 
+### 步骤 8：删除 6 个已确认不可用/超出产品定位的工具（代码层清理）
+
+#### 目标说明
+依据 `project-docs/goal.md` QA-R003 锁定的决策，删除以下 6 个工具及其在各 `sources/*.py` 中的注册函数、私有实现函数，以及仅服务于这些工具的辅助代码/配置，**不做面向未来的预留**（尤其 `download_paper`，是产品定位性排除，即便未来 `arxiv` 库的 `AttributeError` 被修好也不恢复）。删除后 MCP Server 实际注册工具数应为 **11 个**：ArXiv 4（`search_arxiv`/`search_paper`/`list_papers`/`read_paper`）、Scopus 3（`search_scopus`/`get_abstract_details`/`get_serial_title`）、ScienceDirect 2（`retrieve_article`/`get_article_objects`）、PubMed 1（`search_pubmed_papers`）、系统 1（`get_quota_status`）。
+
+#### 具体操作
+
+**8.1 `src/uniarticles/sources/arxiv.py` — 删除 `download_paper`**
+- 删除 `_download_paper()` 私有函数（现第 67-96 行）。
+- 删除 `register()` 内的 `download_paper` 工具定义（现第 146-161 行）。
+- **不要删除 `search_paper`**（现第 112-115 行）——它是 `search_arxiv` 的别名工具，与 `download_paper` 无关，属于保留的 4 个 ArXiv 工具之一，两者名字相近，删除前务必用精确工具名匹配，不要用模糊搜索批量删除。
+- 删除 `_download_paper` 后，文件顶部 `import os` 与 `from ..config import settings` 两行已无其他调用方（`_get_paper_details`/`_run_arxiv_search`/`_serialize_paper` 均不使用），一并删除，避免遗留死 import。
+
+**关联死配置清理（本计划书的衍生决策，非 goal.md 字面列出，但符合其"不做面向未来预留代码"原则，明确写清以免 builder 临场决定）**：
+`ARXIV_DOWNLOAD_DIR` 环境变量与 `Settings.arxiv_download_dir` 字段只服务于 `download_paper`，该工具删除后即为无人读取的死配置，一并清理：
+- `src/uniarticles/config.py`：删除 `arxiv_download_dir: str = os.getenv(...)` 字段（现第 40 行）。
+- `.env.example`：删除 `ARXIV_DOWNLOAD_DIR=./arxiv_downloads` 一行。
+- `README.md` / `README_ZH.md`：`.env` 配置示例中删除该行（与步骤 9 联动，执行步骤 8 时一并完成，步骤 9 不重复处理）。
+- `CLAUDE.md`：`.env` 配置示例中删除该行——`CLAUDE.md` 不在 goal.md"禁止修改"清单内（该清单排除的是 `project-docs/goal.md`、`project-docs/teach.md`），保持其配置示例准确有必要性。
+- 删除该字段后重新运行 `Settings()` 实例化（如调用任意 Scopus 工具触发 `settings` 模块级单例），确认无 dataclass 报错。
+
+**8.2 `src/uniarticles/sources/scopus.py` — 删除 `search_authors`、`get_author_profile`**
+- 删除 `_search_authors()` 私有函数（现第 94-119 行）与 `_get_author()` 私有函数（现第 85-91 行）。
+- 删除 `register()` 内 `get_author_profile`（现第 209-218 行）与 `search_authors`（现第 220-230 行）工具定义。
+- 保留不动：`_search_scopus`/`search_scopus`、`_get_abstract`/`get_abstract_details`、`_get_serial_title`/`get_serial_title`、`_get_quota`/`get_quota_status`——这是 Scopus 保留的 3 个工具 + 1 个系统工具。
+- `_get_headers()`、`BASE_URL`、`_ok`/`_err` 被保留工具及 `sciencedirect.py`（`from .scopus import _get_headers, BASE_URL`）跨文件依赖，禁止删除。
+
+**8.3 `src/uniarticles/sources/sciencedirect.py` — 删除 `search_sciencedirect`、`get_article_metadata`**
+- 删除 `_search_sciencedirect()` 私有函数（现第 30-41 行）与 `_get_article_metadata()` 私有函数（现第 44-55 行）。
+- 删除 `register()` 内 `search_sciencedirect`（现第 94-104 行）与 `get_article_metadata`（现第 106-116 行）工具定义。
+- 保留不动：`_retrieve_article`/`retrieve_article`、`_get_article_objects`/`get_article_objects`——ScienceDirect 保留的 2 个工具。
+
+**8.4 `src/uniarticles/sources/paperscraper.py` — 删除 `search_scholar_papers`**
+- **明确决策（避免 builder 临场判断该文件的去留）**：`paperscraper.py` 文件本身保留，不删除、不从 `src/uniarticles/sources/__init__.py` 的 `register_all_sources()` 中摘除注册调用。理由：删除 `search_scholar_papers` 后文件仍保留 `search_pubmed_papers`（PubMed 检索，属于保留的 11 个工具之一），文件并未清空。已核实 `sources/__init__.py` 中 `register_paperscraper_source(server)` 这一行**无需任何改动**。
+- 删除 `_search_scholar()` 私有函数（现第 48-50 行）与 `register()` 内 `search_scholar_papers` 工具定义（现第 66-75 行）。
+- 删除文件头部 `from paperscraper.scholar.scholar import get_scholar_papers` 这一行 import（现第 5 行）——删除 `_search_scholar` 后该 import 已无引用。
+- 保留不动：`from paperscraper.pubmed.pubmed import get_pubmed_papers`、`_to_items()`、`_search_pubmed()`、`search_pubmed_papers` 工具、`_ok`/`_err`。
+
+#### 验证方法
+- 在 `src/` 全目录全局搜索，确认这 6 个工具名（`download_paper`/`search_authors`/`get_author_profile`/`search_sciencedirect`/`get_article_metadata`/`search_scholar_papers`）不再作为函数名或 `@server.tool()` 出现；`search_paper`（别名）与 `search_pubmed_papers` 必须仍然存在且未被误删。
+- 启动服务并通过真实 stdio 客户端连接（或 FastMCP 提供的工具枚举接口，具体以当时 `mcp` 库版本为准）确认实际注册工具数为 11。
+- 用本地 `.env` 中的真实 `ELSEVIER_API_KEY` 启动服务，手动调用保留的 11 个工具中至少 ArXiv/Scopus/ScienceDirect/PubMed 各 1 个，确认均正常返回，不因误删共享代码导致 `ImportError`/`NameError`。
+- 已核实项目当前**不存在** `tests/` 目录（`Glob "tests/**/*.py"` 无匹配），因此不存在"硬编码 17 个工具数量/清单的验证脚本需要同步更新"这一风险点——本计划书已代 builder 完成这项核查，无需在构建时重新排查。
+
+#### 风险提示
+- 最大风险是"手滑删多"：`search_paper`（保留）与 `search_authors`（删除）、`search_arxiv`（保留）三者名字相近，务必按精确工具名操作。
+- `sciencedirect.py` 通过 `from .scopus import _get_headers, BASE_URL` 依赖 `scopus.py`，删除 `scopus.py` 内容时不要误删这两个被跨文件引用的对象。
+- 若使用编辑器"删除未使用 import"自动化功能，需人工复核，避免误删多个工具间共享的顶层 import（如 `httpx`、`asyncio`）。
+
+---
+
+### 步骤 9：README.md / README_ZH.md 同步修正
+
+#### 目标说明
+`goal.md` 成功标准 7、8 要求 README 工具清单/计数与代码实际注册的 11 个工具一一对应，且 Elsevier Key 资质说明段落改为准确反映实测结论（非商业/无机构资质的基础 Key 即可让删减后的全部 11 个工具正常工作）。中英文两个版本必须同步修改，不能只改一个语言。
+
+#### 具体操作
+对 `README.md` 与 `README_ZH.md` 同步执行，字段一一对应翻译：
+
+1. **`## Features`/`## 功能特性` 章节**：
+   - Scopus 条目：`Search, abstract details, author profiles, author search, quota check` → 改为 `Search, abstract details, journal/serial title lookup by ISSN, quota check`（中文同步："搜索、摘要详情、按 ISSN 查询期刊信息、配额查询"）。
+   - ScienceDirect 条目：`Article search, metadata search, full-text retrieval (requires entitlement)` → 改为 `Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval`（中文同步）。
+   - ArXiv 条目：`Search papers, search by ID, list recent papers, download PDF` → 去掉 "download PDF"，改为 `Search papers, list recent papers, read paper metadata by ID`（中文同步）。
+   - Paperscraper 条目：`PubMed search and Google Scholar title search` → 改为仅 `PubMed search`（中文同步）。
+   - **整条删除** `Google Scholar Stability Notice`/`Google Scholar 稳定性说明` 该行 bullet——功能已删除，不再需要稳定性提示。
+
+2. **`## ⚠️ API Key Requirements`/`## ⚠️ API 密钥说明` 章节**第 2 条 "Restriction"/"限制"：
+   - 英文原句 `Your institution must have a subscription to Elsevier's services; otherwise, you cannot use related functions even with an API Key.` → 改为准确表述，例如：`A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 11 tools using a real non-commercial key.)`
+   - 中文原句 `您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key，亦无法使用相关功能。` → 改为：`非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 11 个工具做过实测验证。）`
+   - **不新增未经验证的申请步骤/链接/承诺**（`goal.md` 成功标准 8 的明确约束）——仅替换这一句限制性表述，不改写整段结构，不新增 Elsevier Developer Portal 之外的说明。
+
+3. **`## Available Tools`/`## 可用工具列表` 章节**：
+   - Scopus 小节：删除 `get_author_profile(...)`、`search_authors(...)` 两行，保留 `search_scopus`/`get_abstract_details`/`get_serial_title`/`get_quota_status` 四行（`get_quota_status` 沿用现有归类放在 Scopus 小节下，属组织方式差异非计数错误）。
+   - ScienceDirect 小节：删除 `search_sciencedirect(...)`、`get_article_metadata(...)` 两行，保留 `retrieve_article`/`get_article_objects` 两行。
+   - ArXiv 小节：删除 `download_paper(...)` 一行，保留 `search_arxiv`/`list_papers`/`read_paper` 三行（`search_paper` 别名此前 README 就未单独列出，无需改动）。
+   - Paperscraper 小节：删除 `search_scholar_papers(...)` 一行，只保留 `search_pubmed_papers(...)`。
+   - 若 README 中存在对外的工具总数陈述（如徽章/文字提及"17 个工具"），一并改为"11 个工具"。
+
+4. **明确不在本次改动范围内**（避免范围蔓延）：
+   - `#### Project Structure`/`#### 项目结构` 与 `#### Testing`/`#### 测试` 两节提到的 `tests/` 目录——经核实项目当前不存在该目录，这是先于本轮改动已存在的文档失真，不属于 `goal.md` QA-R003 圈定的范围（QA-R003 只圈定 Elsevier Key 说明段落 + 工具清单/计数），本轮不处理；如需修正应作为独立事项另行提出，不要顺手在本步骤扩大范围。
+
+#### 验证方法
+- 全文检索 `README.md`、`README_ZH.md`，确认 6 个已删工具名不再出现在 `Features`/`Available Tools` 任何位置。
+- 逐条清点 `Available Tools` 章节工具总数为 11，与步骤 8 验证方法中确认的实际注册数一致。
+- 中英文两版逐段比对，确保内容对等。
+
+#### 风险提示
+- 该项目历史上多次出现"只更新一个语言版本"的模式（buildlog.md 历史记录 `[1.3.0]` 已提及类似问题），本轮务必同步检查两个文件。
+- Elsevier Key 说明段落改写时，不要把"实测验证"表述扩大为对未来订阅升级/其他 Elsevier 产品线（如 SciVal/Embase）的泛化承诺——只针对"当前保留的 11 个工具"陈述实测结论。
+
+---
+
+### 步骤 10：`pyproject.toml` 版本号提升至 2.1.0
+
+#### 目标说明
+`goal.md` 明确指定本轮对应版本号 `2.1.0`（非 patch 号），因为包含移除已发布公开工具接口这一使用者可见的破坏性变更。
+
+#### 具体操作
+- `pyproject.toml` 第 7 行 `version = "2.0.1"` → 改为 `version = "2.1.0"`。
+- 无需改动 `dependencies`/`classifiers`/`optional-dependencies` 等其他字段，本轮不引入新依赖，不涉及 Python 版本要求变化。
+
+#### 验证方法
+- `python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"` 输出 `2.1.0`。
+- 若本地为 editable install（`pip install -e .`），确认 `python -c "import importlib.metadata as m; print(m.version('uniarticles-mcp'))"` 与新版本号一致（如因 editable 安装机制未即时刷新，可重新执行 `pip install -e .`，不算功能性 bug）。
+
+#### 风险提示
+- 版本号是发布到 PyPI 的关键字段，建议放在步骤 8、9 全部验证通过之后再改，避免代码未改完就先改版本号导致误发布不完整版本。
+
+---
+
+### 步骤 11：`project-docs/buildlog.md` 记录本轮变更
+
+#### 目标说明
+`goal.md` 成功标准 9 要求 buildlog.md 记录本轮变更；`goal.md` 约束条件明确要求记录决策依据链接到 QA-R003。
+
+#### 具体操作
+- 在 `project-docs/buildlog.md` 的 `## v2.0.0 构建记录` 章节之后新增 `## v2.1.0 构建记录` 一级章节。
+- 章节开头一段简述本轮背景：引用 `project-docs/goal.md` 的 `QA-R003`（真实 Cherry Studio 环境下对已发布 v2.0/2.0.1 全部 17 个工具的实测，11 可用/6 不可用），说明本轮是范围收缩而非新增功能。
+- 逐条记录：
+  - 删除的 6 个工具清单（工具名 + 所在文件 + 删除原因，复用 `goal.md` 范围界定表格中的措辞，**不收录** `docs/调用错误分析报告.md` 中未经核实的具体归因推测，如"需联系机构管理员升级"——只记录客观现象：HTTP 状态码 401、请求超时）。
+  - 关联清理的死配置：`ARXIV_DOWNLOAD_DIR`/`Settings.arxiv_download_dir`（本计划书步骤 8 的衍生决策，简述理由）。
+  - README.md / README_ZH.md 修改摘要。
+  - 版本号变更：`2.0.1` → `2.1.0`。
+- 每完成一个开发步骤追加一条，格式延续该文件既有约定（参考步骤 1 中 `### 步骤 N：<步骤名称> —— 完成于 <日期>` 的格式）。
+
+#### 验证方法
+- `project-docs/buildlog.md` 中能找到明确指向 `goal.md` `QA-R003` 的引用文字。
+- 6 个被删工具在 buildlog.md 中均有对应记录，且未收录报告中未经核实的具体归因推测。
+
+#### 风险提示
+- 不要把 `docs/调用错误分析报告.md` 中的推测性归因原文照抄进 buildlog.md——`goal.md` QA-R003 已明确这一处理原则，buildlog.md 作为下游文档同样应遵循。
+
+---
+
+### 步骤 12：整体回归验证
+
+#### 目标说明
+确认删除操作未破坏保留的 11 个工具，且 MCP 协议层面（stdio/JSON-RPC）未受影响。
+
+#### 具体操作
+1. 全局搜索复核（`src/` 全目录 + `README.md`/`README_ZH.md`/`.env.example`/`CLAUDE.md`）：确认 6 个已删工具名、`ARXIV_DOWNLOAD_DIR` 均无残留引用（`project-docs/goal.md`、`project-docs/teach.md`、`CHANGELOG.md` 历史条目除外——这些是历史记录，须保留原样，不得修改）。
+2. 用 `uv run uniarticles-mcp` 或 `python -m uniarticles` 启动服务，确认进程正常启动，`stdout` 未被污染（重点关注步骤 8 中 import 清理是否引入任何 `print`/未捕获异常）。
+3. 若条件允许，在真实 Claude Desktop/Cherry Studio 中实际加载一次，确认工具列表恰好显示 11 个工具，且名称与 README 一致。
+4. 用真实 `.env`（`ELSEVIER_API_KEY`）手动调用保留的 11 个工具中至少覆盖 4 个数据源各 1 个（如 `search_scopus`、`get_serial_title`、`retrieve_article`、`get_article_objects`、`search_arxiv`、`search_pubmed_papers` 中选取），确认均正常返回 `ok: true` 或结构清晰的 `_err`。
+
+#### 验证方法
+- 上述 4 项操作均通过，无 `ImportError`/`NameError`/未捕获异常。
+- MCP 客户端加载后工具计数为 11，与 README 描述一致。
+
+#### 风险提示
+- 本项目没有自动化测试套件（`tests/` 目录不存在），回归验证只能靠手动/真实调用完成，不要因为"删除操作看似简单"而跳过实际启动验证——步骤 2（v2.0 环境变量改名）已有先例说明"看似纯文本改动"也可能因一个 `stdout` 污染就破坏协议帧。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -399,3 +557,9 @@ settings = Settings()
 - 本计划书基于 `project-docs/goal.md`（commit `09c837e`，已定稿）第二步范围与用户在本轮对话中明确指定的第一步范围共同产出。
 - 步骤 1、2 为用户直接指定的固定收尾事项；步骤 3～7 为落实 `goal.md` 核心目标及处理其记录的遗留风险所设计的具体步骤。
 - 若用户对步骤 2 中"是否兼容旧变量名"的建议有不同意见，可在 `project-builder-cn` 开始执行前告知调整，避免已落地代码后再返工。
+
+---
+
+- （v2.1.0，2026-08-03）步骤 8～12 基于 `project-docs/goal.md` QA-R003（commit f57416d）追加，是对已发布 v2.0（2.0.1）的一次事后范围收缩：删除 6 个已确认不可用/超出产品定位的工具，同步修正 README 的 Elsevier Key 说明与工具清单，版本号提升至 `2.1.0`。步骤 1～7（v2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+- 步骤 8 中"清理 `ARXIV_DOWNLOAD_DIR` 死配置"是本计划书基于"不做面向未来预留代码"原则做出的衍生决策，`goal.md` QA-R003 未逐字列出该配置项，已在步骤 8 中明确标注该决策来源，避免 `project-builder-cn` 误以为超出授权范围而跳过，或反过来误以为是临场发挥。
+- 步骤 9 中明确排除了 README `tests/` 目录相关描述的修正——该失真先于本轮改动已存在，不属于 QA-R003 圈定范围，留待未来独立事项处理，避免本轮范围蔓延。
