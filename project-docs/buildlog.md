@@ -388,3 +388,37 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 3. 版本号提升并重新发布之后，`claude_desktop_config.example.json` 这类走 PyPI 的配置会自动解析到新版本，问题即消失，无需再改这份示例配置文件本身。
 
 ---
+
+## [2026-08-03 11:18] 发布：版本号提升至 2.0.1 并重新发布到 PyPI（记录既成事实）
+
+### 背景
+- 承接上一条诊断记录（`73fed72`，见「诊断：`claude_desktop_config.example.json`（走 PyPI `--refresh`）复现同一个 "Connection closed"，非新 bug」）：PyPI 上的 `2.0.0` 是**修复前的坏版本**——其发布时间（`2026-08-02 23:00:34 +0800`）早于 Connection closed 两处根因的修复提交 `e625944`（`2026-08-02 23:45:07 +0800`），因此 PyPI 上的 `2.0.0` 仍带 `mcp>=1.0.0` 无上限约束、且未含 paperscraper stdout 防污染修复。
+- 由于 PyPI 版本号不可覆盖（同一版本号无法重新上传），必须提升版本号才能把 `e625944` 的修复真正发布出去。主线程据此建议将版本号提升至 `2.0.1` 后重新打包发布。
+
+### 版本号 2.0.0 → 2.0.1 的原因
+- PyPI 上的 `2.0.0` 已被此前一次误发布（发布时间早于 bug 修复提交）占用，且是坏版本，无法覆盖，只能以新版本号 `2.0.1` 承载修复后的制品。
+
+### 2.0.1 相对 2.0.0 修复的内容（对应 commit `e625944`）
+1. **mcp 依赖版本上限修复**：`pyproject.toml` 中 `mcp` 依赖由无上限的 `mcp>=1.0.0` 收紧为 `mcp>=1.0.0,<2.0.0`，避免解析到 PyPI 新发布的破坏性 `mcp==2.0.0`（该版本迁移/移除了 `mcp.server.fastmcp` 模块，导致 `ModuleNotFoundError` → 进程崩溃 → "Connection closed"）。
+2. **paperscraper 劫持 root logger 污染 stdout 修复**：`paperscraper` 导入时会把 root logger 输出到 stdout，污染 MCP stdio 传输的 JSON-RPC 帧，同样触发 "Connection closed"；已在导入侧加以纠正（详见 `e625944`）。
+
+### 执行的任务（均由用户本人完成，本次仅记录既成事实）
+- 用户已手动将 `pyproject.toml` 第 7 行版本号改为 `version = "2.0.1"`（本次已核对确认属实）。
+- 用户已执行 `uv publish`，成功将 `2.0.1` 发布到 PyPI。
+- 用户本人已验证 hatch sdist exclude 规则生效：`project-docs/`、`.claude/`、`CLAUDE.md`、`docs/`、`.env` 等内部文件确未被打进发布到 PyPI 的 sdist 包中（该 exclude 规则来自此前提交 `8524d2f`）。
+
+### 关键变更
+- `pyproject.toml`：版本号 `2.0.0` → `2.0.1`（由用户手动改动，非本代理修改；本次未再改动该文件）。
+- `project-docs/buildlog.md`：追加本条发布记录。
+
+### 遇到的问题及解决方案
+- 无。本条为记录既成的发布事实，未执行任何打包/发布操作，未修改 `pyproject.toml`。
+
+### 验证方法
+- 用户已在 PyPI 端确认 `2.0.1` 发布成功，并亲自验证 sdist 打包未包含内部文档/配置文件。
+- 后续走 PyPI 的配置（如 `claude_desktop_config.example.json` 的 `uvx --refresh uniarticles-mcp`）将解析到修复后的 `2.0.1`，此前复现的 "Connection closed" 问题即消失，无需再改示例配置本身。
+
+### 下一步计划
+- ✅ v2.0 升级与发布流程已全部完成，无待执行的构建步骤。
+
+---
