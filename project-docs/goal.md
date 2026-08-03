@@ -33,6 +33,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 7.（v2.1.0，QA-R003）删除后 MCP Server 实际注册的工具数量为 11 个，README.md / README_ZH.md 中的工具清单、表格、计数与代码实际注册的工具一一对应，不再出现"文档写了但代码没有/代码有但文档没写"的不一致。
 8.（v2.1.0，QA-R003）README.md / README_ZH.md 中 Elsevier Key 的说明段落不再包含"您的机构必须购买了 Elsevier 的相关数据库服务，否则无法申请 API Key，亦无法使用相关功能"这类与实测结论相悖的表述，改为准确反映实测结论：非商业、无机构资质的基础 Elsevier Key 可在 Elsevier Developer Portal 个人免费申请，且能让删减后的全部 11 个工具正常工作；改写内容不超出实测证据范围，不新增未经验证的申请步骤/链接/承诺。
 9.（v2.1.0，QA-R003）`pyproject.toml` 版本号更新为 `2.1.0`，`project-docs/buildlog.md` 记录本轮变更（工具删除 + README 修正）。
+10.（下一轮，QA-R004/QA-R005，源自 `docs/TODO.md` 两条待办）删除能正常工作但未公开宣传的兼容别名 `search_paper`；对删除后剩余的全部 10 个工具，按"数据源_对象_动作(_by_限定词)"语义化命名风格（用户选定的方案 A，如 `arxiv_paper_search_by_query`）做一次性彻底重命名（不设新旧名字并存的过渡期，旧工具名直接消失）；并把 `list_papers` 的实现从"无筛选拉取最新论文"补全为**真正支持按 arXiv category 过滤**，使其重命名后的新工具名（暗示 category 过滤能力）与实际功能一致。目标版本号见 QA-R005（拟为 `3.0.0`，待用户最终确认）。
 
 ## 范围界定
 ### 包含
@@ -52,6 +53,10 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 
 - **（v2.1.0，QA-R003）同步修改 README.md / README_ZH.md**：(1) Elsevier Key 资质要求说明段落，改为准确反映"非商业/无机构资质的基础 Key 即可让删减后的全部 11 个剩余工具正常工作"，并说明可在 Elsevier Developer Portal 个人免费申请；(2) 工具清单/表格/计数从 17 个同步更新为 11 个，覆盖 ArXiv(4)/Scopus(3)/ScienceDirect(2)/PubMed(1)/系统(1)。
 - **（v2.1.0，QA-R003）`pyproject.toml` 版本号提升为 `2.1.0`**，`project-docs/buildlog.md` 记录本轮变更。
+- **（下一轮，QA-R004/QA-R005）删除 `search_paper` + 全部剩余 10 个工具一次性彻底重命名 + `list_papers` 功能补全**，依据是用户在 `docs/TODO.md` 提出的两条待办 + goal.md QA-R004/QA-R005 的澄清确认：
+  1. **删除 `search_paper`**（`src/uniarticles/sources/arxiv.py`）：它是 `search_arxiv` 的纯别名，功能正常但从未公开列入 README，v2.1.0 曾被有意保留；本轮用户主动放弃该兼容别名，无过渡期，直接删除代码、注册与测试引用。
+  2. **删除后剩余 10 个工具（`search_arxiv`/`list_papers`/`read_paper`/`search_scopus`/`get_abstract_details`/`get_serial_title`/`get_quota_status`/`search_pubmed_papers`/`retrieve_article`/`get_article_objects`）全部按方案 A 命名风格重命名**，一次性切换，旧名字不保留、不设别名过渡期。具体的新工具名、每个工具改动前后的请求体/返回体/参数/作用，由 project-planner-cn 在构建计划书中以表格形式逐一给出（要求详见"备注"交接说明）。
+  3. **`list_papers` 功能补全**：新增真实的 arXiv category 过滤能力（不是仅改名字），实现方式需复用 arXiv 官方查询语法的 `cat:` 字段前缀拼接进 `query`，而不是新增 `arxiv.Search` 不存在的原生 `category` 参数，也不是客户端侧对全量结果做二次过滤（技术依据见备注）。
 
 ### 排除
 | 功能 | 排除原因 |
@@ -76,6 +81,17 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **（v2.1.0，QA-R003）`searchScholarPapers` 的删除原因是用户确认的网络访问受限**（不是 Elsevier API Key 权限问题），与其余 5 个工具的删除原因（`downloadPaper` 除外）不同，特此分开记录，避免后续误将其归因为"权限不足"。
 - **（v2.1.0，QA-R003）本轮目标（工具删除 + README 修正）对应的发布版本号为 `2.1.0`**（当前 `pyproject.toml` 为 `2.0.1`），采用新增功能/范围调整级别的版本号而非 patch 号，因为该变更包含移除已发布公开工具接口这一对使用者可见的破坏性变更。
 - **（v2.1.0，QA-R003）执行分工**：本 agent（project-creator-cn）仅负责将上述决策写入本文档；实际的代码删除（`arxiv.py`/`scopus.py`/`sciencedirect.py`/`paperscraper.py` 及对应测试）与 README.md/README_ZH.md 文案修改，需要移交给 `project-planner-cn` 制定构建计划书，再由 `project-builder-cn` 落地执行并更新 `project-docs/buildlog.md`。
+- **（下一轮，QA-R004）重命名是无过渡期的一次性破坏性变更，用户已知情并接受**：不做新旧名字并存、不做 deprecated 别名、不做兼容层，任何硬编码旧工具名（含已删除的 `search_paper`）的外部提示词/工作流会在新版本发布后立即失效，这是用户主动选择的方案，不属于遗留风险，无需后续版本中"补救式"恢复旧名字。
+- **（下一轮，QA-R005）版本号待最终确认**：本 agent 判断"删除+破坏性重命名+功能新增"三者叠加，按语义化版本规范倾向于用主版本号（如 `3.0.0`）而非 2.x minor 号来标识，但用户尚未就版本号本身明确表态，已通过 QA-R005 单独追问，最终版本号以用户在 QA-R005 的回答为准，project-planner-cn 编写构建计划书前应先确认该轮是否已有用户回复。
+- **（下一轮，QA-R004，技术核实，供 project-planner-cn 参考）`list_papers` category 过滤的实现方式**：已实际读取当前项目 `.venv` 安装的 `arxiv` 库（版本 3.0.0，`arxiv.Search.__init__`）源码确认，其构造参数仅有 `query`/`id_list`/`max_results`/`sort_by`/`sort_order`，**不存在独立的 `category` 参数**；当前 `arxiv.py` 的 `list_papers` 实现（第 82-98 行）传入固定 `query="all"`，因此完全没有分类过滤。要让新工具真正支持按 category 过滤，正确做法是复用 arXiv 官方 API 的查询语法——用 `cat:` 字段前缀构造 `query` 字符串（例如 `cat:cs.AI`，多个分类可用 `OR` 组合），传给现有的 `arxiv.Search(query=..., sort_by=SubmittedDate)` 即可拿到"某分类下最新论文"的效果，无需修改 `arxiv` 库本身、也无需在客户端对全量结果做二次内存过滤。project-planner-cn 编写构建计划书时应按"拼接查询字符串复用官方查询语法"这一方式规划实现步骤和参数校验（例如 `category` 参数格式校验、非法分类码的错误处理），而非假设需要升级依赖库或自研过滤逻辑。
+- **（下一轮，QA-R004，交接给 project-planner-cn 的表格要求）用户明确要求构建计划书中必须包含一张覆盖以下 6 个维度的工具改动清单表格，逐一覆盖删除后剩余的全部 10 个工具（不含已确认删除的 `search_paper`）**：
+  1. 改动前工具名
+  2. 改动后工具名（遵循方案 A 命名风格）
+  3. 请求体（入参签名/参数列表）
+  4. 预期返回体（沿用现有 `_ok`/`_err` 统一结构时，`items` 内的字段结构是否随之变化，需明确写出）
+  5. 作用（一句话说明该工具做什么、对接哪个数据源的哪个端点）
+  6. 允许的参数（含默认值、取值范围/枚举、是否新增参数——例如 `list_papers` 新增的 `category` 参数）
+  project-planner-cn 在制定构建计划书时不得省略此表格或简化维度，这是用户在本轮 QA 中明确提出的交付格式要求。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -209,6 +225,49 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **影响的目标文档章节**
   - 核心目标 / 范围界定（包含/排除） / 成功标准 / 约束条件
   <!-- GOAL-QA-R003-END -->
+
+### QA-R004：`docs/TODO.md` 两条待办（移除 search_paper + 全量工具语义化重命名）的可行性核实与破坏性变更决策
+<!-- GOAL-QA-R004-START -->
+- **提问时间**：2026-08-03 19:43
+- **提问目的**：用户在 `docs/TODO.md` 写下两条待办——①移除 `search_paper`（保留实现完全一致的 `search_arxiv`）；②对全部工具做更语义化的命名，并给出 `search_arxiv → arxiv_paper_search_by_query`、`list_paper → arxiv_latest_paper_list_by_category` 两个示例。用户要求先评估、不要直接照单全收去改代码。核实代码（`src/uniarticles/sources/arxiv.py`、`scopus.py`、`sciencedirect.py`、`paperscraper.py`）与既有文档（`project-docs/teach.md`、`project-plan.md`）后，形成以下专业判断：
+  1. **关于移除 `search_paper`**：确认它是 `search_arxiv` 的纯别名（函数体仅 `return await search_arxiv(...)`），无独立校验/异常处理逻辑。README.md/README_ZH.md 从未公开列出过它（`project-plan.md` 469 行已记录）。但 v2.1.0 清理 6 个不可用工具那一轮，`buildlog.md`/`project-plan.md` 明确"故意保留 `search_paper`，删除时别误删"，`teach.md` 记录的推测是"可能为兼容某些习惯 `search_paper`/`search_papers` 命名的客户端/提示词而保留"——这只是推测，没有任何提交记录或文档写明确切原因。它与此前删除的 6 个工具性质不同：那 6 个是**实测确认不可用**（401/403/超时），删除是"清理故障"；`search_paper` 是**能正常工作**的别名，移除它是"主动做破坏性简化"，风险评估的性质不一样，需要用户单独确认而非套用上一轮的删除逻辑。
+  2. **关于全量工具重命名**：当前 11 个工具命名规则本身不统一——`search_arxiv`/`search_scopus`/`search_pubmed_papers` 是"动词_数据源"，但 `list_papers`/`read_paper`/`get_abstract_details`/`get_serial_title`/`get_quota_status`/`retrieve_article`/`get_article_objects` 完全不带数据源信息。用户提出按数据源加前缀语义化命名的方向合理，但重命名 MCP 工具名对已发布的 PyPI 包（`uniarticles-mcp`，已被 `uvx` 方式在 Claude Desktop/Cherry Studio 等客户端启动使用）是**破坏性变更**：MCP 客户端通常在连接时动态拉取工具列表，重命名本身不会导致协议层报错，但任何用户已经写好并硬编码旧工具名的提示词/自定义指令/工作流会失效，且用户此前没有任何弃用过渡（deprecation）就直接改名，无法被识别为"同一功能换了皮"。这与此前"删除确认不可用工具"的破坏性质不同（那是删除本就用不了的功能，实际影响面小），重命名影响的是全部 11 个**当前正常工作**的工具，影响面最大，必须单独决策，不能顺带执行。
+  3. **核实用户示例命名的准确性问题**：`list_paper`（实际工具名为 `list_papers`，复数）目前的实现（`arxiv.py` 第 82-98 行）**并没有真正按分类过滤**——代码注释显示开发者最初想做"按 category 列出最新论文"，但最终改为对 `_run_arxiv_search` 传入固定 query `"all"`，本质是"不带筛选条件的最新论文搜索"。若直接采用用户建议的 `arxiv_latest_paper_list_by_category`，命名会宣称一个当前代码并不具备的能力（承诺功能与实现不符），这是命名规范之外必须先澄清的事实问题：这次改动是"只改名字"还是要"顺带把实现补全到匹配新名字所暗示的能力"。
+- **问题列表**
+  1. 移除 `search_paper`：确认按你在 TODO 里写的直接删除？需要你明确知晉这是主动放弃一个"能正常工作但未公开宣传"的兼容别名，而不是清理故障工具，且没有任何证据能 100% 排除有用户在文档外凭经验用过这个工具名——你是否接受这个不可完全排除的低概率兼容性风险？
+  2. 全量工具重命名属于影响全部 11 个当前可用工具的破坏性变更：你希望现在就在下一个版本里直接把所有工具名改掉（旧名字彻底消失，一次性切换），还是希望采用"新旧名字并存一段时间"的过渡方案（新名字是主实现，旧名字保留为别名并在文档/日志中标注"deprecated，将在下个大版本移除"，给已配置好提示词的用户一个缓冲期）？如果选择一次性切换，是否同意这类量级的改动应该对应一个更高的版本号（例如 3.0.0 而非 2.x 的 minor 版本），以便使用语义化版本号的用户能一眼看出这是破坏性变更？
+  3. 命名风格：你给的示例（`arxiv_paper_search_by_query`、`arxiv_latest_paper_list_by_category`）是"数据源_对象_动作_by_限定词"模式，信息完整但偏长。我倾向的备选方案是更紧凑的"数据源_动词_对象"模式（例如 `arxiv_search_papers`、`sciencedirect_get_article_objects`），同样体现数据源+动作+对象，但去掉 `by_x` 限定词后缀。下面这两种风格你更倾向哪一种？还是希望我针对个别工具单独讨论？
+     - 方案A（你的示例风格，逐词更完整）：`arxiv_paper_search_by_query`、`arxiv_latest_paper_list_by_category`……
+     - 方案B（更紧凑）：`arxiv_search_papers`、`arxiv_list_recent_papers`……
+  4. 承接第 3 点发现的问题：`list_papers` 当前实现并不按分类过滤，只是无筛选地拉取最新论文。这次改动中，你希望（a）只改名字，新名字要如实反映"无分类过滤"这一现状（例如 `arxiv_list_recent_papers`，不含 category 字样），还是（b）借这次改名的机会顺带把实现补全为真正支持按 category 过滤（这会把一次"纯命名"任务变成"命名+功能开发"任务，需要另外评估工作量和 arxiv 库的 category 参数支持情况）？
+- **用户回答**
+  1. 确认完全删除
+  2. 彻底改掉
+  3. 方案A
+  4. 改成完全且真正支持按category过滤
+- **提炼结论**
+  - **`search_paper` 确认完全删除**：用户明确接受"无法 100% 排除文档外用户依赖该别名"这一低概率兼容性风险，`search_paper` 不再作为过渡别名保留，随本轮改动一并从 `arxiv.py` 移除（函数体、`@server.tool()` 注册及相关测试引用）。
+  - **全量工具重命名确认为一次性彻底切换**：不做"新旧名字并存/deprecated 过渡期"方案，旧工具名在新版本中直接消失，不提供向后兼容别名。这是用户主动选择的更激进方案（相对于本 agent 在问题 2 中提出的过渡期备选方案），意味着任何硬编码旧工具名的用户提示词/工作流会在升级后立即失效，无缓冲期。
+  - **命名风格确认为方案 A**（用户示例风格）：采用"数据源_对象_动作(_by_限定词)"的完整语义模式，例如 `arxiv_paper_search_by_query`，不采用本 agent 备选的更紧凑的"数据源_动词_对象"方案 B。全部工具的具体新名称由 project-planner-cn 在构建计划书中按此风格逐一拟定。
+  - **`list_papers` 确认为"命名+功能开发"双重任务**：不是仅改名字掩盖现状，而是要求本次改动把实现补全为**真正支持按 category 过滤**，新名字（暗示 category 过滤能力）与实际功能要对齐。技术可行性已核实（见备注中的交接说明）：`arxiv` 库（当前项目依赖版本 3.0.0）的 `arxiv.Search.__init__` 只有 `query`/`id_list`/`max_results`/`sort_by`/`sort_order` 五个参数，**没有独立的 `category` 参数**；但 arXiv 官方查询语法支持 `cat:` 字段前缀（如 `cat:cs.AI`），可以通过拼接 `query` 字符串复用这一官方查询语法实现按分类过滤，既不是"库原生参数直接可用"，也不需要"客户端拿到全量结果后自己按 category 字段过滤"，是介于两者之间的第三种实现方式——细节已写入下方"备注"交接说明，供 project-planner-cn 编写构建计划书时参考，避免凭空判断工作量。
+  - **版本号问题：用户本轮回答未覆盖**。本 agent 在问题 2 中把"是否一次性切换"和"版本号应为 3.0.0 还是延续 2.x"绑定在一起提问，但用户的回答"彻底改掉"只回应了切换方式，没有对版本号表态。鉴于版本号是不可由本 agent 代替用户决定的一次性发布决策，已追加 **QA-R005** 单独确认，不在本轮结论中替用户预设版本号。
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定（包含/排除） / 约束条件
+  <!-- GOAL-QA-R004-END -->
+
+### QA-R005：全量重命名+功能补全对应的版本号确认
+<!-- GOAL-QA-R005-START -->
+- **提问时间**：2026-08-03 19:51
+- **提问目的**：QA-R004 问题 2 把"重命名是否一次性切换"与"版本号是否应为 3.0.0"绑定提问，用户只回答了"彻底改掉"（一次性切换），未对版本号单独表态。本轮改动包含三类变更叠加：①删除一个当前能正常工作的工具（`search_paper`）；②对剩余全部 10 个工具做无过渡期的破坏性重命名；③新增/修改 `list_papers` 的功能（真正支持 category 过滤，非纯 bugfix，是能力扩展）。按语义化版本规范的通行理解，②是典型的破坏性变更（Breaking Change），③是功能新增（Feature），二者叠加通常应体现为主版本号（Major）提升而非 2.x 的 minor 号；但版本号最终标识的是对外发布语义，必须由用户本人明确拍板，本 agent 不能替用户悄悄定版本号，故单独追问确认。
+- **问题列表**
+  1. 本轮改动（删除 `search_paper` + 全部 10 个工具一次性重命名 + `list_papers` 新增真实 category 过滤）对应的目标发布版本号，是否确认为 **`3.0.0`**（主版本号提升，明确标识破坏性变更）？还是你有其他版本号考虑（例如仍归入 2.x，或使用其他版本策略）？
+- **用户回答**
+  1. [等待用户回答]
+- **提炼结论**
+  - [收到回答后补充]
+- **影响的目标文档章节**
+  - 核心目标 / 约束条件
+<!-- GOAL-QA-R005-END -->
 
 <!-- GOAL-QA-LOG-END -->
 
