@@ -28,7 +28,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 10 个工具做过实测验证。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 12 个工具做过实测验证。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -149,6 +149,8 @@ python -m uniarticles      # 使用 pip 安装时
 - `scopus_abstract_detail_by_eid(eid, view)`: 按 EID 获取归一化的摘要记录（标题、作者、机构、期刊、标识符）。摘要正文仅在更高级别、受订阅限制的视图下才会返回。
 - `scopus_serial_title_by_issn(issn, view)`: 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。
 - `scopus_api_usage_status()`: 检查 Elsevier API 用量/速率限制状态（通过 Scopus 端点）。
+- `scopus_serial_title_search_by_criteria(title, issn, pub, subj, content, date, oa, start, count, view)`: 按期刊名、出版商、学科、Open Access 状态等多个可选条件搜索期刊/连续出版物（无需 ISSN，结果含 SNIP/SJR 计量指标）。是 `scopus_serial_title_by_issn` 的姊妹工具。注意：`subj` 需传学科缩写（如 `COMP`）而非数字代码；`count` 上限为 200。
+- `scopus_subject_classification_lookup_by_source(source, description, detail, code, abbrev, field)`: 查询 Scopus/ScienceDirect 学科分类代码，用于构造更精确的检索查询。`source` 为必填（`scopus` 或 `scidir`）。
 
 ### ScienceDirect
 - `sciencedirect_article_retrieve_by_identifier(identifier, identifier_type, view)`: 按标识符检索归一化的文章记录（标题、作者、期刊、标识符、主题）。

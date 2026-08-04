@@ -28,7 +28,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 10 tools using a real non-commercial key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 12 tools using a real non-commercial key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -151,6 +151,8 @@ If the process starts without import or configuration errors, the installation i
 - `scopus_abstract_detail_by_eid(eid, view)`: Get a normalized abstract record (title, authors, affiliations, journal, identifiers) by EID. The abstract body is only populated under richer, subscription-gated views.
 - `scopus_serial_title_by_issn(issn, view)`: Look up journal/serial metadata (publisher, Open Access status, coverage years, subject areas, homepage) by ISSN.
 - `scopus_api_usage_status()`: Check Elsevier API usage/rate-limit status (via Scopus endpoint).
+- `scopus_serial_title_search_by_criteria(title, issn, pub, subj, content, date, oa, start, count, view)`: Search journals/serials by title, publisher, subject, Open Access status, etc. (multiple optional criteria, no ISSN required; results include SNIP/SJR metrics). Sibling tool to `scopus_serial_title_by_issn`. Note: `subj` takes a subject abbreviation (e.g. `COMP`) not a numeric code; `count` max is 200.
+- `scopus_subject_classification_lookup_by_source(source, description, detail, code, abbrev, field)`: Look up Scopus/ScienceDirect subject classification codes to help build more precise search queries. `source` is required (`scopus` or `scidir`).
 
 ### ScienceDirect
 - `sciencedirect_article_retrieve_by_identifier(identifier, identifier_type, view)`: Retrieve a normalized article record (title, authors, journal, identifiers, subjects) by identifier.
