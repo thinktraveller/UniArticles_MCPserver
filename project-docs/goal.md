@@ -14,6 +14,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 3. 两项新工具均以当前 SCOPUS_API_KEY 在真实调用中验证通过（HTTP 200）为前提落地，不实现已实测确认不可用或未经许可访问的功能。
 4. 明确记录并对外暴露"哪些 Elsevier 能力当前订阅不支持"，避免用户误以为 MCP Server 支持了实际调不通的功能。
 5.（v2.1.0，QA-R003）基于用户在真实 Cherry Studio 环境下对已发布 v2.0（2.0.1）全部 17 个工具的一轮完整实测（11 可用/6 不可用，见 `docs/调用错误分析报告.md`），删除 6 个确认不可用或超出产品定位的工具——`downloadPaper`、`searchAuthors`、`getAuthorProfile`、`searchSciencedirect`、`getArticleMetadata`、`searchScholarPapers`——将 MCP Server 收窄为 11 个稳定可用工具；同步修正 README.md / README_ZH.md 对 Elsevier Key 资质要求的描述，使其准确反映"非商业/无机构资质的基础 Elsevier Key 即可让删减后的全部剩余功能正常工作"这一实测结论，不做无实测依据的营销式表述。
+6.（v2.3.0，QA-R007/QA-R008）基于调研本地参考项目 `reference-projects/elsevier-mcp-main/` 发现的候选功能，用真实 Elsevier Key 实测确认可用后，**新增两个 MCP 工具**：`serial_title_search`（期刊多条件搜索，接入 `content/serial/title`，不要求预先知道 ISSN，是现有 `scopus_serial_title_by_issn`的姊妹工具）与 `subject_classifications`（学科分类代码查询，接入 `content/subject/{scopus|scidir}`，全新概念，帮助用户查代码构造更精确的 Scopus 查询）。**这是纯新增（Additive）版本，不删除、不重命名、不改动现有 10 个工具的任何行为**，与 v2.1.0（删除故障工具）、v2.2.0（破坏性重命名+功能改造）性质均不同。
 
 ## 目标用户
 使用 Claude Desktop / Cherry Studio 等 LLM 客户端、通过 UniArticles MCP Server 检索学术文献的科研人员/学生，且其机构订阅了基础级别的 Elsevier Scopus/ScienceDirect API 访问权限（非商业性质 Key，无 Insttoken）。
@@ -36,6 +37,9 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 10.（QA-R004/QA-R005/QA-R006，源自 `docs/TODO.md` 两条待办）删除能正常工作但未公开宣传的兼容别名 `search_paper`；对删除后剩余的全部 10 个工具，按"数据源_对象_动作(_by_限定词)"语义化命名风格（用户选定的方案 A，如 `arxiv_paper_search_by_query`）做一次性彻底重命名（不设新旧名字并存的过渡期，旧工具名直接消失），其中 `get_quota_status` 的新名字按 QA-R006 用户要求由 `scopus_api_quota_status` 改为 `scopus_api_usage_status`；并把 `list_papers` 的实现从"无筛选拉取最新论文"补全为**真正支持按 arXiv category 过滤**，使其重命名后的新工具名（暗示 category 过滤能力）与实际功能一致。目标版本号已由用户在 QA-R005 确认为 **`2.2.0`**（否决了本 agent 建议的 3.0.0，理由是工具数量未净增加）。
 11.（QA-R006，范围已确认，字段方案留待构建阶段真实探测）新增 `get_abstract_details`（`scopus.py`）与 `retrieve_article`（`sciencedirect.py`）两个工具的 JSON 归一化任务——当前两者均为 Elsevier 原始响应整体透传（`items=[response.json()]`），不像 `search_scopus`/`get_serial_title`/`get_article_objects` 那样做逐字段提取；归一化字段方案本身**不在本文档中给出**，需 `project-builder-cn` 先做真实 API 探测确认响应体字段结构（原因见约束条件），再由 `project-planner-cn` 在构建计划书中据实拟定提取字段。
 12.（QA-R006，已确认）调整 `src/uniarticles/sources/__init__.py` 中 `register_all_sources()` 的文件级调用顺序，从当前的 `arxiv → scopus → paperscraper → sciencedirect` 改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）；用户已明确选择"只要求文件级顺序"，不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独注册，`scopus.py` 内部各工具相对顺序维持不变。
+13.（v2.3.0，QA-R007/QA-R008）`serial_title_search`（暂定名，最终名称由 project-planner-cn 在方案 A 命名风格下确认，本 agent 建议 `scopus_serial_title_search_by_criteria`）能够对真实检索条件（如 `title=Cell`）返回 200 响应并正确解析出 `serial-metadata-response.entry[]` 列表。
+14.（v2.3.0，QA-R007/QA-R008）`subject_classifications`（暂定名，本 agent 建议 `scopus_subject_classification_lookup_by_source`）能够对真实 `source=scopus` 请求返回 200 响应并正确解析出 `code`/`description`/`detail`/`abbrev` 字段；`source=scidir` 分支需 project-builder-cn 补充真实探测后再确认字段一致性，不得凭空假设与 scopus 分支同构。
+15.（v2.3.0，QA-R007/QA-R008）两个新工具均遵循项目现有的 `_ok`/`_err` 统一响应结构，且均放入 `src/uniarticles/sources/scopus.py`，不新建模块；MCP Server 工具总数由 10 个增至 12 个，不删除、不重命名任何现有工具。
 
 ## 范围界定
 ### 包含
@@ -61,6 +65,11 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   3. **`list_papers` 功能补全**：新增真实的 arXiv category 过滤能力（不是仅改名字），实现方式需复用 arXiv 官方查询语法的 `cat:` 字段前缀拼接进 `query`，而不是新增 `arxiv.Search` 不存在的原生 `category` 参数，也不是客户端侧对全量结果做二次过滤（技术依据见备注）。
   4. **（QA-R006 新增）`get_abstract_details`/`retrieve_article` 归一化**：本轮范围扩大到把这两个工具的返回体从"Elsevier 原始 JSON 整体透传"改为像 `get_serial_title`/`get_article_objects` 一样做逐字段提取归一化，具体字段方案留待 `project-builder-cn` 做真实探测后由 `project-planner-cn` 补充（不在本文档中凭空定义字段，理由见约束条件）。
   5. **（QA-R006，已确认）工具注册顺序调整为文件级顺序**：`sources/__init__.py` 中 `register_all_sources()` 内四个 `register_xxx_source()` 调用顺序改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）。用户已明确选择"只要求文件级顺序"，不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独最后调用，`scopus.py` 内部各工具（`search_scopus`/`get_abstract_details`/`get_serial_title`/`scopus_api_usage_status`）相对顺序维持文件内原有顺序不变，不需要跨文件拆分注册逻辑。
+- **（v2.3.0，QA-R007/QA-R008，已确认）新增 `serial_title_search` + `subject_classifications` 两个工具**，依据是调研本地参考项目 `reference-projects/elsevier-mcp-main/` 后用真实 Elsevier Key 实测确认可用（探测记录见附录"实测可行性探测（2026-08-04，QA-R007 新候选项）"，commit `d9890f8`），用户明确指定版本号 `2.3.0`：
+  1. **`serial_title_search`**：接入 `content/serial/title`（GET，query 参数：`title`/`issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view` 均为可选过滤条件，可任意组合），放入 `src/uniarticles/sources/scopus.py`（与同源的 `scopus_serial_title_by_issn` 放在一起，复用文件内既有的 `_get_headers()`/`BASE_URL`/`_ok`/`_err`），建议命名 `scopus_serial_title_search_by_criteria`（方案 A 风格；不用 `_by_title` 是因为端点支持多条件组合，避免重蹈 `list_papers` 命名与实现不符的覆辙）。
+  2. **`subject_classifications`**：接入 `content/subject/{source}`（`source` 必填，取值 `scopus`/`scidir`；`description`/`detail`/`code`/`abbrev`/`field` 均为可选过滤条件），同样放入 `src/uniarticles/sources/scopus.py`（本 agent 判断：端点路径属通用 `content/subject/` 前缀而非 ScienceDirect 专属家族，且已有 `scopus_serial_title_by_issn` 放置通用 Elsevier 内容概念于 scopus.py 的先例；project-planner-cn 若认为应新建独立模块可提出并说明理由），建议命名 `scopus_subject_classification_lookup_by_source`（方案 A 风格）。
+  3. **两个新工具的真实响应字段结构、建议命名的完整依据、以及尚未探测的参数边界**，均已详细记录在附录"实测可行性探测（2026-08-04，QA-R007 新候选项）"与 QA-R008 提炼结论中，project-planner-cn 编写构建计划书时可直接引用，不需要重新做探测。
+  4. **本轮明确边界：v2.3.0 是纯新增（Additive）版本**，不涉及删除、重命名或修改现有 10 个工具（`scopus_document_search_by_query`/`scopus_abstract_detail_by_eid`/`scopus_serial_title_by_issn`/`scopus_api_usage_status`/`sciencedirect_article_retrieve_by_identifier`/`sciencedirect_article_object_by_identifier`/`arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id`/`pubmed_paper_search_by_query`）的名称、参数、返回结构或注册顺序，与 v2.1.0（删除）、v2.2.0（重命名+功能改造）在改动性质上完全不同，project-planner-cn 制定构建计划书时不应顺带评估或改动这 10 个现有工具。
 
 ### 排除
 | 功能 | 排除原因 |
@@ -101,6 +110,11 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **（QA-R006）`scopus_api_usage_status` 命名确认**：`get_quota_status` 的新名字最终确认为 `scopus_api_usage_status`（用 usage 替代此前拟定的 quota），交付表格中其余 9 个工具的新名字维持不变。
 - **（QA-R006，前置事实核实：归一化任务不能凭空编字段）`get_abstract_details`/`retrieve_article` 归一化缺少真实响应体字段样例，需先做真实探测**：核实 `project-docs/buildlog.md` 136-141 行，此前 v2.0 阶段的实测只确认了这两个端点在 `view=META` 下返回 **HTTP 200** 及**响应根对象名**（Scopus 侧为 `abstracts-retrieval-response`，ScienceDirect 侧为 `full-text-retrieval-response.coredata`），并未记录完整的字段级结构；对比之下 `get_article_objects` 的归一化在 `buildlog.md` 161-163 行有完整的真实抓包字段清单（`attachment[]` 各字段及可选性）可直接复用。因此 `get_abstract_details`/`retrieve_article` 的归一化字段方案**当前无法在 goal.md 或构建计划书中直接凭空定义**，必须先由 `project-builder-cn`（或构建前的探测步骤）用真实 `ELSEVIER_API_KEY` 对两个端点各发起真实请求、拿到完整响应体样例后，才能确定要提取哪些字段、哪些字段是可选的——这是本项目一贯的"真实验证优先"原则（同 QA-R001/QA-R002 对 Elsevier 端点可行性的处理方式）的延续。project-planner-cn 编写构建计划书时应把"真实探测 → 确定字段 → 编写归一化代码"列为该任务的显式前置步骤，不能跳过探测直接写归一化实现。
 - **（QA-R006，已确认）工具注册顺序调整的实现粒度已由用户明确选择为"文件级顺序"**：`src/uniarticles/sources/__init__.py` 的 `register_all_sources()` 内四个 `register_xxx_source()` 调用顺序改为 `scopus → sciencedirect → arxiv → paperscraper`（pubmed）即可；用户明确不要求把 `scopus_api_usage_status` 从 `scopus.py` 的 `register()` 中拆出单独调用，`scopus.py` 内部工具相对顺序不变，不需要跨文件拆分注册逻辑。这是比"全局工具注册顺序精确匹配"更轻量的方案，project-planner-cn/project-builder-cn 按此实现即可，无需再评估拆分注册逻辑的方案。
+- **（v2.3.0，QA-R007/QA-R008）`serial_title_search`/`subject_classifications` 的真实探测尚未覆盖全部参数边界，构建阶段需先补测再写实现，不得凭空补全**：QA-R007/QA-R008 的真实探测各只验证了一种最基础的调用组合（`serial_title_search` 只测了单一 `title` 条件；`subject_classifications` 只测了 `source=scopus` 分支）。以下细节明确标注为"未探测"，project-builder-cn 在正式构建阶段需先用真实 Elsevier Key 补测，再据实确定参数校验/归一化字段，不能照抄参考项目 `reference-projects/elsevier-mcp-main/` 的 Zod schema 假设（那是别的项目自己的实现选择，不代表 Elsevier 服务端真实行为）：
+  1. `serial_title_search`：`issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view` 参数逐一的真实调用效果；不带任何检索条件时服务端的真实行为（拒绝还是返回全量）；`count` 的服务端真实上限是否为 200；无效 `subj` 学科代码的错误响应。
+  2. `subject_classifications`：`source=scidir`（ScienceDirect 学科分类）分支的真实响应字段结构（不能假设与已验证的 `source=scopus` 分支同构）；`code`/`abbrev`/`field` 精确过滤参数的真实效果；`source` 传入非法值时的错误响应；不带过滤条件、只传 `source` 时的响应体量级（是否需要分页提示）。
+  3. 两工具的错误处理边界（无效标识符/无匹配结果/权限不足）均未真实触发过，需按项目现有 `_ok`/`_err` 规范真实测试后再确定归一化降级行为。
+- **（v2.3.0，QA-R007/QA-R008）本轮新增工具建议命名（`scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source`）为本 agent 拟定，非不可更改的最终方案**：project-planner-cn 若在构建计划书阶段认为有更贴切的命名，可以调整，但须说明理由，并保持 v2.2.0（QA-R004）已确认的"数据源_对象_动作(_by_限定词)"方案 A 命名风格不变，不得引入新的命名规则或退回方案 B。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -345,6 +359,43 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - 核心目标 / 范围界定（包含/排除） / 附录：Elsevier API 现状盘点
   <!-- GOAL-QA-R007-END -->
 
+### QA-R008：v2.3.0 正式立项——`serial_title_search` + `subject_classifications` 纳入开发范围
+<!-- GOAL-QA-R008-START -->
+- **提问时间**：2026-08-04 13:53
+- **提问目的**：QA-R007 已用真实 Elsevier Key 实测确认 `serial_title_search`（期刊搜索）、`subject_classifications`（学科分类查询）均可用（HTTP 200），但当轮用户只回答"验证一下"，未对"验证通过后是否正式纳入某个版本"表态，本 agent 在上一轮结尾主动留了这个待确认问题。本轮用户已通过协调方明确答复，直接完成立项确认，不需要再像 v2.2.0 那样单独开一轮问版本号（用户已直接指定 `2.3.0`）。
+- **问题列表**（本轮为用户主动确认，非本 agent 追问触发，问题以"待确认事项"形式记录）
+  1. `serial_title_search`、`subject_classifications` 是否正式纳入下一版本开发范围？版本号是多少？
+- **用户回答**
+  1. "纳入下一版本 v2.3.0 的开发范围，继续完善 project-docs/goal.md 以便规划计划"
+- **提炼结论**
+  - **版本号确认为 `2.3.0`**，用户直接指定，无需像 v2.2.0（QA-R005）那样单独走一轮版本号确认流程。
+  - **v2.3.0 范围边界明确为"纯新增两个工具"，与此前两个版本性质不同，需要在文档中讲清楚以避免后续误解**：
+    - v2.1.0＝删除 6 个已发布但不可用的工具（清理故障）。
+    - v2.2.0＝删除 1 个别名工具 + 剩余 10 个工具全部破坏性重命名 + `list_papers` 功能补全 + 2 处归一化（改造性质，涉及全部现有工具）。
+    - **v2.3.0＝仅新增 2 个工具**（`serial_title_search`、`subject_classifications` 对应的新 MCP 工具），**不删除、不重命名、不改动任何现有 10 个工具的名称/参数/返回结构/注册顺序**。这是纯粹的能力扩展（Additive/Feature 版本），风险面和 v2.1.0/v2.2.0 完全不同，project-planner-cn 制定构建计划书时只需规划"新增"相关的步骤，不应顺带评估或触碰现有 10 个工具。
+  - **落地细节（供 project-planner-cn 直接使用，不必回头翻 QA-R007 探测记录）**：
+    - **`serial_title_search`**：
+      - 端点：`content/serial/title`（GET，query 参数搜索，区别于已实现的 `content/serial/title/issn/{issn}` 单 ISSN 精确查询）。
+      - 文件归属：**`src/uniarticles/sources/scopus.py`**（与同源的 `scopus_serial_title_by_issn` 放在一起，复用同文件已有的 `_get_headers()`/`BASE_URL`/`_ok`/`_err`/`_as_list` 等既有工具函数，不新建模块）。
+      - 建议命名（方案 A 风格，本 agent 拟定，project-planner-cn 如有更贴切方案可在构建计划书中调整，但需说明理由、保持方案 A 风格不变）：**`scopus_serial_title_search_by_criteria`**（不用 `_by_title`，因为端点实际支持 `title`/`issn`/`pub`/`subj`/`oa`/`content`/`date` 等多个可选检索条件的任意组合，命名为 `by_title` 会像 QA-R004 发现的 `list_papers` 问题一样"承诺了实现不具备的单一维度"，用 `_by_criteria` 更如实反映"多条件组合搜索"这一实际能力）。
+      - 已通过真实探测确认的响应字段（`title=Cell&count=5` → 200）：根为 `serial-metadata-response.entry[]`，单条 entry 至少含 `dc:title`/`dc:publisher`/`prism:issn`/`prism:eIssn`/`prism:aggregationType`/`coverageStartYear`/`coverageEndYear`/`openaccess`/`openaccessType`/`subject-area[]`（`@code`/`@abbrev`/`$`）/`link[]`（含 `@ref=homepage`/`@ref=coverimage`/`@ref=scopus-source`）/`prism:url`/`source-id`，另外还观察到 `SNIPList.SNIP[]`/`SJRList.SJR[]`（期刊计量指标，按年份列出 SNIP/SJR 值）——这是现有 `scopus_serial_title_by_issn` 归一化字段里**没有**提取的新字段，是否要在新工具里补充提取由 project-planner-cn/project-builder-cn 决定。
+      - 参考项目额外支持的可选参数：`pub`（出版商）、`subj`（学科代码）、`content`（journal/tradejournal/conferenceproceeding/bookseries）、`date`、`oa`（all/full/partial/none）、`start`（分页偏移）、`count`（每页数量，文档标注上限 200）、`view`（STANDARD/ENHANCED/CITESCORE）——这些参数**均未在真实探测中逐一测试**，只测过 `title` 单一条件，具体见下方"尚待探测的细节"。
+    - **`subject_classifications`**：
+      - 端点：`content/subject/{source}`，`{source}` 取值 `scopus` 或 `scidir`（GET，可选 query 参数 `description`/`detail`/`code`/`abbrev`/`field` 做过滤）。
+      - 这是一个**全新概念的工具**（本项目此前没有任何"学科分类代码查询"能力），不依附于文献检索/期刊检索，而是辅助用户构造更精确查询用的元数据速查工具。
+      - 文件归属判断：**同样放入 `src/uniarticles/sources/scopus.py`**（本 agent 的判断：虽然该端点通过 `source` 参数同时覆盖 Scopus 和 ScienceDirect 两套分类体系，功能上不完全等同"纯 Scopus"，但 (a) 端点路径前缀是通用的 `content/subject/`，不属于 ScienceDirect 专属的 `content/article`/`content/object` 家族；(b) 现有 `scopus_serial_title_by_issn` 已经开了"Elsevier 内容级通用概念放进 scopus.py"的先例；(c) 单独为一个小工具新建模块会增加文件数量但收益不明显。project-planner-cn 若认为应新建独立模块，可在构建计划书中提出并说明理由，本决定非不可更改的硬性约束）。
+      - 建议命名（方案 A 风格，本 agent 拟定）：**`scopus_subject_classification_lookup_by_source`**（`source` 是该端点唯一必填参数，其余 `description`/`detail`/`code`/`abbrev`/`field` 均为可选过滤条件，参照现有 `scopus_abstract_detail_by_eid` "detail_by_主键参数" 的命名思路）。
+      - 已通过真实探测确认的响应字段（`source=scopus&description=computer` → 200）：根为 `subject-classifications.subject-classification[]`，每项字段扁平、无嵌套：`code`（字符串数字，如 `"1700"`）、`description`（大类名，如 `"Computer Science"`）、`detail`（细分学科名，如 `"Artificial Intelligence"`）、`abbrev`（大类缩写，如 `"COMP"`）。
+      - **`source=scidir`（ScienceDirect 学科分类）分支完全未测试**，真实响应结构是否与 `source=scopus` 一致（字段名是否相同）未知，不能凭空假设一致。
+  - **尚待探测的细节（如实标注，留给 project-builder-cn 在正式构建阶段补充真实探测，不在本文档凭空补全）**：
+    1. `serial_title_search`：`issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view` 等参数逐一的真实调用效果未测试（只测过纯 `title` 条件）；不带任何检索条件调用会返回什么（参考项目在 TS 客户端侧做了"至少需要 title/issn/pub/subj 之一"的前置校验，但这只是参考项目自己的实现选择，不代表 Elsevier 服务端本身的真实行为，本项目要不要照搬这个前置校验、或服务端在零条件下到底是报错还是返回全量数据，需要真实探测确认）；`count` 参数的服务端实际上限是否真的是 200（该值来自参考项目 Zod schema 的注释，未在本项目端验证）；无效/不存在的 `subj` 学科代码时的错误行为。
+    2. `subject_classifications`：`source=scidir` 分支未测试，字段结构未知；`code`/`abbrev`/`field` 精确过滤参数的真实调用效果未测试；`source` 传入非法值（既非 scopus 也非 scidir）时的错误响应未测试；不带任何过滤条件、只传 `source` 时的响应体量级未知（学科分类总数可能较大，需要确认是否需要分页或客户端提示）。
+    3. 两个工具的错误处理（无效标识符/无匹配结果/权限不足等边界情况）尚未真实触发过，需要 project-builder-cn 按项目现有 `_ok`/`_err` 规范真实测试后再确定归一化的降级行为。
+  - **两个新工具均须遵循项目现有的 `_ok`/`_err` 统一响应结构规范**（`{"ok", "source", "query", "count", "items", "error"}`），与现有 10 个工具保持完全一致的对外契约，不引入新的响应结构。
+- **影响的目标文档章节**
+  - 核心目标 / 目标用户 / 期望成果 / 成功标准 / 范围界定（包含） / 约束条件
+  <!-- GOAL-QA-R008-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
@@ -356,3 +407,8 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   4. 新增 `get_abstract_details`/`retrieve_article` 的 JSON 归一化，**必须先由 project-builder-cn 做真实 API 探测确认响应体字段结构，再确定提取字段**，不得凭空编写归一化方案。
   5. 调整 `src/uniarticles/sources/__init__.py` 的 `register_all_sources()` 文件级调用顺序为 `scopus → sciencedirect → arxiv → paperscraper`，`scopus.py` 内部工具相对顺序不变，无需拆分注册逻辑。
   构建计划书必须包含用户明确要求的"6 维度工具改动清单表格"（要求详见"约束条件"章节，此处不重复），目标发布版本号为 **`2.2.0`**，构建计划书应涵盖 `pyproject.toml` 版本号更新与 `project-docs/buildlog.md` 变更记录，再交由 `project-builder-cn` 落地执行。
+- （v2.3.0，QA-R007/QA-R008，2026-08-04）本轮目标澄清（源自调研本地参考项目 `reference-projects/elsevier-mcp-main/`，QA-R007 发现候选 + 真实 API 探测 + QA-R008 用户正式立项确认）已闭环，用户明确指定版本号 `2.3.0`，无待定事项。**下一步建议调用 `project-planner-cn` 基于本文档最终版制定 v2.3.0 构建计划书**，交接要点：
+  1. **范围边界必须在计划书开头明确重申**：v2.3.0 是纯新增（Additive）版本，只新增 `serial_title_search`、`subject_classifications` 两个工具，**不得**顺带评估或改动现有 10 个工具的名称/参数/返回结构/注册顺序——这与 v2.1.0（删除）、v2.2.0（重命名+功能改造）的任务性质不同，务必在计划书里讲清楚以避免误将本轮当成又一轮"清理/重构"来做。
+  2. **两个新工具的落地要点**（完整细节见"范围界定/包含"最后一条 + 附录"实测可行性探测（2026-08-04）"+ QA-R008 提炼结论，此处不重复）：均放入 `src/uniarticles/sources/scopus.py`；均遵循 `_ok`/`_err` 统一响应结构；建议命名 `scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source`（方案 A 风格，可调整但须说明理由）。
+  3. **构建前必须先做真实探测补测，不得凭空写归一化方案**：本轮 QA-R007/QA-R008 的探测只覆盖了每个端点最基础的一种调用组合，"约束条件"章节已详细列出两个工具各自尚未探测的参数边界（`serial_title_search` 的 `issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view` 等参数、零条件行为；`subject_classifications` 的 `source=scidir` 分支字段结构、`code`/`abbrev`/`field` 过滤参数），project-builder-cn 需先补测这些边界，再确定参数校验与归一化字段——延续本项目一贯的"真实验证优先"原则，与此前 `get_abstract_details`/`retrieve_article` 归一化任务的处理方式一致。
+  4. 目标发布版本号为 **`2.3.0`**，构建计划书应涵盖 `pyproject.toml` 版本号更新（当前为 `2.2.0`）与 `project-docs/buildlog.md` 变更记录，工具总数由 10 个增至 12 个，README.md / README_ZH.md 的工具清单/计数需同步更新，再交由 `project-builder-cn` 落地执行。
