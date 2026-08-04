@@ -683,7 +683,67 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **风险处置**：`doi=None` 是 arXiv 数据真实分布（大量预印本从未获 DOI），下游若依赖该字段做二次查询（喂给 ChEMBL/Crossref）需自行处理空值分支——此为数据特性非实现错误。
 - **提交**：见 git（本步骤独立提交，不依赖后续探测阶段）。
 
+### 步骤 28~32：13 个候选数据源真实 API 探测 —— 完成于 2026-08-04 22:21
+- **方法论（步骤 28）**：临时探测脚本写入会话 scratchpad（`probe.py`，**未**提交仓库），仅发起只读 GET；端点均先从本地 `reference-projects/paper-search-mcp-main/.../academic_platforms/*.py` 连接器源码核实真实 URL/参数（ChEMBL 端点从 `research-superpower-main/skills/research/checking-chembl/SKILL.md` 核实），不凭记忆拼接；请求统一携带 polite `User-Agent`+`mailto`；每个候选覆盖基础检索/查询 + 边界输入 + 限流线索三类；止损判定随探测同步完成。字段结构摘要一律以**真实响应 JSON 实际键名**为准。
+- **探测样本**：关键词统一 `machine learning`；DOI 查询样本 `10.1016/j.physletb.2012.08.020`（Higgs，真实已发表）；ChEMBL 已收录样本 `10.1021/jm401507s`（J. Med. Chem. → CHEMBL3120156，101 数据点）、未收录样本用上述物理论文。
+
+- **批次一（步骤 29）Semantic Scholar / OpenAlex / Crossref**：
+  - **Semantic Scholar**：关键词检索 `graph/v1/paper/search` **连续 4 次均 429**（无 `Retry-After` 头，响应体明示"apply for a key for higher rate limits"）；单篇 by-DOI `graph/v1/paper/DOI:{doi}` **200**（返回 `paperId/externalIds/title/citationCount`）。结论：**API 本身可用，但无 key 情况下核心的关键词检索被共享池限流锁死，可用体验实质需要用户自行申请免费 key** → 止损第 2 类（价值存疑，交用户）。
+  - **OpenAlex**：`api.openalex.org/works` 关键词检索 **200**、by-DOI **200**、坏 DOI **404**（干净）。字段极丰富（`id/doi/title/authorships/cited_by_count/abstract_inverted_index/primary_location/open_access/...`）。限流头 `X-RateLimit-Limit:1000`（polite pool，带 mailto），无需 key。→ 止损第 3 类（可行且价值明确）。
+  - **Crossref**：`api.crossref.org/works` 关键词检索 **200**、by-DOI **200**、坏 DOI **404**（`Resource not found.`）。字段丰富（`DOI/title/author/abstract/is-referenced-by-count/container-title/URL/...`）。限流头 `x-rate-limit-limit:3/1s`（search）、`10/1s`（by-DOI），无需 key。→ 止损第 3 类。
+
+- **批次二（步骤 30）PMC / Europe PMC / DOAJ / CORE**：
+  - **PMC**：走 NCBI E-utilities `esearch.fcgi?db=pmc` + `esummary.fcgi?db=pmc`，**均 200**（限流头 `X-Ratelimit-Limit:3`）。esummary 字段 `uid/pubdate/authors/title/articleids/fulljournalname/...`。**关键重叠证据**：本项目现有 `pubmed_paper_search_by_query` 经 `paperscraper`→`pymed_paperscraper` 调用的正是**同一套 NCBI E-utilities**，仅 `db` 参数不同（现有工具 `db=pubmed` 引文库；PMC 为 `db=pmc` 开放获取全文子集）。→ 止损第 2 类（与现有 PubMed 同源、内容高度重叠，增量价值需用户判断）。
+  - **Europe PMC**：`ebi.ac.uk/europepmc/webservices/rest/search` **200**，维护方为 **EBI（非 NCBI）**，单次调用即返回，字段独有 `citedByCount/inEPMC/inPMC/hasPDF/pmcid/nextCursorMark/...`（含引用计数、全文可得性标记、游标翻页），与 PMC/PubMed 端点与字段均不同。→ 止损第 3 类（独立聚合源、字段更丰富，价值明确；与 PubMed 的内容重叠作为信息提示留给用户知悉）。
+  - **DOAJ**：`doaj.org/api/search/articles/{q}` **200**，无 key。`bibjson` 含 `title/author/abstract/keywords/link/identifier/journal/subject`。key 仅用于提升限额。→ 止损第 3 类。
+  - **CORE**：`api.core.ac.uk/v3/search/works` 无 key **200**，字段极丰富（`title/authors/abstract/doi/citationCount/fullText/downloadUrl/arxivId/pubmedId/...`）。**但无 key 限流极严**：突发测试 5 次后第 6 次即 **429**，且 `x-ratelimit-retry-after` 由 14:14 跳至 **14:24（锁定 10 分钟）**。→ 止损第 2 类（技术可行、字段丰富，但无 key 限流严重到无法正常使用，完整体验需用户自行申请免费 key，交用户）。
+
+- **批次三（步骤 31）Zenodo / HAL / dblp / OpenAIRE**：
+  - **Zenodo**：`zenodo.org/api/records?type=publication` **200**，无 key，字段 `doi/metadata/title/files/stats/...`，限流头 `x-ratelimit-limit:30`。注：Zenodo 为通用仓库（含数据集/软件/论文），需靠 `type=publication` 过滤论文类资源。→ 止损第 3 类（可行；混合资源类型的过滤特性作为实现提示留存）。
+  - **HAL**：`api.archives-ouvertes.fr/search/`（Solr）**200**，无 key，`fl` 指定字段全部按需返回（`docid/title_s/abstract_s/authFullName_s/doiId_s/uri_s/...`），英文关键词有召回。偏法语/欧洲文献但可用。→ 止损第 3 类（可行；覆盖面偏区域性作为信息提示留存）。
+  - **dblp**：`dblp.org/search/publ/api` —— **本探测环境网络受限，无法核实**。Python `requests` 报 `SSL: UNEXPECTED_EOF_WHILE_READING`，`curl` 报 `schannel: failed to receive handshake`（exit 35, http 000），**两套独立 TLS 栈对 `dblp.org` 均在握手阶段失败**，而同批次其他境外主机（zenodo.org/ebi.ac.uk/api.openaire.eu）全部正常——判定为**该主机在本探测环境遭网络层拦截**，非服务下线、非权限、非代码问题。真实字段结构无法采集。→ **交用户判断**（详见步骤 33 分类说明：因根因是探测环境网络而非服务本身，不按"服务不可用"直接静默排除）。
+  - **OpenAIRE**：`api.openaire.eu/search/researchProducts` **连续 5 次独立请求全部 200**（`application/json`，无一次 403），**参考项目代码中描述的 403 不稳定问题在本环境未复现、未触发任何重试**。响应为深层嵌套结构 `response.results.result[].metadata.oaf:entity.oaf:result`（`title/creator/pid/subject/bestaccessright/publisher/...`）。→ 止损第 3 类（本环境稳定可用，判为技术可行）。**按步骤 31 要求如实附两点信息供用户知悉，不因此改判：① 参考项目历史记载的经常性 403 在本次未复现；② 响应嵌套很深、归一化实现成本高于其他候选**——两者均为信息透明，非价值存疑判定。
+
+- **批次四（步骤 32）bioRxiv/medRxiv（浏览语义）+ ChEMBL（DOI 查询语义）**：
+  - **bioRxiv/medRxiv**：`api.biorxiv.org/details/{server}/{start}/{end}/{cursor}`，`server=biorxiv` 与 `server=medrxiv` **均 200**。**语义确认为"按时间窗口+分类浏览"，非关键词检索**：`messages[0]` 返回 `total/count/cursor/interval/category`，单页固定 30 条（`cursor` 翻页）；`collection[]` 字段 `title/authors/doi/date/version/type/category/abstract/jatsxml/published/server`。边界 `cursor=99999`（超范围）返回 200（`collection` 空）。→ 止损第 3 类（可行；实现与文档措辞须如实标注"浏览"而非"搜索"）。
+  - **ChEMBL**：`www.ebi.ac.uk/chembl/api/data/document.json?doi={doi}`。**已收录**样本 `10.1021/jm401507s`：**200**，`page_meta.total_count=1`，`documents[0]` 字段 `document_chembl_id(=CHEMBL3120156)/doi/title/authors/abstract/journal/pubmed_id/year/...`；再查 `activity.json?document_chembl_id=CHEMBL3120156` **200**，`activities[0]` 含真实 SAR/生物活性字段 `standard_type(如 IC50)/standard_value/standard_units/pchembl_value/canonical_smiles/target_pref_name/molecule_chembl_id/assay_description/...`。**未收录**样本（物理论文 DOI）：**200**，`total_count=0`，`documents` 空——"未收录"响应干净可辨。边界空 `doi=`：200（返回全量文档分页，说明实现须客户端强制校验 `doi` 非空）。→ 止损第 3 类（可行；已收录/未收录两路径真实响应均已采集，DOI 必填查询语义确认）。
+
+### 步骤 33：探测结果汇总 + 范围二次确认（检查点）—— 完成于 2026-08-04 22:21
+
+#### 13 个候选真实探测汇总表
+
+| # | 候选 | 真实端点 | 探测 HTTP 摘要 | 真实字段结构摘要（实际键名） | 限流/稳定性 | 止损分类 |
+|---|------|----------|----------------|------------------------------|-------------|----------|
+| 1 | Semantic Scholar | `api.semanticscholar.org/graph/v1/paper/search`、`/paper/DOI:{doi}` | 检索 **429×4**（无 Retry-After，提示 apply for key）；by-DOI **200** | by-DOI: `paperId/externalIds/title/citationCount` | 无 key 关键词检索被共享池限流锁死 | **② 价值存疑（交用户）** |
+| 2 | OpenAlex | `api.openalex.org/works` | 检索 200 / by-DOI 200 / 坏DOI 404 | `id/doi/title/authorships/cited_by_count/abstract_inverted_index/open_access/primary_location` | 无 key，polite pool 1000/日 | ③ 可行·落地 |
+| 3 | Crossref | `api.crossref.org/works` | 检索 200 / by-DOI 200 / 坏DOI 404 | `DOI/title/author/abstract/is-referenced-by-count/container-title/URL` | 无 key，3/s(搜)·10/s(DOI) | ③ 可行·落地 |
+| 4 | PMC | NCBI E-utilities `esearch/esummary?db=pmc` | 均 200 | `uid/pubdate/authors/title/articleids/fulljournalname` | NCBI 3/s | **② 价值存疑（与现有 PubMed 同源 NCBI、内容重叠，交用户）** |
+| 5 | Europe PMC | `ebi.ac.uk/europepmc/webservices/rest/search` | 200 | `id/source/pmcid/title/citedByCount/inEPMC/hasPDF/nextCursorMark/firstPublicationDate` | 无 key，单次调用即返回 | ③ 可行·落地（与 PubMed 内容重叠仅作信息提示） |
+| 6 | DOAJ | `doaj.org/api/search/articles/{q}` | 200 | `bibjson.{title/author/abstract/keywords/link/identifier/journal/subject}` | 无 key（key 提额） | ③ 可行·落地 |
+| 7 | CORE | `api.core.ac.uk/v3/search/works` | 无 key 200，突发第 6 次 429 | `title/authors/abstract/doi/citationCount/fullText/downloadUrl/arxivId/pubmedId` | **无 key 限流极严：约 5 次即锁 10 分钟** | **② 价值存疑（需自行申请免费 key，交用户）** |
+| 8 | Zenodo | `zenodo.org/api/records?type=publication` | 200 | `doi/conceptdoi/metadata/title/files/stats/links` | 无 key，30/分 | ③ 可行·落地（通用仓库需 type 过滤论文） |
+| 9 | HAL | `api.archives-ouvertes.fr/search/`(Solr) | 200 | `docid/title_s/abstract_s/authFullName_s/doiId_s/uri_s/docType_s` | 无 key | ③ 可行·落地（偏欧洲文献覆盖） |
+| 10 | dblp | `dblp.org/search/publ/api` | **本环境网络受限：SSL 握手失败（requests+curl 双栈一致），http 000，无法核实** | 无法采集 | 主机级网络拦截（非服务下线/权限） | **交用户（无法核实，环境网络所致，未静默排除）** |
+| 11 | OpenAIRE | `api.openaire.eu/search/researchProducts` | **200×5 连续，无 403、无重试** | `response.results.result[].metadata.oaf:entity.oaf:result.{title/creator/pid/subject/bestaccessright/publisher}` | 本环境稳定；历史 403 未复现 | ③ 可行·落地（附注：嵌套深·归一化成本高） |
+| 12 | bioRxiv/medRxiv | `api.biorxiv.org/details/{server}/{start}/{end}/{cursor}` | biorxiv/medrxiv 均 200，超范围 cursor 200(空) | `messages[].{total/count/cursor}`、`collection[].{title/authors/doi/date/version/category/abstract/server}` | 公开无 key | ③ 可行·落地（**浏览语义**，非关键词检索） |
+| 13 | ChEMBL | `ebi.ac.uk/chembl/api/data/document.json?doi=`、`activity.json?document_chembl_id=` | 已收录 200(total=1)+activity 200；未收录 200(total=0) | doc: `document_chembl_id/doi/title/authors/abstract/journal/pubmed_id/year`；activity: `standard_type(IC50)/standard_value/standard_units/pchembl_value/canonical_smiles/target_pref_name/molecule_chembl_id` | 公开无 key | ③ 可行·落地（**DOI 必填查询语义**；空 doi 需客户端校验） |
+
+#### 止损分类结论（严格遵循 goal.md QA-R010/QA-R011 + 用户本轮直接指令）
+
+- **① 技术确认不可行、直接排除（无需用户确认）**：**无**。全部 13 个候选在真实探测中，除 dblp（环境网络）外均返回 200 可解析数据，无一属于"需付费 key / 服务下线 / 限流严到完全不可用"的干净排除项。
+- **② 技术可行但价值存疑、交还用户最终判断（原样保留，未自行剔除）**：
+  1. **Semantic Scholar** —— 无 key 关键词检索被共享池 429 锁死（4/4 失败），可用体验实质需用户自行申请免费 key；by-DOI 路径可用。
+  2. **PMC** —— 与本项目现有 `pubmed_paper_search_by_query` 走同一套 NCBI E-utilities（仅 `db=pmc` vs `db=pubmed`），内容高度重叠，增量价值需用户定夺。
+  3. **CORE** —— 字段最丰富，但无 key 限流极严（约 5 次请求即锁 10 分钟），完整体验需用户自行申请免费 key。
+- **附加·无法核实、亦交用户判断**：**dblp** —— 探测环境对 `dblp.org` 网络层拦截（双 TLS 栈握手失败），无法采集真实字段结构。按 project-plan 步骤 28 默认规则"网络受限→技术不可行"本可直接排除，但根因是**本探测环境**网络而非服务/权限/代码问题，MCP Server 实际运行在**终端用户机器**上、其网络环境可能可达 dblp.org，故不静默排除，一并交用户判断。
+- **③ 技术可行且价值明确、确认落地候选（9 个）**：OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、bioRxiv/medRxiv、ChEMBL。
+
+#### 决策留痕说明（关于 goal.md）
+- project-plan 步骤 33.4 建议将"价值存疑"清单同步追加进 `project-docs/goal.md`（比照 QA-R002 新增一轮 QA）。**但 `project-builder-cn` 的文档写入边界规定：在 `project-docs/` 内仅允许修改 `buildlog.md`，禁止修改 `goal.md`**；且 `goal.md` 当前存在用户未提交的本地改动。因此本步骤**不**改写 goal.md，改由本 buildlog 完整留痕，并在交付汇报中把"价值存疑（SS/PMC/CORE）+ 无法核实（dblp）"清单明确交还用户；goal.md 的新一轮 QA 追加应由用户经 `project-creator-cn`/`project-planner-cn` 完成。
+
 ### 下一步计划
-- ⏭️ 步骤 28~32：对 13 个候选逐一真实 API 探测；步骤 33：汇总止损分类（技术不可行直接排除；技术可行但价值存疑交还用户判断）。
+- ⏸️ **等待用户对以下 4 项做去留判断**（不可由构建方代决）：② Semantic Scholar、PMC、CORE（技术可行但价值存疑）；＋ dblp（本环境无法核实，需用户依其部署网络决定）。
+- ✅ 已确认落地的 9 个数据源（OpenAlex/Crossref/Europe PMC/DOAJ/Zenodo/HAL/OpenAIRE/bioRxiv·medRxiv/ChEMBL）等最终清单确定后，由 `project-planner-cn` 在计划书中追加步骤 34+（各源参数签名、归一化字段、代码骨架、验证方法、风险提示）。本轮探测阶段**未**编写任何新数据源实现代码，符合步骤 33"检查点前不落地实现"的约束。
+- ⏭️ README/pyproject 版本号按计划书策略在全部落地数据源实现完毕后统一更新，本轮不动。
 
 ---
