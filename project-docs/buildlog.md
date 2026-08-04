@@ -667,3 +667,23 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 待用户决定是否打包（`uv build`）并发布 `2.3.0` 到 PyPI（`uv publish`，由用户手动执行）。本轮为纯新增（Additive）版本，无破坏性变更，现有工具/配置方式不受影响。
 
 ---
+
+## v3.0.0 构建记录
+
+> 本章节对应 `project-plan.md` 步骤 27~33，依据 `goal.md` QA-R010/QA-R011。本轮是本项目至今规模最大的一轮：11 个通用检索型新数据源 + 2 个语义特殊新数据源（bioRxiv/medRxiv 浏览语义、ChEMBL DOI 查询语义）+ 1 个现有工具增强（arXiv 三工具补 `doi`），合计 13 个数据源/功能点。步骤 27（arXiv 补 `doi`）为独立低风险增强，步骤 28~33 为 13 个候选的真实 API 探测 + 汇总止损（探测阶段**不写任何新数据源实现代码**，实现步骤待步骤 33 结果与用户二次确认后由 `project-planner-cn` 追加）。
+
+### 步骤 27：arXiv 三工具补充 `doi` 输出字段 —— 完成于 2026-08-04 22:03
+- **完成内容**：在 `src/uniarticles/sources/arxiv.py` 私有序列化函数 `_serialize_paper()`（第 53-63 行）的 `"pdf_url"` 之后新增一行 `"doi": paper.doi,`，复用第三方 `arxiv` 库 `Result.doi` 属性，零额外请求成本。三个公开工具（`arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id`）序列化逻辑全部收敛到此函数（前两者经 `_run_arxiv_search()`、后者经 `_get_paper_details()`），改一处三工具同步获得 `doi` 字段。
+- **涉及文件**：`src/uniarticles/sources/arxiv.py`（仅新增一个字段，未改动既有键名/取值/签名/校验逻辑）。
+- **README**：核实 `README.md`/`README_ZH.md` 中三个 arXiv 工具仅有概述性/参数级描述，未逐字段列出输出结构，故**无需**改动（符合步骤 27.2 分支）。
+- **真实验证**（本地 src 代码路径 + 真实网络）：
+  - `_run_arxiv_search("attention is all you need", 2)` → `ok=True`，每个 item 均含 `doi` 键，值为 `None`（早期预印本未获 DOI，属预期常态，非 bug）。
+  - `_get_paper_details("1207.7214")`（Higgs 发现论文，已发表于 Physics Letters B）→ `doi='10.1016/j.physletb.2012.08.020'`，确认字段在有值时能正确透出真实 DOI 字符串（不是只验证了 `null` 一种情况）。
+  - `_get_paper_details("1512.03385")`（ResNet）/`1706.03762`（Transformer 原文）→ `doi=None`，无 `AttributeError`/未捕获异常。
+- **风险处置**：`doi=None` 是 arXiv 数据真实分布（大量预印本从未获 DOI），下游若依赖该字段做二次查询（喂给 ChEMBL/Crossref）需自行处理空值分支——此为数据特性非实现错误。
+- **提交**：见 git（本步骤独立提交，不依赖后续探测阶段）。
+
+### 下一步计划
+- ⏭️ 步骤 28~32：对 13 个候选逐一真实 API 探测；步骤 33：汇总止损分类（技术不可行直接排除；技术可行但价值存疑交还用户判断）。
+
+---

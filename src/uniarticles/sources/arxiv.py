@@ -59,6 +59,7 @@ def _serialize_paper(paper) -> dict:
         "published": paper.published.isoformat(),
         "categories": paper.categories,
         "pdf_url": paper.pdf_url,
+        "doi": paper.doi,
     }
 
 
