@@ -26,6 +26,16 @@ v2.0（2.0.1）发布后，用户在真实 Cherry Studio 环境下对已发布�
 
 对应开发计划见下方"步骤 13～20"。步骤 1～12（v2.0/v2.1.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
 
+### v2.3.0 范围补充（QA-R007～QA-R008，2026-08-04）
+
+源自用户要求调研本地参考项目 `reference-projects/elsevier-mcp-main/`，`project-creator-cn` 逐一比对该项目 14 个工具的端点与 `project-docs/goal.md` 已有实测结论后，发现 3 个此前完全未调研过的全新端点，用真实 `ELSEVIER_API_KEY` 逐一探测（QA-R007），确认 2 个可用（`content/serial/title` 期刊多条件搜索、`content/subject/{source}` 学科分类代码查询）、2 个不可用（`analytics/plumx/...` PlumX 指标、`content/article/.../` 纯文本变体，均已记录进 goal.md"范围界定/排除"表格）。用户在 QA-R008 中正式确认把 2 个可用端点纳入 **v2.3.0**，版本号由用户直接指定，无需再走版本号确认流程。
+
+**本轮明确边界：v2.3.0 是纯新增（Additive）版本**，只新增 `scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source` 两个 MCP 工具，均放入 `src/uniarticles/sources/scopus.py`（不新建模块）；**不删除、不重命名、不改动**现有 10 个工具（`scopus_document_search_by_query`/`scopus_abstract_detail_by_eid`/`scopus_serial_title_by_issn`/`scopus_api_usage_status`/`sciencedirect_article_retrieve_by_identifier`/`sciencedirect_article_object_by_identifier`/`arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id`/`pubmed_paper_search_by_query`）的名称/参数/返回结构/注册顺序，与 v2.1.0（删除）、v2.2.0（重命名+功能改造）在改动性质上完全不同。MCP Server 工具总数由 10 个增至 **12 个**。
+
+**命名复核**：goal.md QA-R008 建议的两个名字（`scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source`）已符合 v2.2.0（QA-R004）确认的方案 A"数据源_对象_动作(_by_限定词)"命名风格，与现有 `scopus_serial_title_by_issn`/`scopus_abstract_detail_by_eid` 等同文件工具命名一致，`_by_criteria`/`_by_source` 均如实反映其参数语义（前者是多条件组合搜索，后者 `source` 是唯一必填参数），未发现类似 QA-R004 中 `list_papers` 那种"命名承诺了实现不具备的能力"的问题，本计划书采纳该命名，不做调整。
+
+对应开发计划见下方"步骤 21～26"。步骤 1～20（v2.0/v2.1.0/v2.2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
 ## 可行性分析
 
 ### 技术可行性评估
@@ -802,6 +812,198 @@ v2.1.0 已把 README 的工具清单改到"11 个工具"的旧名字状态；本
 
 ---
 
+### 步骤 21：真实探测补测——`serial_title_search`/`subject_classifications` 参数边界（编码前置步骤）
+
+#### 目标说明
+`project-docs/goal.md` QA-R007/QA-R008 已用真实 `ELSEVIER_API_KEY` 确认两个新端点在**最基础的调用组合**下返回 HTTP 200（`content/serial/title?title=Cell&count=5`；`content/subject/scopus?description=computer`），但明确标注"探测覆盖不全"，以下细节均未验证：
+- `content/serial/title`：`issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view` 各参数的真实调用效果；不带任何检索条件时服务端的真实行为（拒绝还是返回全量）；`count` 的服务端真实上限是否为参考项目 Zod schema 注释里声称的 200（未经本项目验证，不可采信）；无效 `subj` 学科代码的错误响应；无匹配结果时的响应结构。
+- `content/subject/{source}`：`source=scidir`（ScienceDirect 学科分类）分支的真实响应字段结构，**不能假设**与已验证的 `source=scopus` 分支（`code`/`description`/`detail`/`abbrev`）同构；`code`/`abbrev`/`field` 精确过滤参数的真实效果；`source` 传入非法值时的错误响应；不带过滤条件、只传 `source` 时的响应体量级（是否需要分页提示）。
+- 两工具的错误处理边界（无效标识符/无匹配结果/权限不足）均未真实触发过。
+
+这是步骤 22 编码的**强制前置步骤**，与步骤 14（`get_abstract_details`/`retrieve_article` 归一化前的真实探测）性质相同——不得跳过探测直接假设参数签名/字段结构编码，不得照抄参考项目 `reference-projects/elsevier-mcp-main/` 的 Zod schema 假设（那是别的项目自己的实现选择，不代表 Elsevier 服务端真实行为，`goal.md` 约束条件已明确这一点）。
+
+#### 具体操作
+1. 使用本地 `.env` 中真实 `ELSEVIER_API_KEY`，写一次性探测脚本（放 scratchpad，验证完即弃，不提交仓库，延续项目一贯"临时探测脚本"做法），对 `content/serial/title` 端点逐一测试：
+   - 在已确认可用的 `title=Cell` 基础上，单变量新增/替换 `issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view` 各参数，观察响应是否按预期过滤/是否报错。
+   - 测试不带任何检索条件的调用（零条件），记录服务端真实行为（拒绝/报错/返回全量）。
+   - 测试 `count` 传入较大值（如 200、201、500），确认服务端真实截断上限。
+   - 测试一个明显无效/不存在的 `subj` 学科代码，记录错误响应结构。
+   - 测试一个明显不存在的 `title`/`issn` 组合，记录"无匹配结果"时的响应结构（空 `entry` 数组还是错误）。
+2. 对 `content/subject/{source}` 端点：
+   - 测试 `source=scidir` 分支（如 `description=engineering` 或类似关键词），完整记录响应字段结构，与已确认的 `source=scopus` 分支逐字段比对，明确结论"是否同构"（不能含糊带过）。
+   - 单独测试 `code`/`abbrev`/`field` 作为过滤参数的真实效果。
+   - 测试 `source` 传入非法值（如 `source=invalid`）的错误响应。
+   - 测试只传 `source`、不带任何过滤条件时的响应体条目数量级，判断是否需要在归一化/文档中提示"结果量较大"。
+3. 将两个端点的真实探测结果整理成清单（参数名/是否生效/错误响应结构/字段列表），作为步骤 22 编码的直接依据；并按 `buildlog.md` 步骤 4/5/14 既有"真实抓包确认的响应字段结构"写法，记入步骤 25 的 buildlog.md 条目。
+4. 若探测发现某参数实际不受支持、或行为与 `goal.md` QA-R008 记录的推测不同（如 `count` 上限并非 200、零条件被服务端拒绝），以本步骤实测结果为准调整步骤 22 的最终实现，不强行套用 `goal.md`/参考项目的推测。
+
+#### 验证方法
+- 两个端点列出的全部待测参数/边界情况均有真实探测记录（HTTP 状态码 + 响应体摘要），不是假设。
+- `subject_classifications` 的 `scidir` 分支字段结构已被明确记录为"与 `scopus` 分支相同"或"不同，具体差异是……"二选一，不留模糊结论。
+
+#### 风险提示
+- 探测脚本务必只发 GET 请求，不对 Elsevier 账号产生任何写副作用。
+- 不要因探测耗时而只测一部分参数就跳到步骤 22 编码——`goal.md` 约束条件已完整列出全部待测项，步骤 22 的参数签名/校验逻辑/归一化字段必须完整覆盖本步骤的探测结论，不能留"未探测就编码"的缺口。
+
+---
+
+### 步骤 22：新增 `scopus_serial_title_search_by_criteria` + `scopus_subject_classification_lookup_by_source` 两个 MCP 工具
+
+#### 目标说明
+基于步骤 21 真实探测结果，在 `src/uniarticles/sources/scopus.py` 中新增两个工具，复用文件已有的 `_get_headers()`/`BASE_URL`/`_ok`/`_err`/`_as_list` 等既有模式，遵循 `_ok`/`_err` 统一响应结构（`{"ok", "source", "query", "count", "items", "error"}`），参数校验风格对齐现有工具（`.strip()` 去空白、必填项判空、`try/except` 捕获异常转 `_err`）。命名沿用 `goal.md` QA-R008 建议、已在本计划书"v2.3.0 范围补充"中复核通过，不做调整。
+
+**22.1 `scopus_serial_title_search_by_criteria`（期刊多条件搜索）**
+- 新增内部异步函数 `_search_serial_title(...)`：
+  ```python
+  async def _search_serial_title(
+      title: str | None,
+      issn: str | None,
+      pub: str | None,
+      subj: str | None,
+      content: str | None,
+      date: str | None,
+      oa: str | None,
+      start: int | None,
+      count: int | None,
+      view: str,
+  ) -> dict:
+      headers = _get_headers()
+      params = {
+          k: v
+          for k, v in {
+              "title": title, "issn": issn, "pub": pub, "subj": subj,
+              "content": content, "date": date, "oa": oa,
+              "start": start, "count": count, "view": view,
+          }.items()
+          if v is not None
+      }
+      async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+          response = await client.get(f"{BASE_URL}content/serial/title", params=params)
+          response.raise_for_status()
+          payload = response.json()
+      entries = payload.get("serial-metadata-response", {}).get("entry", []) or []
+      normalized = [...]  # 复用 _get_serial_title 的字段提取逻辑（title/publisher/issn/eissn/
+                            # aggregation_type/openaccess/openaccess_type/coverage_start_year/
+                            # coverage_end_year/subject_areas/homepage_url/source_id/scopus_url），
+                            # 并新增该端点独有的 SNIPList/SJRList 期刊计量指标字段——具体子结构
+                            # 以步骤 21 真实探测样本为准提取，不得凭空定义
+      return _ok(query=..., items=normalized)
+  ```
+  具体参数是否必填、`count` 是否 clamp 及上限值、零条件时工具层是直接 `_err` 还是允许透传给 API，均以步骤 21 探测结论为准调整——若探测确认服务端拒绝零条件请求，工具层需在全部参数皆为空时直接返回 `_err`，避免把明显会失败的请求发给 API 产生难懂的远端错误；若服务端允许零条件返回全量，则允许调用但应在 docstring 中提示"不带任何条件会返回大量结果，建议至少提供一个过滤条件"。
+- `register()` 内新增 `@server.tool() async def scopus_serial_title_search_by_criteria(...)`，各字符串参数 `.strip()` 后判空转 `None`，`try/except` 包裹调用，异常转 `_err`。
+
+**22.2 `scopus_subject_classification_lookup_by_source`（学科分类代码查询）**
+- 新增内部异步函数 `_lookup_subject_classification(source: str, description/detail/code/abbrev/field: str | None)`：`source` 必填，工具层先做枚举校验（`source.strip().lower() not in {"scopus", "scidir"}` 时直接返回 `_err`，不透传给 API 产生远端错误，参照步骤 15 中 `arxiv_latest_paper_list_by_category` 对 `category` 的前置校验思路——但若步骤 21 探测发现 API 对非法 `source` 已有清晰易懂的错误响应，也可选择不做前置校验、直接透传，与现有 `identifier_type` "不做强枚举校验、透传 API" 的风格保持一致，两种做法均可接受，具体取舍由 `project-builder-cn` 参照步骤 21 探测结果决定，并在 buildlog.md 中说明选择依据）。
+- 归一化：根据步骤 21 确认的 `scopus`/`scidir` 是否同构决定实现方式——若同构，单一归一化逻辑复用；若不同构，按 `source` 分支分别提取字段，不得强行套用同一套字段名。已确认 `scopus` 分支字段：`code`/`description`/`detail`/`abbrev`（扁平结构，无嵌套）。
+- `register()` 内新增 `@server.tool() async def scopus_subject_classification_lookup_by_source(source: str, description: str | None = None, detail: str | None = None, code: str | None = None, abbrev: str | None = None, field: str | None = None) -> dict`，`source` 做归一化+校验，其余参数 `.strip()` 后可选透传。
+
+#### 验证方法
+- 用真实 `ELSEVIER_API_KEY` 调用两个新工具：
+  - `scopus_serial_title_search_by_criteria(title="Cell", count=5)` 确认返回 `ok: true` 且 `items` 为逐字段结构（非原始 JSON blob）。
+  - `scopus_subject_classification_lookup_by_source(source="scopus", description="computer")` 确认返回 `ok: true` 且字段与已确认样本一致。
+  - 若步骤 21 探测确认 `source=scidir` 可用，追加一次真实 `source="scidir"` 调用验证归一化分支正确。
+- 用边界/无效输入验证 `_err` 分支：全部检索条件留空调用 `scopus_serial_title_search_by_criteria`（按步骤 21 结论预期报错或返回提示）；`scopus_subject_classification_lookup_by_source(source="invalid")` 确认走 `_err` 而非未捕获异常。
+
+#### 风险提示
+- 归一化字段（尤其 `SNIPList`/`SJRList`、`scidir` 分支字段）必须严格来自步骤 21 的真实探测结果，不得凭空定义。
+- 两个新工具与已有 `scopus_serial_title_by_issn`/`scopus_abstract_detail_by_eid` 写在同一文件，复制粘贴时容易手滑改到已有函数体，编码时应新增独立函数而非在已有函数上"顺手改造"。
+- `count`/`start` 等数值参数若类型处理不当（如 MCP 客户端传入字符串数字）需按现有 `search_scopus` 的 `count: int` 处理方式保持一致。
+
+---
+
+### 步骤 23：README.md / README_ZH.md 同步更新
+
+#### 目标说明
+`project-docs/goal.md` 核心目标 15 要求 MCP Server 工具总数由 10 个增至 12 个，README 工具清单与计数需同步，不得出现"代码有但文档没写"的落差。
+
+#### 具体操作
+对 `README.md` 与 `README_ZH.md` 同步执行：
+1. **`## Available Tools`/`## 可用工具列表` 章节 → Scopus 小节**：在 `scopus_api_usage_status()` 一行之后新增两行（紧跟其后，与 `register()` 函数体内新增工具的定义顺序一致）：
+   - 英文：`` `scopus_serial_title_search_by_criteria(title, issn, pub, subj, content, date, oa, start, count, view)`: Search journals/serials by title, publisher, subject, Open Access status, etc. (multiple optional criteria, no ISSN required). Sibling tool to `scopus_serial_title_by_issn`. ``
+   - 英文：`` `scopus_subject_classification_lookup_by_source(source, description, detail, code, abbrev, field)`: Look up Scopus/ScienceDirect subject classification codes to help build more precise search queries. ``
+   - 中文对应两行同步翻译。
+   - 最终参数列表以步骤 22 实际落地的函数签名为准，此处为草案，若步骤 21 探测导致参数增减，此处需同步调整。
+2. **Elsevier Key 说明章节的工具计数修正**（`README.md`/`README_ZH.md` 现均为第 31 行）：现文案 `"Verified against the current 10 tools using a real non-commercial key."` / `"该结论已用真实的非商业 Key 对当前全部 10 个工具做过实测验证。"` → 改为 `"12 tools"` / `"12 个工具"`。**不得漏改**——这一处不在 `Available Tools` 表格内，v2.2.0 步骤 17 已特别标注过此类计数遗漏的教训，本轮同样适用。
+3. `## Features`/`## 功能特性` 章节：若该章节有明确点名工具能力的描述，可顺带补充"期刊多条件搜索"/"学科分类代码查询"，非强制展开新条目。
+4. **明确不在本次改动范围内**：`.env.example`、`tutorial/step_by_step_guide_zh.md`/`step_by_step_guide_en.md`、`CLAUDE.md`——本轮不涉及新环境变量、不改变客户端配置方式，无需改动这些文件。
+
+#### 验证方法
+- 全文检索确认两个新工具名在 `Available Tools` 章节的中英文版本均出现，参数签名与步骤 22 最终实现一致。
+- 确认 "10 tools"/"10 个工具" 已改为 "12 tools"/"12 个工具"（仅限第 31 行这一处工具计数陈述，不误改其他含"10"的无关数字）。
+- 中英文两版逐段比对，确保内容对等。
+
+#### 风险提示
+- 沿用步骤 9/17 已多次验证过的教训：务必同步检查两个语言版本，避免只改一个语言导致文档不同步。
+- 第 31 行工具计数容易被漏改，务必单独核对一次。
+
+---
+
+### 步骤 24：`pyproject.toml` 版本号提升至 2.3.0
+
+#### 目标说明
+`project-docs/goal.md` QA-R008 已明确用户直接指定本轮对应版本号 `2.3.0`，无需再讨论版本号。
+
+#### 具体操作
+- `pyproject.toml` 第 7 行 `version = "2.2.0"` → 改为 `version = "2.3.0"`。
+- 无需改动 `dependencies`/`classifiers`/`optional-dependencies` 等其他字段，本轮不引入新依赖，不涉及 Python 版本要求变化。
+
+#### 验证方法
+- `python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"` 输出 `2.3.0`。
+- 若本地为 editable install（`pip install -e .`），确认 `python -c "import importlib.metadata as m; print(m.version('uniarticles-mcp'))"` 与新版本号一致（如因 editable 安装机制未即时刷新，可重新执行 `pip install -e .`，不算功能性 bug）。
+
+#### 风险提示
+- 版本号是发布到 PyPI 的关键字段，建议放在步骤 21～23 全部验证通过之后再改，避免代码未改完就先改版本号导致误发布不完整版本。
+
+---
+
+### 步骤 25：`project-docs/buildlog.md` 记录本轮变更
+
+#### 目标说明
+记录本轮 v2.3.0 变更，链接到 `project-docs/goal.md` 的 `QA-R007`（参考项目调研 + 新候选端点发现 + 4 项真实探测）、`QA-R008`（正式立项 v2.3.0，确认纯新增性质），延续该文件既有的"版本号一级章节 + 步骤条目"格式。
+
+#### 具体操作
+- 在 `project-docs/buildlog.md` 的 `## v2.2.0 构建记录` 章节之后新增 `## v2.3.0 构建记录` 一级章节。
+- 章节开头一段简述本轮背景：引用 `QA-R007`（调研 `reference-projects/elsevier-mcp-main/` 发现 3 个新候选端点，真实探测确认 2 可用 2 不可用）、`QA-R008`（用户正式立项 v2.3.0），并明确说明本轮是**纯新增（Additive）**版本，不涉及删除/重命名/改动现有 10 个工具。
+- 逐条记录：
+  - 步骤 21 真实探测补测的完整结果（两个端点各参数的真实效果、`count` 服务端真实上限、零条件行为、`scidir` 分支字段结构对比结论、错误响应结构）——格式参照 buildlog.md 已有的"真实抓包确认的响应字段结构"写法。
+  - 两个新工具的最终参数签名、归一化字段清单。
+  - README.md / README_ZH.md 修改摘要（含"10→12 个工具"计数修正）。
+  - 版本号变更：`2.2.0` → `2.3.0`。
+- 每完成一个开发步骤追加一条，格式延续该文件既有约定（`### 步骤 N：<步骤名称> —— 完成于 <日期>`）。
+
+#### 验证方法
+- `project-docs/buildlog.md` 中能找到明确指向 `goal.md` `QA-R007`/`QA-R008` 的引用文字。
+- 步骤 21 真实探测的完整参数边界结果、两个新工具的最终归一化字段清单均在 buildlog.md 中有完整记录。
+
+#### 风险提示
+- 不得在 buildlog.md 中补记未曾真实探测过的参数/字段，延续项目一贯的"真实验证优先"原则。
+
+---
+
+### 步骤 26：整体回归验证
+
+#### 目标说明
+确认新增的 2 个工具可用，且现有 10 个工具未受影响——本轮不改动它们，但两个新工具与部分现有工具（`scopus_serial_title_by_issn`/`scopus_abstract_detail_by_eid`）写在同一文件 `scopus.py`，需要重点防止编码时误伤共享代码（`_get_headers`/`_ok`/`_err`/`_as_list`/`BASE_URL` 等被 10 个现有工具复用的公共函数）。
+
+#### 具体操作
+1. 全局搜索/`git diff` 复核 `src/uniarticles/sources/scopus.py` 改动范围：确认改动只新增了步骤 22 的两个内部函数 + 两个 `@server.tool()` 定义，未触及 `_search_scopus`/`_get_abstract`/`_get_serial_title`/`_get_quota` 等已有函数体，也未修改 `_get_headers`/`_ok`/`_err`/`_as_list`/`BASE_URL`。
+2. 用 `uv run uniarticles-mcp` 或 `python -m uniarticles` 启动服务，确认进程正常启动，`stdout` 未被污染。
+3. 若条件允许，在真实 Claude Desktop/Cherry Studio 中实际加载一次，确认工具列表恰好显示 **12 个工具**（Scopus 6 个 → ScienceDirect 2 个 → ArXiv 3 个 → Paperscraper 1 个，与 v2.2.0 步骤 16 确认的文件级注册顺序一致，新增两个工具紧跟 `scopus_api_usage_status` 之后，与 `register()` 函数体内定义顺序一致）。
+4. 用真实 `.env`（`ELSEVIER_API_KEY`）手动调用：
+   - 新增 2 个工具各至少 1 次（含至少 1 次边界/错误输入，如空条件或非法 `source`）。
+   - 现有 10 个工具各至少 1 次（覆盖 ArXiv/Scopus/ScienceDirect/PubMed 四个数据源），确认均正常返回 `ok: true` 或结构清晰的 `_err`，返回字段/结构与 v2.2.0 发布前一致，未因本轮改动产生回归。
+
+#### 验证方法
+- 上述 4 项操作均通过，无 `ImportError`/`NameError`/未捕获异常。
+- MCP 客户端加载后工具计数为 12，与 README 描述一致。
+- 现有 10 个工具的返回结构/字段与 v2.2.0 发布前逐一比对一致，无意外变化。
+
+#### 风险提示
+- 本项目没有自动化测试套件，回归验证只能靠手动/真实调用完成；重点验证"新增没有误伤旧工具"，因为两个新工具与现有 `scopus_serial_title_by_issn`/`scopus_abstract_detail_by_eid` 写在同一个文件，编码时容易复制粘贴手滑改到已有函数。
+- 若真实探测（步骤 21）发现的参数行为与 `goal.md` QA-R008 记录的推测有出入，回归验证时应以步骤 21/22 的最终实现为准，而非机械对照 `goal.md` 原文。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -825,3 +1027,9 @@ v2.1.0 已把 README 的工具清单改到"11 个工具"的旧名字状态；本
 - （v2.2.0，2026-08-03）步骤 13～20 基于 `project-docs/goal.md` QA-R004/QA-R005/QA-R006（源自 `docs/TODO.md` 两条待办）追加，是对已发布 v2.1.0（11 个已注册工具，含未公开列出的别名 `search_paper`）的一次无过渡期破坏性变更：删除 `search_paper`、剩余 10 个工具一次性彻底重命名（方案 A 风格）、`list_papers` 功能补全为真正的 category 过滤、`get_abstract_details`/`retrieve_article` 归一化、`sources/__init__.py` 注册顺序文件级调整，版本号提升至 `2.2.0`（用户已在 QA-R005 明确否决 `3.0.0`，不再讨论版本号）。步骤 1～12（v2.0/v2.1.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
 - 步骤 14（真实探测 `get_abstract_details`/`retrieve_article` 响应体）是应 QA-R006 明确要求新增的强制前置步骤——此前从未记录过这两个端点的真实字段级结构，归一化编码必须以该步骤的探测结果为依据，不得凭空定义字段名，步骤 15.2/15.3 已在"具体操作"中明确标注这一依赖关系。
 - 步骤 17 中"11 tools/11 个工具"→"10 tools/10 个工具"的计数修正（`README.md`/`README_ZH.md` 第 31 行）是本计划书核实源码后发现的必要改动点：该数字统计的是"实际注册工具数"（含此前未公开列出的 `search_paper`），删除 `search_paper` 后必须同步下修，否则会与代码实际注册数不一致——此处不在 `Available Tools` 表格内，容易被遗漏，已在步骤 17 中特别标注。
+
+---
+
+- （v2.3.0，2026-08-04）步骤 21～26 基于 `project-docs/goal.md` QA-R007/QA-R008 追加，源自用户要求调研本地参考项目 `reference-projects/elsevier-mcp-main/` 后发现的候选新端点：真实探测确认 `content/serial/title`（期刊多条件搜索）、`content/subject/{source}`（学科分类代码查询）可用，`analytics/plumx/...`（PlumX 指标）、`content/article/.../` 纯文本变体不可用（已排除）。用户在 QA-R008 中正式立项，直接指定版本号 `2.3.0`，无需再走版本号确认流程。**本轮是纯新增（Additive）版本**：只新增 `scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source` 两个工具（均放入 `src/uniarticles/sources/scopus.py`），不删除、不重命名、不改动现有 10 个工具的名称/参数/返回结构/注册顺序，与 v2.1.0（删除）、v2.2.0（重命名+功能改造）的任务性质均不同。MCP Server 工具总数由 10 个增至 12 个。步骤 1～20（v2.0/v2.1.0/v2.2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+- 步骤 21（真实探测补测 `serial_title_search`/`subject_classifications` 参数边界）是应 QA-R007/QA-R008 明确要求新增的强制前置步骤——此前的探测只覆盖了每个端点最基础的一种调用组合（`title=Cell` 单条件、`source=scopus`），大量参数（`issn`/`pub`/`subj`/`content`/`date`/`oa`/`start`/`count`/`view`、零条件行为、`source=scidir` 分支字段结构）均未验证过，步骤 22 的参数签名与归一化逻辑必须以该步骤的探测结果为依据，不得凭空定义，也不得照抄参考项目的 Zod schema 假设（`goal.md` 约束条件已明确排除这一做法）。
+- 步骤 23 中"10 tools/10 个工具"→"12 tools/12 个工具"的计数修正（`README.md`/`README_ZH.md` 第 31 行）延续了 v2.2.0 步骤 17 已发现的同一类风险点——该数字不在 `Available Tools` 表格内，容易被遗漏，已在步骤 23 中特别标注核对要求。
