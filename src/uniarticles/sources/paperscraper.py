@@ -1,5 +1,6 @@
 import asyncio
 
+import pandas as pd
 from mcp.server.fastmcp import FastMCP
 from paperscraper.pubmed.pubmed import get_pubmed_papers
 
@@ -29,9 +30,9 @@ def _err(query: str, message: str) -> dict:
 def _to_items(result: object) -> list[dict]:
     if result is None:
         return []
-    if hasattr(result, "empty") and result.empty:
-        return []
-    if hasattr(result, "to_dict"):
+    if isinstance(result, pd.DataFrame):
+        if result.empty:
+            return []
         records = result.to_dict(orient="records")
         return records if isinstance(records, list) else []
     if isinstance(result, list):

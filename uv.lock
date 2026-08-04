@@ -3241,6 +3241,8 @@ dependencies = [
     { name = "arxiv" },
     { name = "httpx" },
     { name = "mcp" },
+    { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pandas", version = "3.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "paperscraper" },
     { name = "python-dotenv" },
 ]
@@ -3255,6 +3257,7 @@ requires-dist = [
     { name = "arxiv", specifier = ">=2.1.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "mcp", specifier = ">=1.0.0,<2.0.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
     { name = "paperscraper" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
