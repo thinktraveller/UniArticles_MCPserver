@@ -75,6 +75,8 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 | Engineering Village APIs | 用户明确不需要；且需 EV 订阅 + 联系支持单独启用 |
 | Nonserial Title（图书/专著元数据） | 用户产品定位不关注图书/专著检索场景，直接排除，不再深究 404 的技术性质 |
 | TDM Service（批量文本挖掘授权） | 本轮未讨论，非新端点而是使用条款/注册流程，超出本次范围 |
+| PlumX Metrics（`analytics/plumx/{id_type}/{id_value}`，替代计量学指标） | （QA-R007，2026-08-04 实测）401 AUTHENTICATION_ERROR，与 SciVal 同属 `analytics/` 前缀资源，当前非商业 Key 无法访问 |
+| ScienceDirect 全文纯文本变体（同一 `content/article/{id_type}/{id}` 端点，`Accept: text/plain`） | （QA-R007，2026-08-04 实测）固定返回 400 INVALID_INPUT（与 view 参数取值无关，含不传 view），而同端点 `Accept: application/json`/`text/xml` 均正常 200；非新能力，是已实现端点 `sciencedirect_article_retrieve_by_identifier` 的响应格式变体，JSON 归一化已覆盖等价信息，不值得为此单独投入 |
 
 ## 约束条件
 - 当前 `SCOPUS_API_KEY` 为**基础级别、非商业性质**的 Elsevier 开发者 Key，未配置 `X-ELS-Insttoken`（机构令牌）。
@@ -159,6 +161,22 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 2. **实测可用**：Serial Title（期刊信息）、Object Retrieval（ScienceDirect 图表/补充材料）——这两项可以直接纳入 v2.0 开发范围。
 3. **实测不可用（需要更高订阅/entitlement，非当前 Key 能解决）**：Affiliation Retrieval、Affiliation Search、Citation Count Metadata、Citation Overview、Article Entitlement (ScienceDirect)——均为订阅等级不足。SciVal 单独列出：并非与现有 Key 无关，而是同一 Elsevier 开发者 Key 下"商业 vs 非商业"账号类型的区隔，用户当前 Key 为非商业性质，因此无法访问。
 4. **结论待定**：Nonserial Title（图书检索），错误性质与其他"确认不可用"项不同，且用户对图书类目的检索场景是否是刚需本身也未明确。
+
+### 实测可行性探测（2026-08-04，QA-R007 新候选项，使用 `.env` 中真实 Elsevier Key）
+
+来源：调研本地参考项目 `reference-projects/elsevier-mcp-main/`（非本仓库代码，`.gitignore` 排除）后发现的 3 个本文档从未调研过的全新端点，以及 1 个"同端点换 Accept 头"的响应格式变体。用户在 QA-R007 中回答"验证一下"（四项全部要求真实探测，明确表示即便结构上高度可疑（`plumx_metrics`）也要实测而非凭同构证据下结论）。沿用一贯方法论：临时探测脚本（`probe_qa_r007.py`，位于会话 scratchpad，未纳入仓库）对四个候选各发起 1-3 次真实请求，复用此前探测中已验证有效的真实标识符（ISSN `0092-8674`=Cell、DOI `10.1016/j.jmst.2026.07.003`）。结果如下：
+
+| 功能 | 探测请求 | HTTP 状态 | Elsevier 错误码/说明 | 结论 |
+|---|---|---|---|---|
+| `serial_title_search`（期刊搜索，不需要 ISSN） | `content/serial/title?title=Cell&count=5` | **200** | — | **实测可用**。返回 `serial-metadata-response.entry[]`，字段结构与已实现的 `content/serial/title/issn/{issn}` 高度一致（`dc:title`/`dc:publisher`/`prism:issn`/`prism:aggregationType`/`subject-area[]`/`link[]`），另有 `SNIPList`/`SJRList`（期刊计量指标，当前 `scopus_serial_title_by_issn` 未提取）。真实返回的第一条是 *Advanced Fuel Cell Technology*（`title=Cell` 是子串匹配，非精确匹配，符合"搜索"语义预期）。 |
+| `subject_classifications`（学科分类代码查询） | `content/subject/scopus?description=computer` | **200** | — | **实测可用**。返回 `subject-classifications.subject-classification[]`，每项含 `code`/`description`/`detail`/`abbrev`（真实样本：`code=1700-1712` 均为 Computer Science 大类下的细分学科，如 `1702`="Artificial Intelligence"、`1709`="Human-Computer Interaction"）。字段结构简单、扁平，无嵌套问题。 |
+| `plumx_metrics`（PlumX 替代计量学指标） | `analytics/plumx/doi/{doi}` | 401 | AUTHENTICATION_ERROR（"The requestor is not authorized to access this resource"） | **实测不可用**。印证了 QA-R007 中"`analytics/` 前缀与 SciVal 同构、大概率同样受限"的判断——虽然具体错误码与 SciVal 的 `403 ENTITLEMENTS_ERROR` 不完全相同（这里是 `401 AUTHENTICATION_ERROR`），但结论一致：当前非商业 Key 无法访问。 |
+| `fulltext_retrieval` 纯文本变体（同一 `content/article/doi/{id}` 端点，仅 `Accept: text/plain`） | `content/article/doi/{doi}`，`Accept: text/plain`，分别测试 `view=META`/`view=META_ABS`/`view=FULL`/不带 view 共 4 种组合 | 400（4 种组合均一致） | INVALID_INPUT（"View parameter specified in request is not valid"） | **实测不可用**，且现象比较特殊：同一端点、同一 DOI，把 `Accept` 换回 `application/json`（不带 view）或 `text/xml`（`view=META`）都能正常返回 **200**，只有 `Accept: text/plain` 这一种协商方式始终 400，与 `view` 参数取值无关（含不传 `view`）。错误信息字面是"view 参数无效"，但实际上没有传无效 view 也照样报错，怀疑是账号对 `text/plain` 纯文本正文输出的实体协商本身不被支持/不受当前订阅覆盖，Elsevier 用了一个措辞上有误导性的校验错误来表达。由于这只是已实现端点的响应格式变体（不是新能力），且实测确认此路不通，不建议为它单独投入更多探测。 |
+
+**关键发现（QA-R007 探测）**：
+1. **实测可用、且推荐纳入候选范围**：`serial_title_search`（期刊搜索）、`subject_classifications`（学科分类查询）——两者均返回 200 且拿到了真实、结构清晰的响应字段，与本项目已实现的 Elsevier 功能属于同一订阅层级，技术风险低。
+2. **实测不可用，建议排除**：`plumx_metrics`——与 SciVal 同属 `analytics/` 前缀资源，当前非商业 Key 确认无法访问（401 AUTHENTICATION_ERROR）。
+3. **实测不可用，建议排除**：`fulltext_retrieval` 纯文本变体——同一已实现端点换 `Accept: text/plain` 后固定返回 400，JSON/XML 协商方式均正常，说明问题出在纯文本这一特定响应格式上，而非端点本身或 view 参数；不是新能力，本项目已有的 JSON 归一化返回已能覆盖同等信息，无需为此单独开发。
 
 ## 澄清问答记录
 <!-- GOAL-QA-LOG-START -->
@@ -295,6 +313,37 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **影响的目标文档章节**
   - 核心目标 / 范围界定 / 约束条件
   <!-- GOAL-QA-R006-END -->
+
+### QA-R007：调研参考项目 `reference-projects/elsevier-mcp-main/` 后发现的新候选功能点确认
+<!-- GOAL-QA-R007-START -->
+- **提问时间**：2026-08-04 12:57
+- **提问目的**：用户要求调研本地 `reference-projects/elsevier-mcp-main/`（一个 TypeScript 实现的开源 Elsevier MCP 参考项目，`.gitignore` 排除，非本仓库代码），评估其中是否有值得纳入 UniArticles 的能力。已完整阅读该项目 `src/` 下全部 14 个工具源码（`scopus-search.ts`/`abstract-retrieval.ts`/`article-retrieval.ts`/`serial-title.ts`/`subject-classifications.ts`/`author-search.ts`/`author-retrieval.ts`/`affiliation-search.ts`/`affiliation-retrieval.ts`/`citation-count.ts`/`citations-overview.ts`/`plumx-metrics.ts`/`fulltext-retrieval.ts`及`client.ts`/`errors.ts`），并逐个核对其调用的真实端点路径，与本文档"附录：Elsevier API 现状盘点"逐项比对，结论如下：
+  - **8/14 个工具的端点与本文档已用真实 Key 实测并排除的功能完全一致**（`author_search`↔`content/search/author`、`affiliation_search`↔`content/search/affiliation`、`author_retrieval`↔`content/author/author_id/{id}`、`affiliation_retrieval`↔`content/affiliation/affiliation_id/{id}`、`citation_count`↔`content/abstract/citation-count`、`citations_overview`↔`content/abstract/citations`——均已实测 401/403；另外 `article_retrieval`/`abstract_retrieval` 与本项目已实现的 `sciencedirect_article_retrieve_by_identifier`/`scopus_abstract_detail_by_eid` 是同一端点）。这 8 项**没有新增价值**，参考项目也没有揭示任何本文档实测结论之外的新可行性证据（该项目 README 同样把这类工具标注为"需机构网络/额外订阅"）。
+  - **`serial_title_retrieval`** 与本项目已实现的 `scopus_serial_title_by_issn` 是同一端点（`content/serial/title/issn/{issn}`），已覆盖。
+  - **发现 3 个本文档从未提及、goal.md 完全没有调研过的全新端点**（详见下方问题列表），其中 1 个（`serial_title_search`）与已验证可用的端点同属一个资源族、把握较高；1 个（`subject_classifications`）完全未知可行性；1 个（`plumx_metrics`）因使用 `analytics/` 前缀、与已证实"仅限商业 Key"的 SciVal（`analytics/scival/...`）同构，大概率同样不可用。
+  - 另发现参考项目的 `fulltext_retrieval` **不是新端点**，调用的正是本项目已实现的 `content/article/{id_type}/{id}`（即 `sciencedirect_article_retrieve_by_identifier` 背后的同一端点），差异只在于它请求 `Accept: text/plain` 而非 JSON，目的是拿到清洗过的纯文本全文而非结构化元数据。这是一个"响应格式变体"而非新功能，价值有限但成本极低（同一端点换一个 Accept 头）。
+  - 工程实践方面观察到两点可能有参考价值、但都不是功能缺口：(1) 该项目在收到 401 时会自动尝试 `/authenticate` 端点做一次机构网络 IP 认证重试，这个机制只对处于机构网络内的调用方有意义，对本项目当前"非商业、无 Insttoken"的账号场景没有实际用处；(2) 该项目用 `ElsevierApiError` 自定义异常类把 HTTP 状态码与错误消息分开保存，而本项目当前 `except Exception as exc: _err(..., message=str(exc))` 依赖 httpx 异常的 `str()` 表示（已包含状态码文本），效果上大体等价但结构化程度较低。
+  - 按项目一贯的"真实 API 验证优先"原则，以下 3 个新候选**均未做真实调用验证**，在获得用户确认要不要投入验证之前，不预判其可行性、也不直接建议采纳。
+- **问题列表**
+  1. **`serial_title_search`**（端点 `content/serial/title`，按期刊标题/出版商/学科代码/OA 状态等条件搜索期刊，不要求预先知道 ISSN）——与本项目已验证可用的 `content/serial/title/issn/{issn}` 同属期刊元数据资源族，价值在于补齐"不知道 ISSN、只想按主题/出版商找期刊"的场景。是否希望投入一次真实 API 探测来验证当前 Key 下是否可用（HTTP 200）？如果验证通过，是否原则上同意把它纳入未来版本的候选范围（作为 `scopus_serial_title_by_issn` 的姊妹工具）？
+  2. **`subject_classifications`**（端点 `content/subject/{scopus|scidir}`，查询 Scopus ASJC 学科分类代码/缩写/说明，或 ScienceDirect 学科分类代码）——本文档此前完全没有调研过这个端点，可行性未知。价值在于给用户提供"学科代码速查"能力，间接帮助构造更精确的 Scopus 搜索查询（如 `SUBJAREA(COMP)`）。是否希望投入真实验证？
+  3. **`plumx_metrics`**（端点 `analytics/plumx/{id_type}/{id_value}`，PlumX 替代计量学指标——使用量/收藏/社交媒体提及等）——因为它和已证实"仅商业性质 Key 可访问"的 SciVal 同属 `analytics/` 路径前缀，结构上高度可疑同样受限（但不是 100% 确定，两者是否共用同一权限判定逻辑并未验证过）。是否仍希望花一次真实探测请求做实锤确认，还是基于这个同构证据直接判定"大概率不可用"、本轮不再单独测试、留到未来订阅升级后再评估？
+  4.（次要，供参考）`fulltext_retrieval` 这个"纯文本全文"变体，是否有兴趣顺带验证一下——用同一个 `retrieve_article`/`sciencedirect_article_retrieve_by_identifier` 已经在用的端点，换成 `Accept: text/plain` 请求头，看当前 Key 能否拿到比现有 `view=META` 更完整的正文纯文本？如果没兴趣，我们就不再展开。
+- **用户回答**
+  1. 验证一下
+  2. 验证一下
+  3. 验证一下
+  4. 验证一下
+- **提炼结论**
+  - 用户对全部 4 项均要求"验证一下"，即便本 agent 已给出"`plumx_metrics` 与 SciVal 同构、大概率不可用"的初步判断，用户仍坚持要真实实测而非采信同构推断——已用 `.env` 中真实 Elsevier Key（临时探测脚本 `probe_qa_r007.py`，位于会话 scratchpad，未纳入仓库）对四项各发起真实请求，结果记录在附录新增小节"实测可行性探测（2026-08-04，QA-R007 新候选项）"。
+  - **`serial_title_search`（期刊搜索）：实测可用（HTTP 200）**。返回 `serial-metadata-response.entry[]`，字段结构与已实现的 `scopus_serial_title_by_issn` 高度一致，另有 `SNIPList`/`SJRList` 期刊计量指标是现有工具未提取的增量字段。本 agent 专业判断：**值得纳入候选范围**，作为 `scopus_serial_title_by_issn` 的姊妹工具，补齐"不知道 ISSN、只想按标题/出版商/学科搜期刊"的场景，技术风险低（同资源族、同订阅层级）。
+  - **`subject_classifications`（学科分类查询）：实测可用（HTTP 200）**。返回 `subject-classifications.subject-classification[]`，字段简单扁平（`code`/`description`/`detail`/`abbrev`），真实样本验证通过。本 agent 专业判断：**值得纳入候选范围**，可作为独立小工具，帮助用户查学科代码以构造更精确的 Scopus 查询（如 `SUBJAREA(COMP)`），实现成本低。
+  - **`plumx_metrics`：实测不可用（401 AUTHENTICATION_ERROR）**。印证了此前"与 SciVal 同属 `analytics/` 前缀、大概率同样受限"的判断，虽具体错误码与 SciVal 的 403 ENTITLEMENTS_ERROR 不同，但结论一致——当前非商业 Key 无权访问。本 agent 专业判断：**排除**，已记录到"范围界定/排除"表格，理由与既有 SciVal 排除项保持同一逻辑（账号类型不满足，非代码问题，未来若拿到商业 Key 可重新评估）。
+  - **`fulltext_retrieval` 纯文本变体：实测不可用（400 INVALID_INPUT，与 view 参数取值无关）**。同一端点换 `Accept: application/json`/`text/xml` 均正常 200，唯独 `text/plain` 协商方式固定报错，现象与错误文案本身不一致（错误说"view 参数无效"，但不传 view 一样报错），怀疑是账号对该纯文本输出格式本身不受支持/未被订阅覆盖，Elsevier 用了措辞有误导性的校验错误表达。本 agent 专业判断：**排除**，且不建议为查明这个错误文案的真实语义投入更多探测精力——它本来就不是新能力（同一端点、同一数据，JSON 归一化已覆盖等价信息），性价比低。已记录到"范围界定/排除"表格。
+  - **总结**：4 项候选中 2 项（`serial_title_search`、`subject_classifications`）实测通过、建议纳入未来版本候选范围；2 项（`plumx_metrics`、`fulltext_retrieval` 纯文本变体）实测确认不可用/无增量价值、建议排除，已记录排除原因。是否正式把前两项纳入某个具体版本的开发范围（核心目标/包含范围），仍需用户明确拍板（本轮 QA 用户只回答了"验证一下"，尚未对"验证通过后是否纳入"给出最终意见），留待用户确认后再补充版本号与具体范围条目，或开启新一轮 QA 记录。
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定（包含/排除） / 附录：Elsevier API 现状盘点
+  <!-- GOAL-QA-R007-END -->
 
 <!-- GOAL-QA-LOG-END -->
 
