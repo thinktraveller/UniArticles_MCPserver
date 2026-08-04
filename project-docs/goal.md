@@ -396,6 +396,50 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - 核心目标 / 目标用户 / 期望成果 / 成功标准 / 范围界定（包含） / 约束条件
   <!-- GOAL-QA-R008-END -->
 
+### QA-R009：v2.4.0 调研——`paperscraper.py` 实现方式核实、改名可行性、PubMed 功能扩展候选（真实 Entrez API 验证）
+<!-- GOAL-QA-R009-START -->
+- **提问时间**：2026-08-04 19:27
+- **提问目的**：v2.3.0（12 个工具）已发布（commit `ee8aeb0`）。用户启动 v2.4.0 调研，聚焦 `src/uniarticles/sources/paperscraper.py`——该文件在 v2.1.0 删除 `searchScholarPapers`（Google Scholar）后，目前只承担 PubMed 检索（`pubmed_paper_search_by_query` 一个工具），文件名与实际内容不符。用户提出三个具体问题，均已完成真实调研/真实 API 验证，结论如下（供下方问题列表引用）：
+
+  **发现1（实现方式核实）**：`src/uniarticles/sources/paperscraper.py` 第 4 行 `from paperscraper.pubmed.pubmed import get_pubmed_papers`，实际调用链为：第三方包 `paperscraper`（PyPI，0.3.6）的 `paperscraper/pubmed/pubmed.py` 第 34-95 行 `get_pubmed_papers()` → 内部实例化 `pymed_paperscraper.PubMed`（`paperscraper` 的依赖，PyPI 包 `pymed-paperscraper` 1.0.6，是已废弃的 `pymed` 包的一个维护 fork）→ `PubMed.query()`（`.venv/Lib/site-packages/pymed_paperscraper/api.py` 第 63-89 行）依次调用两个真实的 **NCBI 官方 Entrez E-utilities REST API** 端点：`GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi`（ESearch，检索匹配 PMID 列表）与 `GET .../efetch.fcgi`（EFetch，按 PMID 批量拉取完整 XML 记录并解析出 `title`/`authors`/`abstract`/`journal`/`doi`/`publication_date`/`keywords`/`methods`/`conclusions`/`results`/`copyrights` 等字段）。**结论：不是网页爬虫**（未请求/解析 pubmed.ncbi.nlm.nih.gov 的 HTML 页面），**是对 NCBI 官方 API 的直接包装**，**也不是** BioPython 的 `Bio.Entrez`。当前实现不需要也未使用 NCBI API Key（`pymed_paperscraper.PubMed.__init__`/`self.parameters` 硬编码只有 `tool`/`email`/`db` 三个参数，代码里完全没有 `api_key` 字段）。另确认一个真实存在的官方限制（非 paperscraper 自设）：ESearch 单次查询最多只能取回前 9999 条匹配记录（`paperscraper/pubmed/pubmed.py` 第 50-67 行注释明确说明），当前 `pubmed_paper_search_by_query` 已把 `max_results` clamp 到 `[1, 9998]`，这是对齐官方限制的正确实现，不是缺陷。
+
+  **发现2（改名可行性 + 更深层的技术含义）**：全仓库 grep（排除 `.venv`）核实，纯改名（`paperscraper.py` → `pubmed.py`）需要同步改动：① `src/uniarticles/sources/__init__.py` 第 6/13 行的 import 路径与函数名 `register_paperscraper_source`；② 文件内部 `_ok()`/`_err()` 硬编码的 `"source": "paperscraper"` 字段（第 10、21 行）——这是**返回给 MCP 客户端的 JSON 响应体实际字段值**，若一并改为 `"pubmed"` 会改变已发布工具 `pubmed_paper_search_by_query` 的返回内容，是面向调用方可见的行为变化，非纯内部重命名；③ `CLAUDE.md` 第 36-37 行；④ `README.md`（第 21/129/166 行）与 `README_ZH.md`（第 21/127/164 行）；⑤ `project-docs/teach.md` 多处架构说明。`project-docs/project-plan.md`/`buildlog.md` 属历史构建记录，本 agent 判断不应回溯性篡改，只在 v2.4.0 新增条目中体现改名。
+  **更深层的技术含义（超出字面"改名"提问，主动指出）**："paperscraper" 同时是三样不同的东西：①我们自己的源码文件名；②JSON 响应体里硬编码的 `source` 字段值；③被包装的第三方 PyPI 依赖包名（`pyproject.toml` 第 29 行、`uv.lock`）。**只改我们自己的文件名完全不影响 pyproject.toml/uv.lock 里的依赖声明**——这是两个独立的东西恰好同名，正是当前命名令人困惑的根源之一。已用真实文件核实第三方 `paperscraper` 包（0.3.6）的 `Requires-Dist` 依赖列表：`arxiv`/`pandas`/`requests`/`tqdm`/**`scholarly`**（Google Scholar 爬虫库——v2.1.0 已删除 Google Scholar 工具，但这个依赖仍在被静默安装，完全未使用）/`seaborn`/`matplotlib`/`matplotlib-venn`（绘图库，MCP Server 用不到）/`bs4`/`impact-factor`/`thefuzz`/`tldextract`/`semanticscholar`/`pydantic`/`unidecode`/`dotenv`/**`boto3`**（AWS SDK）/**`pytest`**（测试框架被声明为运行时依赖）——为了用其中一个函数 `get_pubmed_papers`（本质是两次 HTTP 调用），背了一个体积巨大、绝大部分内容用不上的依赖树。另确认第三方 `paperscraper` 包自己的 `__init__.py` 第 14 行在**导入时**执行 `logging.basicConfig(stream=sys.stdout, level=logging.WARNING)`，这正是 `buildlog.md`（296-319/403 行）记录过的 "Connection closed" bug 根因之一，当时的修复是在 `src/uniarticles/__init__.py` 里抢先配置 stderr handler 使其 `basicConfig` 调用变为 no-op——这是**已生效但从根源上未解决**的防御性 workaround，只要仍依赖 `paperscraper`，隐患本身仍在（只是被压制）。另确认 `pymed_paperscraper`（真正发起 HTTP 请求的那层）完全不支持 NCBI API Key 参数，即使想通过配置 Key 换取更高速率限制，当前依赖链在代码层面就不支持。**结论：改名本身在技术上安全、独立，不依赖是否替换第三方包**；但确实存在一个更大的技术选型问题——要不要把第三方 `paperscraper` 包换成直接用 `httpx` 调用 NCBI 官方 Entrez API（与本项目 `scopus.py`/`sciencedirect.py` 一直在用的"直接 httpx 调 REST API、不经第三方 SDK 包装"是同一套架构风格；当前 `paperscraper.py` 反而是这个项目里的架构异类）。这不是本 agent 能替用户决定的事，已整理为下方决策问题。
+
+  **发现3（PubMed 功能扩展候选，已用真实 Entrez API 请求验证，不使用任何 Key）**：核实 `paperscraper.pubmed` 模块（`.venv/Lib/site-packages/paperscraper/pubmed/__init__.py` 仅 `from .pubmed import *`）只公开 `get_pubmed_papers`（已用）与 `get_and_dump_pubmed_papers`（关键词+日期拼接查询后直接落盘文件，是 `get_pubmed_papers` + 落盘的组合，无增量能力，不适合 MCP 工具场景）。`paperscraper`/`pymed_paperscraper` **均未暴露 ESummary、ELink**（`pymed_paperscraper.PubMed` 内部虽有 `getTotalResultsCount()` 方法，只用 ESearch 返回匹配总数，但 `paperscraper.pubmed.pubmed` 未将其包装暴露）。用临时真实请求（无 Key、无认证）逐一验证结果：
+
+    | 候选功能 | 端点 | 真实探测请求 | HTTP 状态 | 结论 |
+    |---|---|---|---|---|
+    | ESearch（已用） | `esearch.fcgi` | `db=pubmed&term=CRISPR&retmax=3&retmode=json` | 200 | 已实现（隐藏在 `get_pubmed_papers` 内部，未单独暴露"仅取总数/ID列表"能力） |
+    | EFetch（已用） | `efetch.fcgi` | `db=pubmed&id=42548914&rettype=abstract&retmode=xml` | 200 | 已实现（隐藏在 `get_pubmed_papers` 内部，无法独立按 PMID 列表批量取详情） |
+    | **ESummary（候选新功能）** | `esummary.fcgi` | `db=pubmed&id=42548914&retmode=json` | **200** | **实测可用**。比 EFetch 更轻量，且额外含 EFetch 当前返回字段没有的 **PMCID**、**PII**、期刊全名、发表状态历史（收稿/修回/接收/上线日期）等字段 |
+    | **ELink 相关文献（候选新功能）** | `elink.fcgi` | `dbfrom=pubmed&db=pubmed&id=33301246&cmd=neighbor&retmode=json` | **200** | **实测可用**。返回 `pubmed_pubmed`/`pubmed_pubmed_combined`/`pubmed_pubmed_reviews` 等多组相关文献 PMID 列表 |
+    | **ELink 全文/引用关联（候选新功能）** | `elink.fcgi` | `dbfrom=pubmed&db=pmc&id=33301246&retmode=json` | **200** | **实测可用**。对知名开放获取论文（PMID 33301246，Pfizer/BioNTech COVID-19 疫苗 NEJM 论文）返回 `pubmed_pmc`（对应 PMC 全文 `PMC7745181`）与 `pubmed_pmc_refs`（引用/关联的 PMC 文章列表，数百条），证明可查"该文献在 PMC 是否有全文"与"哪些文章引用/关联了它" |
+    | 速率限制（NCBI 官方政策，非本次几次请求可验证的行为） | — | 连续 5 次 ESearch 请求，均 200，无 429 | — | 未观察到限速拒绝，但样本量小不能证伪限速存在；NCBI 官方文档记载政策为**不带 API Key 限速 3 请求/秒，带免费申请的 API Key 限速 10 请求/秒**；`.env`/`.env.example` 均未配置任何 NCBI 相关 Key（只有 `ELSEVIER_API_KEY`），且当前依赖的 `pymed_paperscraper` 代码层面完全不支持传入 `api_key` 参数 |
+
+    **结论**：ESummary、ELink（相关文献 + PMC 全文/引用链接）均已真实验证可用且不需要任何 Key，是"确认可行"而非"文档说有但没测过"的候选。但它们都不在 `paperscraper`/`pymed_paperscraper` 现有暴露的接口范围内——要接入，无论文件叫什么名字，都必须绕开 `paperscraper` 包、直接用 `httpx` 调用 `eutils.ncbi.nlm.nih.gov`，这与发现2 的"要不要整体替换依赖"是同一决策点的两个侧面：即使不做整体替换，只要想加 ESummary/ELink，也必然在同一文件里出现"部分工具走 paperscraper 包、部分工具走直接 httpx"的混合写法，除非把已实现的检索也一并改为直接 httpx 以统一风格。
+
+- **问题列表**
+  1. 【改名，操作层面】是否确认把 `src/uniarticles/sources/paperscraper.py` 改名为 `pubmed.py`，同步修改 `src/uniarticles/sources/__init__.py` 的 import 路径与注册函数名（`register_paperscraper_source` → `register_pubmed_source`），以及 `CLAUDE.md`/`README.md`/`README_ZH.md`/`project-docs/teach.md` 里对该文件名的引用（`project-plan.md`/`buildlog.md` 是历史记录，不回溯修改，只在 v2.4.0 新增条目中体现）？是否连带把 `_ok`/`_err` 里硬编码的 `"source": "paperscraper"` 响应字段值也改成 `"source": "pubmed"`（会改变已发布工具 `pubmed_paper_search_by_query` 返回 JSON 里 `source` 字段的实际取值，是面向调用方可见的行为变化）？
+  2. 【依赖层面的技术选型，需你明确拍板】关于要不要保留第三方 `paperscraper`（及其依赖 `pymed-paperscraper`）这个包装库，有三个方向，你倾向哪一个？
+     - **方案A（保守）**：只改名字，PubMed 检索继续用现有 `paperscraper` 包不变；本轮不新增 ESummary/ELink 功能（问题3 的候选留到以后单独评估），改动范围最小、风险最低。
+     - **方案B（渐进混合）**：改名 + 保留 `paperscraper` 包继续承担现有 `pubmed_paper_search_by_query`（不动它，避免影响已发布的唯一工作工具）；新增的 ESummary/ELink 工具绕开 `paperscraper`，直接用 `httpx` 调 NCBI 官方 API 实现（反正 `paperscraper` 本来就不支持这两个端点）。代价是 `pubmed.py` 内会同时存在"一个工具走第三方包装库、其余新工具走直接 httpx"两种写法并存。
+     - **方案C（彻底重构）**：改名 + 把现有 `pubmed_paper_search_by_query` 也一并改造为直接 `httpx` 调 ESearch/EFetch，彻底移除 `paperscraper`/`pymed-paperscraper` 依赖，新工具用同一套直接 httpx 风格实现，与 `scopus.py`/`sciencedirect.py` 风格完全统一。好处是甩掉发现2 列出的大量无关依赖（`scholarly`/`boto3`/`matplotlib`/`seaborn`/`bs4`/`pytest` 等）和"import 时污染 stdout"的根源隐患，且能顺带打开"配置 NCBI API Key 换取更高速率限制"的口子；代价是要重新实现 EFetch 的 XML 字段解析（`pymed_paperscraper.PubMedArticle` 目前免费提供的多个字段解析逻辑），改动范围明显更大，且触碰当前**唯一正常工作**的 PubMed 工具，需要谨慎的字段对等性验证。
+  3. 【功能扩展范围，若倾向方案B或C】ESummary、ELink 已实测确认真实可用（见上表），是否希望在 v2.4.0 中新增以下候选工具（可只选部分）？
+     - **按 PMID 批量获取轻量元数据**（基于 ESummary，比现有 EFetch 更快，额外含 PMCID/PII 等现有工具没有的字段）
+     - **相关文献查询**（基于 ELink `cmd=neighbor`，给定一篇 PMID，返回主题相关的其他 PubMed 文献）
+     - **PMC 全文/引用关联查询**（基于 ELink `dbfrom=pubmed&db=pmc`，给定 PMID，返回该文献在 PMC 是否有开放获取全文、以及哪些 PMC 文章引用/关联了它）
+     - 以上均不需要 NCBI API Key 即可用（已实测确认），但若你希望进一步支持可选的 `NCBI_API_KEY` 配置（免费申请，换取 3→10 请求/秒的限速提升），只有在选择方案C（或方案B的新工具部分）时才有意义，是否也一并纳入本轮范围？
+- **用户回答**
+  1. [等待用户回答]
+  2. [等待用户回答]
+  3. [等待用户回答]
+- **提炼结论**
+  - [收到回答后补充]
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定（包含/排除） / 约束条件 / 附录
+  <!-- GOAL-QA-R009-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
