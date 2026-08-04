@@ -40,6 +40,11 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 13.（v2.3.0，QA-R007/QA-R008）`serial_title_search`（暂定名，最终名称由 project-planner-cn 在方案 A 命名风格下确认，本 agent 建议 `scopus_serial_title_search_by_criteria`）能够对真实检索条件（如 `title=Cell`）返回 200 响应并正确解析出 `serial-metadata-response.entry[]` 列表。
 14.（v2.3.0，QA-R007/QA-R008）`subject_classifications`（暂定名，本 agent 建议 `scopus_subject_classification_lookup_by_source`）能够对真实 `source=scopus` 请求返回 200 响应并正确解析出 `code`/`description`/`detail`/`abbrev` 字段；`source=scidir` 分支需 project-builder-cn 补充真实探测后再确认字段一致性，不得凭空假设与 scopus 分支同构。
 15.（v2.3.0，QA-R007/QA-R008）两个新工具均遵循项目现有的 `_ok`/`_err` 统一响应结构，且均放入 `src/uniarticles/sources/scopus.py`，不新建模块；MCP Server 工具总数由 10 个增至 12 个，不删除、不重命名任何现有工具。
+16.（v3.0.0，QA-R010，部分已确认，具体清单待 QA-R011 收敛）新增至少 Semantic Scholar、OpenAlex、Crossref 三个通用学术检索数据源的 MCP 工具，每个数据源在 `src/uniarticles/sources/` 下建立独立脚本文件（复用现有"一数据源一文件、暴露 `register(server)`"的 source-module 模式）；是否进一步纳入 PMC/Europe PMC/DOAJ/CORE/Zenodo/HAL/dblp/OpenAIRE 等"中等价值"分领域数据源，待 QA-R011 用户明确范围边界后补充确认，纳入前均需经真实 API 可行性验证（延续本项目"真实验证优先"方法论，不得凭 README/代码逻辑直接假设可用）。
+17.（v3.0.0，QA-R010，已确认）新增 bioRxiv、medRxiv 两个预印本数据源的 MCP 工具，明确其官方公开 API 本质是"按分类+时间窗口浏览"而非关键词全文检索，工具描述与文档需如实说明这一局限性，不得暗示支持任意关键词搜索。
+18.（v3.0.0，QA-R010，已确认）新增 ChEMBL 数据源的 MCP 工具，产品语义为"给定一篇已知 DOI 的论文，查询其是否被 ChEMBL 收录及结构化 SAR/生物活性数据（IC50/MIC/Ki 等）"，是 DOI 输入型的文献关联数据查询，不是关键词检索工具，参数签名（`doi` 必填）与实现方式不应比照 Semantic Scholar/OpenAlex/Crossref 等关键词检索型工具设计。
+19.（v3.0.0，QA-R010，已确认）为现有 `arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id` 三个工具的输出补充 `doi` 字段（复用第三方 `arxiv` 库 `Result.doi` 属性，零额外请求成本），列为本轮一个独立、可优先完成的步骤，不依赖新数据源接入进度。
+20.（v3.0.0，QA-R010，已确认）目标发布版本号为 **`3.0.0`**，用户明确要求跳过此前遗留、尚未启动的 v2.4.0（`paperscraper.py` 改名等决策，原 QA-R009）；原 QA-R009 已由用户在主线程确认作废，对应内容已通过 `git revert c316c98`（提交 `d44d066`）从本文档移除。
 
 ## 范围界定
 ### 包含
@@ -70,6 +75,12 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   2. **`subject_classifications`**：接入 `content/subject/{source}`（`source` 必填，取值 `scopus`/`scidir`；`description`/`detail`/`code`/`abbrev`/`field` 均为可选过滤条件），同样放入 `src/uniarticles/sources/scopus.py`（本 agent 判断：端点路径属通用 `content/subject/` 前缀而非 ScienceDirect 专属家族，且已有 `scopus_serial_title_by_issn` 放置通用 Elsevier 内容概念于 scopus.py 的先例；project-planner-cn 若认为应新建独立模块可提出并说明理由），建议命名 `scopus_subject_classification_lookup_by_source`（方案 A 风格）。
   3. **两个新工具的真实响应字段结构、建议命名的完整依据、以及尚未探测的参数边界**，均已详细记录在附录"实测可行性探测（2026-08-04，QA-R007 新候选项）"与 QA-R008 提炼结论中，project-planner-cn 编写构建计划书时可直接引用，不需要重新做探测。
   4. **本轮明确边界：v2.3.0 是纯新增（Additive）版本**，不涉及删除、重命名或修改现有 10 个工具（`scopus_document_search_by_query`/`scopus_abstract_detail_by_eid`/`scopus_serial_title_by_issn`/`scopus_api_usage_status`/`sciencedirect_article_retrieve_by_identifier`/`sciencedirect_article_object_by_identifier`/`arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id`/`pubmed_paper_search_by_query`）的名称、参数、返回结构或注册顺序，与 v2.1.0（删除）、v2.2.0（重命名+功能改造）在改动性质上完全不同，project-planner-cn 制定构建计划书时不应顺带评估或改动这 10 个现有工具。
+- **（v3.0.0，QA-R010，部分已确认）新增数据源，均遵循现有 source-module 模式，在 `src/uniarticles/sources/` 下各建立独立脚本文件**，依据是调研本地参考项目 `reference-projects/paper-search-mcp-main/`、`reference-projects/research-superpower-main/` 后的核实结论（详见附录"实测可行性探测"章节新增小节）+ 用户在 QA-R010 的确认：
+  1. **Semantic Scholar、OpenAlex、Crossref**（已确认纳入）：均为免费/公开、无需强制 key 的通用学术检索数据源，纳入前需 project-builder-cn 按本项目一贯方法论做真实 API 可行性验证（确认字段结构、限流表现），不得直接照抄参考项目的 Python 实现。
+  2. **bioRxiv、medRxiv**（已确认纳入）：官方公开 API 语义为"按分类+时间窗口浏览"而非关键词全文检索，实现与文档需如实体现这一局限性，不能承诺关键词搜索体验。
+  3. **ChEMBL**（已确认纳入，产品语义与其余数据源不同）：DOI 输入型的文献关联数据查询（查询已知 DOI 论文是否被 ChEMBL 收录及其结构化 SAR 数据），不是关键词检索工具，参数签名需以 `doi` 必填设计，不得比照关键词检索型工具的 `query`+`max_results` 模式。
+  4. **PMC、Europe PMC、DOAJ、CORE、Zenodo、HAL、dblp、OpenAIRE**（是否纳入待 QA-R011 确认）：这 8 个数据源在 QA-R010 中被评估为"中等价值"，用户回答"全部都纳入"存在是否包含这 8 个的歧义，且均未经真实 API 探测（仅核实了 README 描述与代码逻辑），暂不写入本轮确定范围，待 QA-R011 收敛后再补充。
+- **（v3.0.0，QA-R010，已确认）arXiv 三个现有工具补充 `doi` 输出字段**，复用第三方 `arxiv` 库 `Result.doi` 属性，零额外请求成本，作为独立步骤，可先于新数据源接入完成。
 
 ### 排除
 | 功能 | 排除原因 |
@@ -86,6 +97,14 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 | TDM Service（批量文本挖掘授权） | 本轮未讨论，非新端点而是使用条款/注册流程，超出本次范围 |
 | PlumX Metrics（`analytics/plumx/{id_type}/{id_value}`，替代计量学指标） | （QA-R007，2026-08-04 实测）401 AUTHENTICATION_ERROR，与 SciVal 同属 `analytics/` 前缀资源，当前非商业 Key 无法访问 |
 | ScienceDirect 全文纯文本变体（同一 `content/article/{id_type}/{id}` 端点，`Accept: text/plain`） | （QA-R007，2026-08-04 实测）固定返回 400 INVALID_INPUT（与 view 参数取值无关，含不传 view），而同端点 `Accept: application/json`/`text/xml` 均正常 200；非新能力，是已实现端点 `sciencedirect_article_retrieve_by_identifier` 的响应格式变体，JSON 归一化已覆盖等价信息，不值得为此单独投入 |
+| Unpaywall（v3.0.0，QA-R010） | 代码核实其检索本质是"给定 DOI 查开放获取全文位置"的单条查找，非关键词检索，产品语义属于全文下载兜底工具，与本项目已排除的下载类功能高度相关；用户在 QA-R010 认可排除 |
+| Sci-Hub（v3.0.0，QA-R010） | 项目自身声明合规风险因司法辖区而异，非本项目产品定位所涉及；用户在 QA-R010 认可排除 |
+| IEEE Xplore（v3.0.0，QA-R010） | 代码核实即便配置 API key，`search()` 仍无条件 `raise NotImplementedError`（含未完工的 TODO 注释），是作者自己也未写完的空壳，不构成真实可用功能；用户在 QA-R010 认可排除 |
+| ACM Digital Library（v3.0.0，QA-R010） | 同 IEEE Xplore，`search()` 同样是无条件 raise 的空壳，未真实实现；用户在 QA-R010 认可排除 |
+| SSRN（v3.0.0，QA-R010） | 参考项目 README 明确标注 403 bot-detection，不稳定；用户在 QA-R010 认可排除 |
+| CiteSeerX（v3.0.0，QA-R010） | 参考项目 README 明确标注端点间歇性不可用/重定向到网页存档，不稳定；用户在 QA-R010 认可排除 |
+| BASE（v3.0.0，QA-R010） | OAI-PMH 接口需机构 IP 注册才能返回实际结果，个人/非机构用户几乎不可用；用户在 QA-R010 认可排除 |
+| Google Scholar（v3.0.0，QA-R010，重申） | 本项目 v2.1.0 已因网络访问受限删除过同类工具（`searchScholarPapers`），参考项目同样标注 bot-detection 问题，无新证据支持重新评估；用户在 QA-R010 认可排除 |
 
 ## 约束条件
 - 当前 `SCOPUS_API_KEY` 为**基础级别、非商业性质**的 Elsevier 开发者 Key，未配置 `X-ELS-Insttoken`（机构令牌）。
@@ -115,6 +134,10 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   2. `subject_classifications`：`source=scidir`（ScienceDirect 学科分类）分支的真实响应字段结构（不能假设与已验证的 `source=scopus` 分支同构）；`code`/`abbrev`/`field` 精确过滤参数的真实效果；`source` 传入非法值时的错误响应；不带过滤条件、只传 `source` 时的响应体量级（是否需要分页提示）。
   3. 两工具的错误处理边界（无效标识符/无匹配结果/权限不足）均未真实触发过，需按项目现有 `_ok`/`_err` 规范真实测试后再确定归一化降级行为。
 - **（v2.3.0，QA-R007/QA-R008）本轮新增工具建议命名（`scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source`）为本 agent 拟定，非不可更改的最终方案**：project-planner-cn 若在构建计划书阶段认为有更贴切的命名，可以调整，但须说明理由，并保持 v2.2.0（QA-R004）已确认的"数据源_对象_动作(_by_限定词)"方案 A 命名风格不变，不得引入新的命名规则或退回方案 B。
+- **（v3.0.0，QA-R010，已确认）ChEMBL 的产品定位差异需要在构建阶段被严格遵守**：不得按论文关键词检索工具的参数模式（`query`+`max_results`）设计，必须是 `doi` 必填的查询工具，语义为"这篇论文是否被 ChEMBL 收录及其结构化数据"。project-planner-cn/project-builder-cn 需在构建计划书/实现中明确标注这一差异，避免与其他新增数据源工具的参数模式混淆。
+- **（v3.0.0，QA-R010，架构提示，非强制要求）新数据源数量若达到两位数（视 QA-R011 结果而定），`src/uniarticles/sources/__init__.py` 的 `register_all_sources()` 调用列表会明显变长**，project-planner-cn 制定构建计划书时可以考虑相应的组织方式（例如分组注释、保持固定排序规则），但用户未要求现在就设计解决方案，不强制在本轮给出方案。
+- **（v3.0.0，QA-R010，已确认）新增数据源纳入前必须先做真实 API 可行性验证，不得直接照抄参考项目的实现假设**：本轮 QA-R010 对 3 个"推荐重点候选"（Semantic Scholar/OpenAlex/Crossref）与 2 个语义特殊的候选（bioRxiv/medRxiv 的浏览语义、ChEMBL 的 DOI 查询语义）已有代码级核实，但均未做过针对本项目 `.env` 环境的真实请求验证；其余"中等价值"候选（若最终纳入）核实程度更浅。project-builder-cn 在正式开发前需延续本项目一贯的"真实验证优先"方法论（同 QA-R001/QA-R002 对 Elsevier 端点、QA-R007 对新候选端点的处理方式），对每个候选逐一发起真实请求确认端点可用性、字段结构、限流表现，不能仅凭参考项目 README/代码逻辑就直接假设可用并开始实现。
+- **（v3.0.0，QA-R010，已确认）原 QA-R009（v2.4.0，`paperscraper.py` 改名/依赖选型/PubMed 新增 ESummary·ELink 的决策请求）已作废**：用户在 QA-R010 问题 6 的回答"本次版本就是3.0.0版本，跳过原本的2.4.0版本"实质确认不再需要该轮次；主线程已代为执行 `git revert c316c98`（提交 `d44d066`）将 QA-R009 从"澄清问答记录"中移除。QA-R010 正文中此前对 QA-R009 的引用（C.3、问题列表问题 6）已改为说明性编者按，不再指代实际存在的轮次。paperscraper.py 相关的技术债（改名/依赖精简/PubMed 功能扩展）如果未来仍需处理，需要作为一次新的、独立的目标澄清重新发起，不因并入 v3.0.0 而自动继承 QA-R009 已调研的内容。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -399,6 +422,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 ### QA-R010：v3.0.0 调研——`paper-search-mcp-main` 与 `research-superpower-main` 源码核实结论，候选新数据源确认
 <!-- GOAL-QA-R010-START -->
 - **提问时间**：2026-08-04 20:32
+
 - **提问目的**：v2.3.0（12 个工具）已发布。用户浏览了《Zotero 加 Codex：2026最新科研 Skills 合集，从找文献到写综述.md》一文里列出的全部科研相关项目，认为除 2 个外均无参考价值，自行下载了 `reference-projects/paper-search-mcp-main`（对应文章里的 `openags/paper-search-mcp`）与 `reference-projects/research-superpower-main`（对应文章里的 `kthorn/research-superpower`）到本地（该目录已被 `.gitignore` 排除，不提交仓库），要求本 agent 实际阅读源码/README，识别本项目当前 4 个数据源（Scopus/ScienceDirect/ArXiv/PubMed）完全未覆盖过的候选新数据源，并区分"真正的新数据源"与"同一数据源的更好实现方式"。本 agent 已逐一阅读两个项目的 README 全文、`paper-search-mcp-main` 的 `academic_platforms/` 目录下全部 26 个连接器源码（含逐一核实 arxiv.py/pubmed.py/semantic.py/openalex.py/crossref.py/biorxiv.py/core.py/unpaywall.py/ieee.py/acm.py）、`server.py` 的全部工具注册、`research-superpower-main` 的全部 9 个 `SKILL.md`，以及本项目自身的 `src/uniarticles/sources/arxiv.py`。核实结论如下（供下方问题列表引用）：
 
   **A. `paper-search-mcp-main` 核实结论**：这是一个真正的多源 MCP Server（不是流程/技能），`academic_platforms/*.py` 每个数据源一个 `PaperSource` 子类，`server.py` 注册了 60+ 个 `@mcp.tool()`（search_x/download_x/read_x 三件套 × 20+ 数据源 + 跨源统一 `search_papers` + `download_with_fallback`）。逐一核实覆盖的数据源中，与本项目现有 4 个数据源完全不重叠的候选，按推荐优先级列出：
@@ -423,12 +447,12 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
     2. Semantic Scholar Graph API（论文查找/引用/被引）——`paper-search-mcp-main` 已覆盖（`search_semantic`）。
     3. Unpaywall（开放获取全文查找）——`paper-search-mcp-main` 已覆盖（`search_unpaywall`）。
     4. **ChEMBL API**（`www.ebi.ac.uk/chembl/api/data/`，仅接受 DOI 查询，返回结构化药物化学 SAR 数据如 IC50/MIC/Ki）——是本次调研中**唯一在 `paper-search-mcp-main` 里也没出现过的全新端点**，但它不是论文搜索/元数据源，而是窄分领域化学生物活性数据库（仅覆盖约 9.9 万篇医药化学论文），仅在"已有一篇药物化学论文 DOI、想查它是否被 ChEMBL 收录并结构化提取过 SAR 数据"这一具体场景下才有意义，与本项目当前"通用学术文献检索"定位的相关性存疑，性质上更接近"文献的关联数据补充"而非"多一个可搜索的论文来源"。
-    **结论：`research-superpower-main` 对本项目"新增数据源"目标没有增量价值**。它真正有参考价值的部分是"工作流方法论"（引用追踪相关性打分规则、两阶段筛选流程、去重与断点续跑设计等），但这些是面向 LLM 客户端自身推理行为的提示词工程/工作流设计，不是 MCP Server 该实现的"数据获取工具"范畴，不建议作为 v3.0.0 的功能改造依据。
+      **结论：`research-superpower-main` 对本项目"新增数据源"目标没有增量价值**。它真正有参考价值的部分是"工作流方法论"（引用追踪相关性打分规则、两阶段筛选流程、去重与断点续跑设计等），但这些是面向 LLM 客户端自身推理行为的提示词工程/工作流设计，不是 MCP Server 该实现的"数据获取工具"范畴，不建议作为 v3.0.0 的功能改造依据。
 
   **C. 现有数据源（arxiv/pubmed）可借鉴的实现细节（非新数据源，单独归类，不与 A/B 混为一谈）**：
     1. **arXiv DOI 字段缺失**：`paper-search-mcp-main` 的 `arxiv.py` 为每篇论文提取 `doi` 字段（优先取 `entry.doi`，缺失时正则兜底提取）。核实本项目 `src/uniarticles/sources/arxiv.py` 的 `_serialize_paper()`（第 53-62 行）完全没有输出 `doi` 字段，而本项目依赖的第三方 `arxiv` 库（`.venv/Lib/site-packages/arxiv/__init__.py` 第 71/123/158 行）其 `Result` 对象本身就自带 `.doi` 属性（从 Atom feed 的 `arxiv_doi` 解析），**这是零额外请求成本就能拿到的字段，当前是"库已给但没透出"的疏漏**，可作为独立于新数据源决策之外的小改进项。
     2. **arXiv 网络重试**：`paper-search-mcp-main` 手写了 3 次重试+指数退避；核实本项目使用的 `arxiv` 库 `Client` 类本身已内置 `num_retries`（默认 3）/`delay_seconds`（默认 3.0）重试机制（同文件第 585-623 行），**本项目已有等价能力，不构成缺口**，仅作记录避免误判。
-    3. **PubMed**：`paper-search-mcp-main` 手写 esearch+efetch；本项目通过第三方 `paperscraper`→`pymed_paperscraper` 间接调用同样的 NCBI 官方端点。QA-R009 已对 PubMed 侧实现方式/改名/依赖精简做过更深入的核实，本轮不重复评估，避免与 QA-R009 未决方向冲突。
+    3. **PubMed**：`paper-search-mcp-main` 手写 esearch+efetch；本项目通过第三方 `paperscraper`→`pymed_paperscraper` 间接调用同样的 NCBI 官方端点。（编者按：原文此处曾引用"QA-R009 已对 PubMed 侧实现方式/改名/依赖精简做过更深入的核实"——该轮次已因用户明确放弃 v2.4.0、直接对齐 v3.0.0，被主线程用 `git revert c316c98`（提交 `d44d066`）从本文档移除，相关调研内容不再存在于本文档中，此处的深入核实不再可引用，仅保留"两者是同源 NCBI API 包装"这一事实性结论。）
 
 - **问题列表**
   1. A 部分里本 agent 判断"较优、免费公开、限流可控、且与产品定位相符"的是 Semantic Scholar / OpenAlex / Crossref 三个。是否将其中若干个（或全部）正式纳入 v3.0.0 候选范围，交给 project-builder-cn 做真实 API 可行性验证（比照本项目一贯"文档判断→真实调用验证→再决定"的方法论）？还是你对 PMC/Europe PMC/dblp/Zenodo/DOAJ/CORE/OpenAIRE/HAL 等分领域数据源有额外的兴趣或排除意见？
@@ -436,19 +460,45 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   3. Unpaywall/Sci-Hub/IEEE/ACM/SSRN/CiteSeerX/BASE/Google Scholar，本 agent 判断均不建议纳入 v3.0.0（理由见 A 表格），是否认可这个排除判断？
   4. `research-superpower-main` 的核实结论是：它是工作流插件而非独立数据源工具集，四个底层 API 中三个已被 `paper-search-mcp-main` 覆盖，唯一全新的 ChEMBL 是窄分领域化学数据库、非通用论文检索源——是否认可"该项目对 v3.0.0 新数据源目标没有增量价值"这一判断？还是你对 ChEMBL（药物化学 SAR 数据附加查询）本身有独立兴趣，希望作为与"新增论文检索数据源"不同性质的功能单独评估？
   5. 关于 arXiv DOI 字段缺失（C.1）：是否要把"在现有 `arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id` 三个工具的输出里补充 `doi` 字段"也一并纳入本轮范围（这是对现有工具的小幅增强，不是新增数据源，理论上可独立于新数据源决策先做）？
-  6. **版本规划**：goal.md 中存在一个来自上一次会话、**尚未回答**的 QA-R009（v2.4.0，`paperscraper.py` 改名+依赖选型+PubMed 新增 ESummary/ELink 的决策请求），与本轮 v3.0.0（新数据源）是两条独立的待办线。是否需要先回答 QA-R009 确定 v2.4.0 范围、再启动 v3.0.0（即 v2.4.0 → v3.0.0 顺序发布），还是两者合并成一轮更大的版本（例如直接对齐到 v3.0.0，把 paperscraper 改造和新数据源一起做）？这个顺序决策会影响后续 project-planner-cn 的版本号命名，需要你明确。
+  6. **版本规划**：goal.md 中存在一个来自上一次会话、**尚未回答**的 QA-R009（v2.4.0，`paperscraper.py` 改名+依赖选型+PubMed 新增 ESummary/ELink 的决策请求），与本轮 v3.0.0（新数据源）是两条独立的待办线。是否需要先回答 QA-R009 确定 v2.4.0 范围、再启动 v3.0.0（即 v2.4.0 → v3.0.0 顺序发布），还是两者合并成一轮更大的版本（例如直接对齐到 v3.0.0，把 paperscraper 改造和新数据源一起做）？这个顺序决策会影响后续 project-planner-cn 的版本号命名，需要你明确。（编者按：本问题提出时 QA-R009 仍存在于本文档中；用户随后在主线程明确要求撤销 QA-R009 对应的提交，本轮问题 6 的回答已实质确认"跳过 v2.4.0，直接对齐 v3.0.0"，QA-R009 已被移除，此问题的历史文本保留以追溯提问背景，不代表 QA-R009 仍然存在。）
+  
+- **用户回答**
+  1. 将全部都纳入项目中，针对每个数据源单独创建src下的脚本文件，分类明确
+  2. 也纳入项目中，但明确说明局限性
+  3. 认可排除判断
+  4. chembl有独立兴趣，希望能增加该数据源的检索
+  5. 也纳入本轮范围，可以列为一个独立步骤，先完成它
+  6. 本次版本就是3.0.0版本，跳过原本的2.4.0版本
+  
+- **提炼结论**
+  - **问题1（部分确认，范围边界仍有歧义，需 QA-R011 收敛）**：用户回答"将全部都纳入项目中"，但 A 表格里的候选分了三档——3 个"推荐重点候选"（Semantic Scholar/OpenAlex/Crossref）与 8 个"中等价值"分领域候选（PMC/Europe PMC/DOAJ/CORE/Zenodo/HAL/dblp/OpenAIRE），"全部"具体指哪一档存在歧义，且中等价值候选此前只做了 README+代码逻辑核实，没有做过真实 API 探测，与本项目"真实验证优先"的一贯方法论存在落差，不能在歧义未消解、且未做真实验证前直接照单全收执行。至少可以确认：3 个推荐重点候选（Semantic Scholar/OpenAlex/Crossref）无论如何都在范围内。中等价值 8 个候选是否全部纳入、是否需要先逐一真实探测，已转入 QA-R011 继续澄清。
+  - **架构决策（已确认，无歧义）**：新增数据源"针对每个数据源单独创建 src 下的脚本文件，分类明确"，即遵循本项目现有的 source-module 模式（一个数据源一个文件、暴露 `register(server)`），不新建其他组织方式。
+  - **问题2（已确认）**：bioRxiv、medRxiv 纳入 v3.0.0 候选范围，用户接受其官方 API"按分类+时间窗口浏览"而非关键词全文检索的语义局限性，要求在实现和文档中明确说明这一点，不得暗示支持任意关键词搜索。
+  - **问题3（已确认）**：Unpaywall、Sci-Hub、IEEE Xplore、ACM Digital Library、SSRN、CiteSeerX、BASE、Google Scholar 全部排除出 v3.0.0 范围，用户认可 QA-R010 A 表格给出的排除理由（DOI查找而非检索/合规风险/未实现的空壳/不稳定/需机构IP/bot-detection 等）。
+  - **问题4（已确认，产品定位需如实记录差异）**：ChEMBL 纳入 v3.0.0，用户明确表示"有独立兴趣，希望能增加该数据源的检索"。但需要如实记录一个产品定位上的差异：ChEMBL 不接受关键词检索，只接受 DOI 查询（`document.json?doi=...`），本质是"给定一篇已知 DOI 的论文，查它是否被 ChEMBL 收录及其结构化 SAR/生物活性数据（IC50/MIC/Ki 等）"，是文献的关联数据查询工具，不是与 Semantic Scholar/OpenAlex/Crossref 同类的"关键词搜论文"工具。project-planner-cn/project-builder-cn 设计该工具的参数签名时必须体现这个差异（`doi` 必填，而非 `query`+`max_results`），避免被误设计成关键词检索接口。
+  - **问题5（已确认）**：在现有 `arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id` 三个工具的输出中补充 `doi` 字段，列为本轮一个独立、可优先完成的步骤（不依赖新数据源接入进度，可以先做）。
+  - **问题6（已确认）**：目标版本号直接对齐为 **`3.0.0`**，跳过原本规划中尚未启动的 `2.4.0`。原 QA-R009（v2.4.0，`paperscraper.py` 改名+依赖选型+PubMed 新增 ESummary/ELink 的决策请求）由此作废，用户已在主线程明确要求撤销其对应提交，coordinator 已执行 `git revert c316c98`（提交 `d44d066`）将 QA-R009 从"澄清问答记录"中完整移除；QA-R010 正文中原本对 QA-R009 的两处引用（C.3、问题列表问题 6）已改为说明性编者按，不再指代实际存在的轮次。paperscraper.py 的改名/依赖精简/PubMed 功能扩展若未来仍需处理，需作为一次新的、独立的目标澄清重新发起。
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定（包含/排除） / 约束条件
+  <!-- GOAL-QA-R010-END -->
+
+### QA-R011：v3.0.0 范围收敛——"全部纳入"候选数据源的边界确认
+<!-- GOAL-QA-R011-START -->
+- **提问时间**：2026-08-04 21:16
+- **提问目的**：QA-R010 问题 1 用户回答"将全部都纳入项目中"，但 QA-R010 的 A 表格把候选数据源分了三档——3 个"推荐重点候选"（Semantic Scholar/OpenAlex/Crossref，README+代码核实较充分）与 8 个"中等价值"分领域候选（PMC/Europe PMC/DOAJ/CORE/Zenodo/HAL/dblp/OpenAIRE，核实程度明显更粗略，仅凭 README 描述+代码逻辑判断，均未做过真实 API 请求验证）。"全部"具体指哪一档、是否包含全部 8 个中等价值候选，直接决定 v3.0.0 是"新增 3 个数据源"还是"新增 11+ 个数据源"，工作量与真实验证覆盖范围差异巨大，不能由本 agent 自行猜测执行，必须问清楚。同时，本项目一贯坚持"真实验证优先"（同 QA-R001/QA-R002/QA-R007 的方法论），若中等价值候选也要纳入，需要确认是否要求正式开发前逐一做真实探测。
+- **问题列表**
+  1. QA-R010 问题 1 的"全部都纳入"，具体范围是：(a) 仅 3 个推荐重点候选（Semantic Scholar/OpenAlex/Crossref）；(b) 3 个推荐重点候选 + 8 个中等价值分领域候选（PMC/Europe PMC/DOAJ/CORE/Zenodo/HAL/dblp/OpenAIRE），合计 11 个新数据源；(c) 其他组合（请具体列出包含/不包含哪些）？
+  2. 如果最终确认是 (b) 或包含中等价值候选的其他组合，是否要求在正式开发前，比照本项目一贯的"真实验证优先"方法论，对每一个候选逐一做真实 API 探测（确认端点可用性、限流表现、真实字段结构），再由 project-planner-cn/project-builder-cn 据实制定实现方案？（本 agent 判断这是必要步骤，因为中等价值候选目前只核实了 README 描述和代码逻辑，没有做过真实请求验证）
+  3. （可选，若你希望进一步收窄）中等价值 8 个候选里，是否有你认为明显应该排除或明显应该优先的？例如 CORE 需要注册免费 key 才能获得较好体验（无 key 限流更严）、OpenAIRE 参考项目代码显示服务端不太稳定（有 3 次重试+逐步升级请求头应对 403 的复杂逻辑）——这类信息是否影响你的取舍？
 - **用户回答**
   1. [等待用户回答]
   2. [等待用户回答]
   3. [等待用户回答]
-  4. [等待用户回答]
-  5. [等待用户回答]
-  6. [等待用户回答]
 - **提炼结论**
   - [收到回答后补充]
 - **影响的目标文档章节**
-  - 项目愿景 / 核心目标 / 范围界定（包含/排除） / 约束条件 / 附录
-<!-- GOAL-QA-R010-END -->
+  - 核心目标 / 范围界定（包含） / 约束条件
+<!-- GOAL-QA-R011-END -->
 
 <!-- GOAL-QA-LOG-END -->
 
