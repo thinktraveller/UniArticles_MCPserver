@@ -592,3 +592,78 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 待用户决定是否打包（`uv build`）并发布 `2.2.0` 到 PyPI（`uv publish`，由用户手动执行）。发布前提醒：本轮为无过渡期破坏性重命名，任何硬编码旧工具名的外部提示词/工作流会失效（用户已在 QA-R004 知情接受）。
 
 ---
+
+## v2.3.0 构建记录
+
+本轮背景：源自用户要求调研本地参考项目 `reference-projects/elsevier-mcp-main/`（非本仓库代码，`.gitignore` 排除），`project-creator-cn` 逐一比对该项目端点与已有实测结论后发现 3 个全新候选端点，用真实 `ELSEVIER_API_KEY` 逐一探测（`project-docs/goal.md` **QA-R007**）：确认 `content/serial/title`（期刊多条件搜索）、`content/subject/{source}`（学科分类代码查询）可用，`analytics/plumx/...`（PlumX 指标，401）、`content/article/.../` 纯文本变体（400）不可用（已排除，记入 goal.md"范围界定/排除"）。用户在 **QA-R008** 中正式立项，直接指定版本号 `2.3.0`。**本轮是纯新增（Additive）版本**：只新增 `scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source` 两个工具（均放入 `src/uniarticles/sources/scopus.py`），**不删除、不重命名、不改动**现有 10 个工具的名称/参数/返回结构/注册顺序。MCP Server 工具总数由 10 个增至 **12 个**。决策依据详见 `project-docs/goal.md` QA-R007/QA-R008 与 `project-docs/project-plan.md` 步骤 21~26。
+
+### 步骤 21：真实探测补测 `serial_title_search`/`subject_classifications` 参数边界（编码前置）—— 完成于 2026-08-04 14:42
+- **性质**：QA-R007/QA-R008 要求的强制前置步骤。此前探测只覆盖每端点最基础的一种调用组合（`title=Cell` 单条件、`source=scopus`），大量参数未验证。用一次性探测脚本（scratchpad，GET-only，验证后即弃、未提交）以真实 `ELSEVIER_API_KEY`（基础非商业 Key）逐一补测。**不照抄参考项目 Zod schema 假设，一切以真实探测结果为准。**
+
+- **`content/serial/title`（期刊多条件搜索）真实探测结果**：
+  - **根结构**：匹配时为 `serial-metadata-response.entry[]`；无匹配时 HTTP **200** + `serial-metadata-response.error="No results found"` 且**无 `entry` 键**（`title=zzqxwv_nonexistent...`、`issn=9999-9999` 均此表现）——工具层 `.get("entry", [])` 得 `[]`，优雅降级为 `ok:true` 空 items。
+  - **单条 entry 字段**（`title=Cell&count=1` 实测 keys）：`@_fa`/`dc:title`/`dc:publisher`/`prism:issn`/`prism:aggregationType`/`prism:url`/`source-id`/`coverageStartYear`/`coverageEndYear`/`openaccess`/`openaccessType`/`openaccessArticle`/`openArchiveArticle`/`openaccessStartDate`/`oaAllowsAuthorPaid`/`subject-area[]`（`@code`/`@abbrev`/`$`）/`link[]`（`@ref` 取值 `scopus-source`/`homepage`/`coverimage`）/**`SNIPList`**/**`SJRList`**。
+    - `SNIPList` 形态：`{"SNIP":[{"@year":"2014","$":"0"}]}`；`SJRList` 形态：`{"SJR":[{"@year":"2014","$":"0.123"}]}`——**这是现有 `scopus_serial_title_by_issn` 未提取的期刊计量指标字段，新工具补充提取为 `snip_list`/`sjr_list`（`[{year,value}]`）**。（本样本 `title=Cell` 结果无 `prism:eIssn`，但按 ISSN 精确查询的期刊通常有，归一化仍保留 `eissn` 字段。）
+  - **各参数真实效果**（单变量测试）：`issn`✓200 / `pub`（出版商）✓200 / `content`（journal 等）✓200 / `date`（年份）✓200 / `oa`（full 等）✓200 / `start`（分页偏移）✓200 / `view=CITESCORE`✓200。
+    - **`subj` 取值规则**：传学科**缩写** `COMP` ✓200；传**数字码** `1700` ✗**400 INVALID_INPUT "Invalid subject specified"**；非法 `ZZZZ` ✗400 同错误——即 `subj` 只认 abbrev 不认 numeric code，已在 docstring/README 注明。
+    - **`view=ENHANCED`** ✗**401 AUTHORIZATION_ERROR**（基础非商业 Key 无权访问该 view，默认用 STANDARD）。
+  - **零条件行为**：不带任何检索条件 ✗未被拒绝——HTTP **200 返回 browse 全量**（默认 25 条，按 `dc:title` 字母序）。**结论：服务端允许零条件，工具层不做前置拒绝**（不照搬参考项目 TS 侧"至少需 title/issn/pub/subj 之一"的前置校验），仅在 docstring 提示"不带条件会 browse 全部期刊，建议至少给一个过滤条件"。
+  - **`count` 服务端真实上限 = 200**：`count=200`✓200；`count=201`/`count=500` ✗**400 INVALID_INPUT "Exceeds the maximum number allowed for the service level"**——工具层 clamp 为 `max(1,min(count,200))`（此前参考项目 Zod 注释称 200 未经本项目验证，现已实测坐实）。
+
+- **`content/subject/{source}`（学科分类代码查询）真实探测结果**：
+  - **根结构**：`subject-classifications.subject-classification`——**单结果返回 dict、多结果返回 list**（Elsevier 惯例），工具层用 `_as_list` 统一（`scopus code=1700`、`scidir code=8` 均实测返回单 dict，佐证必须 coerce）。
+  - **`scopus` 分支字段**（`description=computer`→200，13 条）：`code`/`description`/`detail`/`abbrev` 四字段，扁平无嵌套（如 `{code:1700, description:"Computer Science", detail:"Computer Science (all)", abbrev:"COMP"}`）。
+  - **`scidir` 分支字段**（`description=engineering`→200，18 条）：`code`/`description`/`detail`/`abbrev` **+ 额外 `parentCode`**（层级父码，如 `{code:47, description:"Bioengineering", detail:"Chemical Engineering::Bioengineering", abbrev:"bioengineering", parentCode:"8"}`）。**明确结论：`scidir` 与 `scopus` 分支不同构——scidir 多一个 `parentCode` 字段，且 `detail` 用 `::` 表达层级**。归一化统一暴露 `parent_code`（scopus 无该键 → `None`），单一归一化逻辑即可覆盖两分支。
+  - **无过滤量级**：`scopus` 无过滤 334 条、`scidir` 无过滤 267 条（量级可控，无需强制分页，docstring 提示 `source` 必填即可）。
+  - **过滤参数**：`code`✓、`abbrev`✓、`description`✓、`field`✓（`field=description,code` 实测**只返回被选中的字段**，即 `field` 是字段投影选择器）。
+  - **非法 `source` 行为（关键）**：`content/subject/invalid` ✗未报错——HTTP **200 且静默返回 scidir 风格结果**（含 `parentCode`，误导性）。**结论：API 对非法 source 无清晰错误，故工具层做前置枚举校验**（`source.strip().lower() not in {scopus,scidir}` → `_err`），参照步骤 15 category 前置校验思路，避免把误导性数据当正常结果返回。
+
+### 步骤 22：新增两个 MCP 工具 —— 完成于 2026-08-04 14:42
+- **完成内容**：`src/uniarticles/sources/scopus.py` **纯新增 220 行、0 删除**（`git diff --stat` 确认），未触及任何现有函数体。新增：
+  - 辅助函数 `_serial_metrics()`（SNIP/SJR 计量指标扁平化为 `[{year,value}]`）、`_normalize_serial_entry()`（serial 条目归一化，by-ISSN 字段超集 + SNIP/SJR）。
+  - 内部异步函数 `_search_serial_title(...)`、`_lookup_subject_classification(...)`。
+  - 两个 `@server.tool()`：`scopus_serial_title_search_by_criteria`、`scopus_subject_classification_lookup_by_source`，注册于 `scopus_api_usage_status` 之后（与 README/工具列表顺序一致）。
+- **`scopus_serial_title_search_by_criteria` 最终签名**：`(title, issn, pub, subj, content, date, oa, start, count, view="STANDARD")` 全部可选。`count` clamp `1~200`（步骤 21 实测上限）；`start` clamp `>=0`；各字符串参数 `.strip()` 后空转 `None`；零条件允许透传（步骤 21 确认服务端 browse）；异常转 `_err`。
+  - **归一化字段**：`title`/`publisher`/`issn`/`eissn`/`aggregation_type`/`openaccess`/`openaccess_type`/`coverage_start_year`/`coverage_end_year`/`subject_areas[{code,abbrev,name}]`/`homepage_url`/`source_id`/`scopus_url`/**`snip_list[{year,value}]`**/**`sjr_list[{year,value}]`**（严格来自步骤 21 真实样本）。
+- **`scopus_subject_classification_lookup_by_source` 最终签名**：`(source, description=None, detail=None, code=None, abbrev=None, field=None)`。`source` 必填并前置枚举校验（`scopus`/`scidir`，非法转 `_err`——因步骤 21 确认 API 对非法 source 静默返回误导数据）；其余可选 `.strip()` 透传。
+  - **归一化字段**：`code`/`description`/`detail`/`abbrev`/**`parent_code`**（`_as_list` 统一单/多结果；`parent_code` 仅 scidir 有值，scopus 为 `None`）。
+- **验证结果**（真实 `ELSEVIER_API_KEY`）：
+  | 调用 | 结果 |
+  |---|---|
+  | `serial_title_search_by_criteria(title="Cell", count=5)` | ✅ ok count=5，含 `snip_list`/`sjr_list` |
+  | `serial_title_search_by_criteria(issn="0092-8674")` | ✅ ok count=1 title=Cell |
+  | `serial_title_search_by_criteria(count=300)` 零条件+超限 | ✅ ok count=200（clamp 生效，browse 允许）|
+  | `serial_title_search_by_criteria(title="zzqxwv_...")` 无匹配 | ✅ ok count=0（优雅空）|
+  | `serial_title_search_by_criteria(view="ENHANCED")` | ✅ 走 `_err`（401，基础 Key 无权）|
+  | `subject_classification_lookup_by_source(source="scopus", description="computer")` | ✅ ok count=13 |
+  | `subject_classification_lookup_by_source(source="scidir", description="engineering")` | ✅ ok count=18（含 `parent_code`）|
+  | `subject_classification_lookup_by_source(source="scopus", code="1700")` 单结果 | ✅ ok count=1（`_as_list` coerce 生效）|
+  | `subject_classification_lookup_by_source(source="invalid")` | ✅ 走 `_err`"source must be 'scopus' or 'scidir'"（前置校验）|
+
+### 步骤 23：README.md / README_ZH.md 同步更新 —— 完成于 2026-08-04
+- **完成内容**：中英文两版 `Available Tools`/`可用工具列表` Scopus 小节，在 `scopus_api_usage_status()` 后新增两行工具介绍（参数签名与步骤 22 落地一致，注明 `subj` 取 abbrev/`count` 上限 200/`source` 必填 scopus 或 scidir）。
+- **计数修正**：两版第 31 行 Elsevier Key 资质说明 `10 tools`/`10 个工具` → `12 tools`/`12 个工具`（该处不在 `Available Tools` 表格内，延续 v2.2.0 步骤 17 教训单独核对，全文检索确认无残留"10 tools/10 个工具"计数）。
+- **涉及文件**：`README.md`、`README_ZH.md`。范围外未改：`.env.example`/`tutorial/*`/`CLAUDE.md`（本轮无新环境变量、不改客户端配置）。
+
+### 步骤 24：`pyproject.toml` 版本号提升至 2.3.0 —— 完成于 2026-08-04
+- **完成内容**：`pyproject.toml` 第 7 行 `version = "2.2.0"` → `"2.3.0"`（QA-R008 用户直接指定）。`uv lock` 同步 `uniarticles-mcp` 自身条目 `2.2.0 -> 2.3.0`（diff 仅此 1 行，Resolved 136 packages，无其他依赖变化）。
+- **验证**：`python -c "import tomllib; ..."` 输出 `version: 2.3.0`。
+- **涉及文件**：`pyproject.toml`、`uv.lock`。
+
+### 步骤 25：`project-docs/buildlog.md` 记录本轮变更 —— 完成于 2026-08-04
+- **完成内容**：即本 `## v2.3.0 构建记录` 章节（引用 goal.md QA-R007/QA-R008），含步骤 21 两端点完整参数边界探测结果（`count` 上限 200、`subj` 取 abbrev、零条件 browse、`scidir` 分支 `parentCode` 非同构结论、非法 source 静默误导→前置校验、无匹配优雅空、`SNIPList`/`SJRList` 字段）、两个新工具最终签名与归一化字段清单、README 10→12 计数修正、版本号变更。
+- **涉及文件**：`project-docs/buildlog.md`。
+
+### 步骤 26：整体回归验证 —— 完成于 2026-08-04
+- **改动范围复核**：`git diff --stat` 确认本轮仅改 `src/uniarticles/sources/scopus.py`（+220/-0）、`README.md`/`README_ZH.md`、`pyproject.toml`/`uv.lock`、本 `buildlog.md`。scopus.py 为**纯新增**，`_search_scopus`/`_get_abstract`/`_get_serial_title`/`_get_quota` 等现有函数体及 `_get_headers`/`_ok`/`_err`/`_as_list`/`BASE_URL` 公共代码**零改动**。
+- **`list_tools()`**：恰好 **12 个工具**，顺序 Scopus(6)→ScienceDirect(2)→ArXiv(3)→Paperscraper(1)，两个新工具紧跟 `scopus_api_usage_status` 之后，符合预期。
+- **stdout 洁净性**：`create_server()` 导入构建时 stdout 捕获为空字符串（paperscraper/urllib3 告警均走 stderr），未污染 JSON-RPC 协议帧。
+- **新增 2 工具**：真实调用 + 边界/错误输入（零条件、超限 clamp、无匹配、非法 source、无权 view）全部通过（明细见步骤 22 表格）。
+- **现有 10 工具回归**（真实 `ELSEVIER_API_KEY`，覆盖四数据源）：`scopus_document_search_by_query`✅count=2、`scopus_serial_title_by_issn`✅Cell、`scopus_abstract_detail_by_eid`✅normalized、`scopus_api_usage_status`✅status=200、`sciencedirect_article_retrieve_by_identifier`✅doi 正确、`sciencedirect_article_object_by_identifier`✅count=25、`pubmed_paper_search_by_query`✅count=2、`arxiv_paper_detail_by_id`✅CLIP 论文（arxiv 3 工具走独立 `_run_arxiv_search` 路径、与 scopus.py 无共享代码，单次调用确认；export.arxiv.org 连续请求会 429 属环境限流非代码缺陷，同 v2.2.0 步骤 20）。返回结构/字段与 v2.2.0 发布前一致，无回归。
+- **结论**：纯新增两个工具后，12 个工具全部真实调用通过，现有 10 个工具未被误伤，协议层未受影响。
+
+### 下一步计划
+- ✅ v2.3.0 构建（步骤 21~26）已全部执行完毕，代码与文档一致（12 个工具、纯新增、真实探测坐实的参数边界与归一化字段），版本号已提升至 `2.3.0`。
+- ⏭️ 待用户决定是否打包（`uv build`）并发布 `2.3.0` 到 PyPI（`uv publish`，由用户手动执行）。本轮为纯新增（Additive）版本，无破坏性变更，现有工具/配置方式不受影响。
+
+---
