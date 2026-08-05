@@ -49,7 +49,7 @@ v2.0（2.0.1）发布后，用户在真实 Cherry Studio 环境下对已发布�
 - **第一阶段（步骤 27）——低风险独立交付**：arXiv 补 `doi` 字段，不依赖任何探测结果，可立即开发验证，不受后续阶段进度影响。
 - **第二阶段（步骤 28～32）——真实探测**：对 11 个通用数据源 + bioRxiv/medRxiv + ChEMBL 共 13 个候选做真实 API 可行性验证，按候选置信度/类型分 4 个探测批次执行（统一方法论见步骤 28，批次划分见步骤 29～32），每个候选逐一记录真实 HTTP 状态码、真实字段结构、限流/稳定性表现，不凭参考项目代码逻辑或官方文档字面描述直接假设可用。
 - **第三阶段（步骤 33）——探测结果汇总 + 范围二次确认（检查点）**：整理全部 13 个候选的探测结论，按下方"止损处理规则"完成分类，产出"确认排除"清单（无需用户二次确认）与"技术可行但价值存疑，交用户判断"清单（若存在），这是本轮范围从"13 个候选"收敛为"最终实现清单"的关键节点。
-- **第四阶段——分批实现（步骤 34 及以后，本轮暂不预先编写）**：具体每批实现几个数据源、每个数据源的参数签名/字段归一化方案，均取决于步骤 33 的探测结果与可能需要的用户二次确认，本计划书目前不预先编造尚未经真实验证的实现细节。待步骤 33 完成后，`project-planner-cn` 将基于最终确认的实现清单，对本文档做增量更新，把已确认落地的每个数据源逐一细化为完整的开发步骤（含代码骨架、验证方法、风险提示），延续本文档一贯的详细程度；已知的组织原则见下方"实现阶段组织方案（前瞻性说明）"。
+- **第四阶段——分批实现（步骤 34～42，已于 2026-08-05 补充，见下方"v3.0.0 分批实现阶段补充"小节）**：步骤 33 完成后，交还用户裁决的 4 项候选（Semantic Scholar/PMC/CORE/dblp）已在 `goal.md` QA-R012/QA-R013 中逐项定案（3 纳入 1 排除），v3.0.0 最终确认落地 12 个数据源。本计划书据此追加步骤 34～42，覆盖全部 12 个数据源的具体实现（含代码骨架、真实字段归一化、验证方法、风险提示）、`register_all_sources()` 接入、README/版本号收尾与整体回归验证。
 
 **探测结果对范围的止损处理规则（`goal.md` 约束条件已定，步骤 28～33 执行时必须遵守，不得自行加码或减码）**：
 1. **技术上确认不可行**（端点已下线、强制要求付费商业 key、无 key 时限流严重到实际不可用、返回结构与文档描述不符导致无法可靠解析）→ 直接排除出 v3.0.0，不需要单独找用户二次确认，比照 `goal.md` QA-R002 先例，在探测结果表格中如实记录排除原因即可。
@@ -74,7 +74,17 @@ def register_all_sources(server: FastMCP) -> None:
     register_paperscraper_source(server)
 ```
 
-对应开发计划见下方"步骤 27～33"（第四阶段"分批实现"步骤将在探测结果确认后由 `project-planner-cn` 追加）。步骤 1～26（v2.0/v2.1.0/v2.2.0/v2.3.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+对应开发计划见下方"步骤 27～42"（步骤 34～42 为本次续写的第四阶段"分批实现"，详见下方"v3.0.0 分批实现阶段补充"小节）。步骤 1～26（v2.0/v2.1.0/v2.2.0/v2.3.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
+### v3.0.0 分批实现阶段补充（QA-R012/QA-R013，2026-08-05）
+
+步骤 33（探测结果汇总检查点）完成后，4 项"技术可行但价值存疑/无法核实"的候选（Semantic Scholar、PMC、CORE、dblp）已交还用户裁决。用户在 `goal.md` QA-R012/QA-R013 中逐项定案：**Semantic Scholar 纳入**（key 申请中，且提出"无 key 不注册工具"的条件注册新架构需求）、**PMC 排除**（与现有 `pubmed_paper_search_by_query` 同源 NCBI E-utilities，无稳定性增量）、**CORE 纳入**（key 已配置在 `.env` 的 `CORE_API_KEY`）、**dblp 纳入**（用户三轮不同网络环境实测后确认服务端本身可用，但记录一条已知风险——可能因网络环境波动间歇性失败）。至此 v3.0.0 最终确认落地 **12 个数据源**：OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、bioRxiv/medRxiv、ChEMBL（以上 9 个已在步骤 28～33 真实探测确认可行）+ Semantic Scholar、CORE、dblp（本轮由用户裁决补充确认）；PMC 排除，不纳入实现范围。
+
+本次续写的步骤 34～42 覆盖这 12 个数据源的具体实现，组织原则：
+
+1. **总纲先行（步骤 34）**：统一约定本批次的公共代码规范，并正式落地两项此前留给 `project-planner-cn` 自行判断的开放性决策——(a) `goal.md` QA-R012 提出的"按 key 条件注册"架构的适用范围（Semantic Scholar 采用、CORE 不采用，附完整理由）；(b) `register_all_sources()` 的分组组织方式。同时明确 `goal.md` QA-R013 新增的通用流程约束（探测失败必须把验证脚本产出到 `_verify/` 供用户独立验证）在本轮如何落地。
+2. **按实现特征分批（步骤 35～39）**：不再沿用探测阶段"推荐重点/中等价值"的分档（那是探测优先级维度，探测阶段已完成使命），改按**实现复杂度与代码结构共性**重新分批——批次一（步骤 35）是 4 个字段结构清晰、无 key 要求的标准检索源（OpenAlex/Crossref/Europe PMC/DOAJ）；批次二（步骤 36）是 3 个需要额外结构处理的检索源（Zenodo 的资源类型过滤、HAL 的 Solr 字段选择、OpenAIRE 的深层嵌套响应）；批次三（步骤 37）是 2 个需要"按 key 条件注册"新架构的源（Semantic Scholar/CORE，架构设计集中在同一步骤便于对照验证）；批次四（步骤 38）是 2 个语义特殊源（bioRxiv/medRxiv 浏览语义、ChEMBL DOI 查询语义），延续与其余 10 个通用检索源不同的参数模式约束；dblp（步骤 39）单列，因其"探测环境网络受限、真实字段结构尚未完整采集"+"已知间歇性网络失败风险"两个特殊性质，需要独立的编码前置探测与错误提示文案设计，不适合与其他任何批次合并处理。
+3. **收尾（步骤 40～42）**：`register_all_sources()` 统一接入全部 12 个新数据源（步骤 40）→ README/`pyproject.toml` 版本号统一更新至 `3.0.0`（步骤 41，延续本计划书此前确定的"全部落地后统一更新"策略）→ `buildlog.md` 记录 + 整体回归验证检查点（步骤 42，v3.0.0 最终交付节点）。
 
 ## 可行性分析
 
@@ -1217,6 +1227,497 @@ v2.1.0 已把 README 的工具清单改到"11 个工具"的旧名字状态；本
 
 ---
 
+### 步骤 34：分批实现阶段总纲——公共规范、条件注册架构决策、注册组织方式
+
+#### 目标说明
+为步骤 35～42（12 个新数据源的实现 + 收尾）统一制定执行规范，避免在每个批次步骤中重复表述，并把 `goal.md` QA-R012/QA-R013 中两项留给 `project-planner-cn` 自行判断落地方式的开放性决策——"按 key 条件注册"架构的适用范围、`register_all_sources()` 的组织方式——正式定案。本步骤本身不产出任何数据源实现代码，是后续步骤共同遵守的执行规范，性质上与步骤 28（探测方法论总纲）对应，只是对象从"探测"换成"实现"。
+
+#### 具体操作
+
+**34.1 通用代码规范（延续现有 source-module 模式，12 个数据源全部适用）**
+- 每个数据源独立文件 `src/uniarticles/sources/<name>.py`，暴露 `register(server: FastMCP) -> None`；文件内自带本模块的 `_ok(query, items)`/`_err(query, message)` 辅助函数，`source` 字段填数据源自身标识（如 `"openalex"`），**不复用** `scopus.py` 的 `_ok`/`_err`（那两个硬编码 `source="scopus"`，跨文件复用会导致响应体 `source` 字段值错误，与现有 `sciencedirect.py` 只复用 `scopus.py` 的 `_get_headers`/`BASE_URL`——这两个与 Elsevier 鉴权强相关、本轮新数据源用不上——而不复用 `_ok`/`_err` 的既有先例一致）。
+- HTTP 调用统一用 `httpx.AsyncClient(timeout=30.0, ...)` + `await response.raise_for_status()` 的既有风格（对齐 `scopus.py`/`sciencedirect.py`）；异常统一在 `@server.tool()` 函数体的 `try/except Exception as exc: return _err(..., message=str(exc))` 中捕获。
+- 参数校验风格对齐现有工具：字符串参数 `.strip()` 去空白、必填项判空直接 `_err`（不透传给远端产生难懂的错误）、数值参数（如 `max_results`）clamp 到合理区间（沿用项目惯例 `[1, 25]`，除非该数据源官方限制更严格）。
+- **无新增第三方依赖**：全部 12 个数据源均为标准 REST/JSON 接口，用现有 `httpx` 即可完成，`pyproject.toml` 的 `dependencies` 无需改动。
+- **Polite 请求头约定**：OpenAlex/Crossref 官方文档建议在 `User-Agent`/`mailto` 中携带联系方式以进入更高限额的 polite pool（探测阶段步骤 28 已用此惯例）。本轮不新增必需的环境变量，统一使用固定的项目标识 User-Agent（如 `"UniArticlesMCP/<version> (https://github.com/thinktraveller/UniArticles_MCPserver)"`），不强制用户配置联系邮箱；若未来需要进一步提升限额，应作为独立需求另行提出，本轮不预先设计新的环境变量。
+
+**34.2 "按 key 条件注册"架构的适用范围决策（回应 `goal.md` QA-R012 留给 planner 的开放问题）**
+
+`goal.md` 约束条件明确：Semantic Scholar 必须"无 key 不注册工具"；CORE 是否也套用同一模式，由本计划书自行判断。核实 `buildlog.md` 步骤 33 汇总表的真实探测证据后，给出以下**不对称处理**决策：
+
+| 数据源 | 无 key 时的真实探测表现（`buildlog.md` 步骤 33） | 本计划书决策 |
+|---|---|---|
+| Semantic Scholar | 关键词检索**连续 4 次均 429**，核心检索能力无 key 时**确定性失败**；仅 by-DOI 查询可用（200） | **采用条件注册**：`register()` 内若 `settings.semantic_scholar_api_key` 为空，直接 `return`，模块内全部工具均不注册（含 by-DOI 查询，理由见下） |
+| CORE | 无 key 检索**可正常返回 200**，仅在连续 5 次请求后触发 429 并锁定 10 分钟 | **不采用条件注册，沿用现有 Elsevier 式"无条件注册+运行时透明"模式**：始终注册工具，`core_api_key` 有值时加入鉴权头提升限额，无值时仍可用（退化为有限流约束的体验），在工具 docstring 与 README 中明确提示"建议配置 `CORE_API_KEY`，否则约 5 次请求后需等待 10 分钟" |
+
+**理由**：两者虽然都"建议配置 key"，但无 key 时的实际可用性存在质的差异——Semantic Scholar 的核心检索功能无 key 时是"确定性失败"（4/4 次 429，非偶发），把一个必然报错的工具暴露在工具列表里，用户调用后只会得到清一色错误，等同"看得见用不了"，隐藏它更符合 `goal.md` 明确要求的初衷（"而不是注册了但调用时才报错"）；CORE 无 key 时是"有限次数内可正常工作、超额后短暂锁定"，属于现有 Elsevier 工具一直采用的"能用但有限流约束"模式（`scopus_api_usage_status` 同样只是报告限流状态而非阻止调用），继续沿用现有模式风险更低、也不引入新的不一致——本决策的判断标准明确为"无 key 时核心功能是否确定性失败"，可复用于未来类似决策，不是逐案拍脑袋。
+
+**Semantic Scholar 的 by-DOI 查询为何也一并隐藏（而非只隐藏检索、保留 by-DOI）**：技术上可以做成"细粒度条件注册"（仅隐藏检索、保留 by-DOI），但 `goal.md` QA-R012 用户原话是"如果没有配置 Semantic Scholar 的 API key，就不启用/不注册该工具"，未区分模块内的子能力；且拆成两个粒度不同的工具（一个受 key 门控、一个不受）会让同一数据源在"有无 key"两种状态下呈现不一致的工具数量，增加用户理解成本。本计划书采用**整个模块级别**的条件注册，更贴合用户原话字面意思，也更容易验证（"有 key → 该数据源全部工具可见；无 key → 全部不可见"，二元判断，无需记忆哪个子工具例外）。
+
+**34.3 `Settings` 新增字段**
+
+`src/uniarticles/config.py` 新增两个可选字段（无需兼容性回退逻辑，这是全新的环境变量，不存在旧命名迁移问题）：
+```python
+@dataclass(frozen=True)
+class Settings:
+    elsevier_api_key: str | None = field(default_factory=_resolve_elsevier_api_key)
+    elsevier_insttoken: str | None = os.getenv("ELSEVIER_INSTTOKEN")
+    semantic_scholar_api_key: str | None = field(default_factory=lambda: os.getenv("SEMANTIC_SCHOLAR_API_KEY"))
+    core_api_key: str | None = field(default_factory=lambda: os.getenv("CORE_API_KEY"))
+```
+`.env.example` 同步新增两行（含注释说明二者均为可选，Semantic Scholar 未配置时对应工具不会出现在工具列表中，CORE 未配置时工具仍可用但限流更严）：
+```env
+# 可选：不配置则 Semantic Scholar 相关工具不会注册（无 key 时该数据源检索功能实质不可用）
+SEMANTIC_SCHOLAR_API_KEY=
+# 可选：不配置 CORE 工具仍可用，但约 5 次请求后限流锁定 10 分钟
+CORE_API_KEY=
+```
+用户本地 `.env` 已核实存在 `CORE_API_KEY`，`SEMANTIC_SCHOLAR_API_KEY` 尚未配置（key 申请中）——这正是验证"条件注册"逻辑的天然测试场景：构建时应能观察到 Semantic Scholar 工具在当前环境下不出现在工具列表中。
+
+**34.4 `register_all_sources()` 分组组织方式**
+
+`goal.md` 约束条件已声明这是非强制建议，留给实现阶段视情况决定。本计划书采用"按 v2.x 既有 / v3.0.0 通用检索型 / v3.0.0 语义特殊型"三段分组加注释：
+```python
+def register_all_sources(server: FastMCP) -> None:
+    # v2.x 既有数据源（Elsevier 全家桶 + arXiv + PubMed）
+    register_scopus_source(server)
+    register_sciencedirect_source(server)
+    register_arxiv_source(server)
+    register_paperscraper_source(server)
+    # v3.0.0 新增：通用检索型（标准 query 关键词检索模式）
+    register_openalex_source(server)
+    register_crossref_source(server)
+    register_europepmc_source(server)
+    register_doaj_source(server)
+    register_zenodo_source(server)
+    register_hal_source(server)
+    register_openaire_source(server)
+    register_semantic_scholar_source(server)  # 无 key 时内部不注册任何工具
+    register_core_source(server)
+    register_dblp_source(server)
+    # v3.0.0 新增：语义特殊型（非关键词检索）
+    register_biorxiv_source(server)  # 浏览语义
+    register_chembl_source(server)   # DOI 查询语义
+```
+该顺序具体落地在步骤 40 执行，本步骤先行定案分组方式与顺序规则，供步骤 35～39 各批次实现时预先知晓自己模块在最终注册顺序中的位置（不要求各批次实现时就同步改 `__init__.py`，统一在步骤 40 一次性完成，避免多批次并行改同一文件产生冲突）。
+
+**34.5 `_verify/` 流程约束（`goal.md` QA-R013 新增通用规则，本轮首次落地执行）**
+
+`goal.md` 明确要求：今后任何构建/测试环节，若 agent 在自身探测/验证环境中遇到失败结果（尤其网络类失败），不得仅凭自身单次结果下结论，必须把验证脚本产出到仓库 `_verify/` 目录，交用户独立验证。本轮已知最可能触发该规则的是**步骤 39（dblp）**——其在步骤 28～33 的原始探测就曾遭遇网络层拦截，即便用户后续两次复测已给出"服务端可用"的结论，`project-builder-cn` 在本轮实现阶段自己的环境中若再次连接失败，**不得**直接判定实现有 bug 或服务不可用，应比照已有先例 `_verify/dblp_connectivity_test.py`（commit `9948687`/`abd3e3f`）的做法处理，具体要求见步骤 39。其余 11 个数据源若在实现阶段的真实调用验证中遇到网络类失败（而非明确的字段解析错误/代码逻辑错误），同样应遵循这一规则。
+
+#### 验证方法
+- `Settings` 新增的两个字段可通过 `python -c "from uniarticles.config import settings; print(settings.semantic_scholar_api_key, settings.core_api_key)"` 读出预期值（当前环境下分别应为 `None` 和真实 key 字符串）。
+- 本步骤本身不产出可独立验证的运行时行为，验证将在步骤 37（条件注册实现）与步骤 40（注册顺序）中体现。
+
+#### 风险提示
+- 34.2 的不对称决策（Semantic Scholar 条件注册、CORE 不条件注册）是本计划书基于真实探测证据做出的专业判断，不是 `goal.md` 的字面指令；若后续用户认为 CORE 也应做条件注册，可在 `project-builder-cn` 执行本步骤前明确提出调整，避免已按本方案实现后再返工。
+- `.env.example` 新增两行时注意不要误改文件中已有的 `ELSEVIER_API_KEY`/`ELSEVIER_INSTTOKEN` 行的相对顺序或格式。
+
+---
+
+### 步骤 35：批次一实现——OpenAlex / Crossref / Europe PMC / DOAJ（4 个标准通用检索源）
+
+#### 目标说明
+这 4 个数据源在步骤 28～33 真实探测中均已确认：无需 key、字段结构清晰完整、返回 200 且可直接解析（详见 `buildlog.md` 步骤 33 汇总表 #2/#3/#5/#6 行）。均遵循标准"关键词检索 + 按 DOI/标识符精确查询"两件套模式，是本轮实现难度最低的一组，可作为后续批次的参照基准。
+
+#### 具体操作
+
+**35.1 OpenAlex（`src/uniarticles/sources/openalex.py`）**
+- 端点：`https://api.openalex.org/works`（关键词检索，`search` 参数）、`https://api.openalex.org/works/https://doi.org/{doi}`（按 DOI 精确查询，OpenAlex 官方支持把完整 DOI URL 拼在路径里）。
+- **归一化关键坑点（务必处理，不得省略）**：OpenAlex 不直接返回摘要正文，而是返回 `abstract_inverted_index`（倒排索引：`{"word": [位置1, 位置2, ...]}`），需按位置重新拼接成可读摘要文本，否则 `abstract` 字段会是不可读的 dict，与本项目其余工具"abstract 是可读字符串"的一贯约定不一致：
+  ```python
+  def _reconstruct_abstract(inverted_index: dict | None) -> str | None:
+      if not inverted_index:
+          return None
+      positions: dict[int, str] = {}
+      for word, idxs in inverted_index.items():
+          for idx in idxs:
+              positions[idx] = word
+      if not positions:
+          return None
+      return " ".join(positions[i] for i in sorted(positions))
+  ```
+- 归一化字段（真实键名，来自 `buildlog.md` 步骤 29 探测记录）：`id`（OpenAlex ID）、`doi`、`title`、`authors`（从 `authorships[].author.display_name` 提取）、`abstract`（用上述函数处理 `abstract_inverted_index`）、`cited_by_count`、`open_access`（`open_access.is_oa`/`open_access.oa_url`）、`publication_year`、`primary_location`（期刊/来源名，`primary_location.source.display_name`）。
+- 工具：`openalex_work_search_by_query(query: str, max_results: int = 10) -> dict`、`openalex_work_detail_by_doi(doi: str) -> dict`。`max_results` clamp `[1, 25]`，映射到 OpenAlex 的 `per_page` 参数。
+- 坏 DOI 查询已探测确认返回 **404**，`httpx` 的 `raise_for_status()` 会抛出 `HTTPStatusError`，工具层 `except Exception` 捕获后统一转 `_err`，无需为 404 单独分支。
+
+**35.2 Crossref（`src/uniarticles/sources/crossref.py`）**
+- 端点：`https://api.crossref.org/works`（`query` 参数关键词检索）、`https://api.crossref.org/works/{doi}`（按 DOI 精确查询）。
+- **归一化坑点**：Crossref 的 `title`/`container-title`（期刊名）均为**数组**而非字符串（即便通常只有一个元素），`author` 是对象数组（`given`/`family` 需拼接成姓名），直接 `entry.get("title")` 会拿到 `["..."]` 而非字符串，需 `(entry.get("title") or [None])[0]` 取首项。
+- 归一化字段（真实键名）：`doi`（原始字段名是大写 `DOI`）、`title`（数组取首项）、`authors`（`author[]` 的 `given`+`family` 拼接）、`abstract`（`abstract` 字段，Crossref 常带 JATS XML 标签如 `<jats:p>`，是否清洗标签由 `project-builder-cn` 视实际抓包结果决定）、`cited_by_count`（`is-referenced-by-count`）、`container_title`（数组取首项）、`url`（`URL`）、`published`（`published.date-parts`，嵌套数组如 `[[2024, 3, 15]]`，需拼接成日期字符串或保留原始结构，由 builder 视一致性决定）。
+- 工具：`crossref_work_search_by_query(query: str, max_results: int = 10) -> dict`、`crossref_work_detail_by_doi(doi: str) -> dict`。请求携带 `mailto` 参数（polite pool），沿用步骤 34.1 约定的固定项目标识。
+- 限流：探测确认 `x-rate-limit-limit: 3/1s`（检索）、`10/1s`（by-DOI），无需 key；工具层无需额外限流处理，依赖 `httpx` 超时+异常捕获即可，不引入新的限流中间件。
+
+**35.3 Europe PMC（`src/uniarticles/sources/europepmc.py`）**
+- 端点：`https://www.ebi.ac.uk/europepmc/webservices/rest/search`（`query` 参数）。**注意与本项目已有 `pubmed_paper_search_by_query`、本轮排除的 PMC 三者均不同源**（Europe PMC 维护方是 EBI，非 NCBI），实现时不得复用 `paperscraper` 的 PubMed 逻辑。
+- 归一化字段（真实键名）：`id`、`source`、`pmcid`、`title`、`doi`（若探测响应中确认存在，若 `buildlog.md` 步骤 29 未记录该字段需在实现前补测一次确认字段名，不得假设）、`cited_by_count`（`citedByCount`）、`in_epmc`（`inEPMC`）、`in_pmc`（`inPMC`）、`has_pdf`（`hasPDF`）、`first_publication_date`（`firstPublicationDate`）。
+- **游标分页**：响应含 `nextCursorMark`，工具签名可选提供 `cursor: str | None = None` 支持翻页，或本轮先只做单页查询、不暴露游标参数（更简单，`max_results` 控制单页条数即可）——由 `project-builder-cn` 视实现复杂度取舍，若选择不支持分页需在工具 docstring 中如实说明"仅返回首页结果"。
+- 工具：`europepmc_paper_search_by_query(query: str, max_results: int = 10) -> dict`。
+
+**35.4 DOAJ（`src/uniarticles/sources/doaj.py`）**
+- 端点：`https://doaj.org/api/search/articles/{query}`（**注意 query 是拼进 URL 路径而非 query string 参数**，需做 URL 编码，用 `urllib.parse.quote` 处理特殊字符，不能直接字符串拼接未转义的用户输入）。
+- 归一化字段（真实键名，均在 `bibjson` 对象下）：`title`（`bibjson.title`）、`authors`（`bibjson.author[].name`）、`abstract`（`bibjson.abstract`）、`keywords`（`bibjson.keyword`）、`journal`（`bibjson.journal.title`）、`doi`（从 `bibjson.identifier[]` 中筛选 `type=="doi"` 的 `id`）、`links`（`bibjson.link[]`，含全文/OA 链接）、`subjects`（`bibjson.subject[]`）。
+- 工具：`doaj_article_search_by_query(query: str, max_results: int = 10) -> dict`。key 可选，本轮探测未验证有 key 场景的具体差异，工具应在无 key 情况下正常工作，不强制新增 `Settings` 字段——除非未来用户明确要求提升限额。
+
+#### 验证方法
+- 用真实关键词（如 `machine learning`，与探测阶段样本一致，便于比对）分别调用 4 个数据源的检索工具，确认均返回 `ok: true` 且 `items` 为逐字段结构（非原始 JSON blob）。
+- OpenAlex/Crossref 额外用真实 DOI（如探测阶段样本 `10.1016/j.physletb.2012.08.020`）调用 by-DOI 工具，确认能正确返回；用一个不存在的假 DOI 调用，确认走 `_err` 分支（对应探测确认的 404）。
+- OpenAlex 摘要重建函数需专门测一次：找一篇 `abstract_inverted_index` 非空的真实论文，确认 `abstract` 字段输出的是连贯可读文本而非倒排索引 dict 或乱序词语。
+- Crossref 的 `title`/`container_title` 字段需确认最终归一化结果是字符串而非数组。
+
+#### 风险提示
+- OpenAlex 摘要重建逻辑如果实现时"偷懒"直接透传 `abstract_inverted_index`，会导致下游 LLM 客户端拿到不可读的位置索引字典，必须重建为文本，这是本批次唯一一处"直接透传会产生错误可用性"的坑点，务必落实。
+- Crossref 的 `title`/`container-title`/`author` 均需做数组/对象解包，不能照搬 `entry.get("title")` 这类简单写法，否则字段类型与项目其余工具（均为字符串/字符串数组）不一致，容易让下游 LLM 误判数据结构。
+- DOAJ 的 URL 路径拼接查询词需做转义，避免特殊字符（空格、`/`、`&` 等）破坏请求路径。
+- 4 个数据源均不需要 key，但仍应在网络调用失败（超时/DNS 失败/连接拒绝）时走 `_err` 分支返回清晰错误，不能让未捕获异常导致 MCP 进程崩溃——这是项目一贯要求，非本批次新增。
+
+---
+
+### 步骤 36：批次二实现——Zenodo / HAL / OpenAIRE（3 个需要额外结构处理的检索源）
+
+#### 目标说明
+这 3 个数据源同样无需 key、探测确认可行（`buildlog.md` 步骤 33 汇总表 #8/#9/#11 行），但各自都有一个需要额外处理的结构性特点（Zenodo 混合资源类型、HAL 的 Solr 字段选择语法、OpenAIRE 的深层嵌套响应），归一化实现比批次一（步骤 35）复杂，故单独分批，避免与"标准两件套"模式混淆。
+
+#### 具体操作
+
+**36.1 Zenodo（`src/uniarticles/sources/zenodo.py`）**
+- 端点：`https://zenodo.org/api/records`，**必须携带 `type=publication` 过滤参数**——Zenodo 是通用研究成果仓库（同时托管数据集/软件/论文/海报等），不加此过滤会返回大量非论文类资源，与本项目"学术文献检索"定位不符（探测记录已确认此特性，见 `buildlog.md` 步骤 31）。
+- 归一化字段（真实键名）：`doi`、`conceptdoi`（同一记录不同版本共享的概念 DOI）、`title`（`metadata.title`）、`authors`（`metadata.creators[].name`）、`description`（`metadata.description`，可能含 HTML 标签，视抓包结果决定是否清洗）、`publication_date`（`metadata.publication_date`）、`file_links`（从 `files[]` 中只提取文件名+链接，**不**归一化全文内容——比照 `sciencedirect_article_object_by_identifier` 的既有产品定位原则，只暴露元信息/链接，不做下载搬运）。
+- 工具：`zenodo_record_search_by_query(query: str, max_results: int = 10) -> dict`，内部固定拼接 `type=publication`，不作为可选参数暴露给调用方（保持工具语义单一，避免调用方误传其他 type 值导致检索出非论文资源却以为在用"学术文献检索"工具）。
+- 限流：探测确认 `x-ratelimit-limit: 30`（每分钟），无需 key，工具层无需特殊处理。
+
+**36.2 HAL（`src/uniarticles/sources/hal.py`）**
+- 端点：`https://api.archives-ouvertes.fr/search/`（Solr 检索接口，`q` 参数为关键词，`fl` 参数**必须显式指定**要返回的字段列表，否则 Solr 默认字段集可能不含所需信息或包含大量冗余字段）。
+- 归一化字段（真实键名，均带 Solr 动态字段后缀 `_s`）：`docid`、`title`（`title_s`，是单值还是数组需在编码前对真实响应实际确认，`buildlog.md` 未细化到这一层，不得假设）、`abstract`（`abstract_s`）、`authors`（`authFullName_s`，通常是数组）、`doi`（`doiId_s`）、`url`（`uri_s`）、`doc_type`（`docType_s`）。请求需在 `fl` 参数中列出全部需要的字段名（如 `fl=docid,title_s,abstract_s,authFullName_s,doiId_s,uri_s,docType_s`），否则响应可能缺失部分字段。
+- 工具：`hal_document_search_by_query(query: str, max_results: int = 10) -> dict`，docstring 需注明"HAL 偏重法语/欧洲学术产出，英文关键词检索有召回但覆盖面可能不如面向英语文献的数据源全面"（`buildlog.md` 步骤 31 已如实记录这一特点，实现文档需同步体现，不夸大覆盖面）。
+
+**36.3 OpenAIRE（`src/uniarticles/sources/openaire.py`）**
+- 端点：`https://api.openaire.eu/search/researchProducts`（`keywords` 参数关键词检索）。
+- **归一化关键坑点**：响应是**深层嵌套结构**（`response.results.result[].metadata["oaf:entity"]["oaf:result"]`，键名含 `oaf:` XML 命名空间前缀，说明这是从 XML 转换来的 JSON），比本轮其余所有数据源都更复杂，需要专门的嵌套导航函数，并对单元素被压缩为 dict（而非 list）的情况做兼容——**这一特性在本项目 Elsevier 代码中已有先例**：`scopus.py` 的 `_as_list()` 正是处理同一类"单个元素返回 dict、多个返回 list"的问题，建议在 `openaire.py` 内新增一个本地 `_as_list()`（不跨文件导入 `scopus.py` 版本，保持每个 source 模块自包含）：
+  ```python
+  def _as_list(value):
+      if value is None:
+          return []
+      return value if isinstance(value, list) else [value]
+
+  def _extract_results(payload: dict) -> list[dict]:
+      results = payload.get("response", {}).get("results", {}).get("result", [])
+      return [r for r in _as_list(results) if isinstance(r, dict)]
+  ```
+  归一化字段（真实键名，路径均在 `metadata["oaf:entity"]["oaf:result"]` 下）：`title`、`creator`（作者，可能是列表或单个对象，同样需 `_as_list` 处理）、`pid`（标识符，可能含 DOI，需按类型筛选，如 `pid[].classid=="doi"` 对应的 `$` 值——具体判别写法以 `project-builder-cn` 实现前对真实响应的抓包结果为准，`buildlog.md` 目前只记录到字段名层级，未记录 `pid` 内部按类型筛选的具体写法，属于本步骤需要在编码前二次确认的细节）、`subject`、`bestaccessright`（开放获取状态）、`publisher`。
+- 工具：`openaire_research_product_search_by_query(query: str, max_results: int = 10) -> dict`。docstring 附注（延续步骤 31 探测记录的透明度要求）："参考项目历史记录曾显示该服务偶发 403，本项目探测环境下连续 5 次请求均未复现；若实际使用中遇到网络类错误，属已知可能的服务端不稳定，非本工具实现缺陷"。
+
+#### 验证方法
+- 3 个工具均用真实关键词调用，确认返回 `ok: true` 且 `items` 为逐字段结构。
+- Zenodo：确认返回结果均为论文类资源，未混入数据集/软件类资源。
+- HAL：确认 `fl` 参数生效——对比不传 `fl` 与传 `fl` 两种请求的响应差异，确认显式声明字段列表是必要步骤而非可省略的多余操作。
+- OpenAIRE：用真实关键词调用，确认深层嵌套结构被正确导航到（`items` 中每项应为扁平的归一化对象，而非仍嵌套着 `response.results.result` 等中间层级）；额外用一个只返回单条结果的窄关键词测试，确认单元素被 `_as_list` 正确处理。
+
+#### 风险提示
+- OpenAIRE 的 `pid` 字段（DOI 等标识符）内部按类型筛选的具体写法，`buildlog.md` 探测记录未细化到这一层，`project-builder-cn` 实现前需要对真实响应做一次针对性抓包确认，不得凭字段名"看起来像"就假设写法，这是本步骤唯一一处需要"编码前再确认一次细节"的地方。
+- HAL 的 `title_s`/`authFullName_s` 等 Solr 动态字段是单值还是多值（数组）未在探测记录中明确区分，实现前需实际打印一次真实响应确认，避免按错误的类型假设编码导致解析异常。
+- Zenodo 若不慎遗漏 `type=publication` 过滤参数，会导致该工具实际检索范围远超"学术文献"，与产品定位不符，编码后务必用验证方法中"确认均为论文类资源"这一项复查。
+
+---
+
+### 步骤 37：批次三实现——Semantic Scholar / CORE（按 key 条件注册架构落地）
+
+#### 目标说明
+落地步骤 34.2 已定案的架构决策：Semantic Scholar 采用"无 key 不注册工具"的条件注册模式（`goal.md` QA-R012 明确要求）；CORE 沿用现有 Elsevier 式"无条件注册、key 可选提升体验"模式。这是本项目至今第一次实现"模块级条件注册"，需要重点验证该逻辑本身工作正常（有 key 时正常注册、无 key 时完全不出现在工具列表），而不仅是验证数据源本身的检索功能。
+
+#### 具体操作
+
+**37.1 Semantic Scholar（`src/uniarticles/sources/semantic_scholar.py`）**
+- 端点：`https://api.semanticscholar.org/graph/v1/paper/search`（关键词检索，`query` 参数）、`https://api.semanticscholar.org/graph/v1/paper/DOI:{doi}`（按 DOI 精确查询）。有 key 时通过请求头 `x-api-key` 携带。
+- 归一化字段（真实键名，来自 `buildlog.md` 步骤 29 探测记录）：`paper_id`（`paperId`）、`doi`（`externalIds.DOI`，`externalIds` 下还可能有 `ArXiv`/`PubMed` 等其他标识符，视需要一并提取）、`title`、`cited_by_count`（`citationCount`）。探测记录字段较基础，若实现时请求携带更完整的 `fields` query 参数（Semantic Scholar Graph API 支持 `fields=title,abstract,authors,year,citationCount,externalIds` 显式声明返回字段），建议在实现前用真实 key（若已申请到）验证一次，确认能拿到 `abstract`/`authors`/`year` 等本项目其余工具普遍提供的核心字段，不要因探测记录只列了 4 个字段就在实现中也只归一化这 4 个字段。
+- **条件注册实现**：
+  ```python
+  def register(server: FastMCP) -> None:
+      if not settings.semantic_scholar_api_key:
+          # No key configured: Semantic Scholar's core search capability fails
+          # deterministically without a key (confirmed 429 on every request during
+          # probing). Per goal.md QA-R012, do not register ANY tool from this module
+          # rather than exposing a tool that will always error at call time.
+          return
+
+      @server.tool()
+      async def semantic_scholar_paper_search_by_query(query: str, max_results: int = 10) -> dict:
+          """Search Semantic Scholar by keyword. Requires SEMANTIC_SCHOLAR_API_KEY to
+          be configured (this tool is not registered at all if the key is missing)."""
+          ...
+
+      @server.tool()
+      async def semantic_scholar_paper_detail_by_doi(doi: str) -> dict:
+          """Look up a paper on Semantic Scholar by DOI. Requires
+          SEMANTIC_SCHOLAR_API_KEY (see module-level note)."""
+          ...
+  ```
+- 工具：`semantic_scholar_paper_search_by_query(query: str, max_results: int = 10) -> dict`、`semantic_scholar_paper_detail_by_doi(doi: str) -> dict`（两者均仅在有 key 时存在）。
+
+**37.2 CORE（`src/uniarticles/sources/core.py`）**
+- 端点：`https://api.core.ac.uk/v3/search/works`（`q` 参数关键词检索）。有 key 时通过请求头 `Authorization: Bearer {key}` 携带（若 `project-builder-cn` 实现前发现 CORE 官方文档规定的鉴权头格式与此不同，以官方文档/实测为准调整）。
+- 归一化字段（真实键名）：`title`、`authors`、`abstract`、`doi`、`citation_count`（`citationCount`）、`download_url`（`downloadUrl`，**不**默认把 `fullText` 全文塞进 `items`，只暴露下载链接，与本项目一贯"只返回元信息/链接、不做下载/全文搬运"的产品定位保持一致，比照 `sciencedirect_article_object_by_identifier` 的既有处理原则）、`arxiv_id`（`arxivId`）、`pubmed_id`（`pubmedId`）。
+- **无条件注册**（对齐现有 Elsevier 工具风格）：
+  ```python
+  def register(server: FastMCP) -> None:
+      @server.tool()
+      async def core_work_search_by_query(query: str, max_results: int = 10) -> dict:
+          """Search CORE (global OA aggregator) by keyword. Works without an API key
+          (~5 requests before a 10-minute rate-limit lockout); configuring
+          CORE_API_KEY is recommended for reliable use. See README for how to obtain
+          a free key."""
+          ...
+  ```
+  内部实现中，`settings.core_api_key` 有值时加入鉴权头；无值时不加鉴权头直接请求（探测已确认无 key 仍可用，只是限流更严）。若请求触发 429，工具层应将 CORE 返回的限流相关响应头（如 `x-ratelimit-retry-after`，探测记录已确认存在该头）一并整理进 `_err` 的 `message`，让调用方能看懂"为什么现在不能用、大概什么时候能重试"，而不是只返回一句笼统的 HTTP 错误文本。
+- 工具：`core_work_search_by_query(query: str, max_results: int = 10) -> dict`。
+
+#### 验证方法
+- **条件注册专项验证**（本步骤最重要的验证项）：
+  1. 当前环境（`.env` 无 `SEMANTIC_SCHOLAR_API_KEY`）下启动服务，通过 MCP 工具枚举确认**不出现** `semantic_scholar_paper_search_by_query`/`semantic_scholar_paper_detail_by_doi` 任何一个工具。
+  2. 临时在本地 `.env` 中设置一个测试用 `SEMANTIC_SCHOLAR_API_KEY`（哪怕是无效值，只为验证注册逻辑本身，不验证真实调用成功率）重启服务，确认此时**两个工具均出现**在工具列表中。
+  3. 恢复步骤 1 的无 key 状态，确认工具再次消失——验证该逻辑是纯粹依据当前配置动态决定，无缓存/残留状态问题。
+- 待用户申请到真实 `SEMANTIC_SCHOLAR_API_KEY` 后，补充一次真实检索+by-DOI 调用验证（若本轮构建时 key 仍未到手，可先只做条件注册逻辑验证，真实功能验证留到用户拿到 key 后自行确认，在 buildlog.md 中如实标注"条件注册逻辑已验证，真实检索功能待用户配置 key 后自行验证"）。
+- CORE：用真实关键词调用确认 `ok: true`；连续调用 6 次以上验证是否复现探测阶段观察到的"第 6 次 429"限流行为，若复现确认 `_err` 中包含限流相关的可读提示（而非仅一句 HTTP 状态码文本）。
+
+#### 风险提示
+- 条件注册逻辑最容易被误实现为"注册了工具，但工具内部 `try/except` 捕获无 key 情况后返回 `_err`"——这**不等同于** `goal.md` 要求的"不注册"，二者在 MCP 客户端工具列表可见性上有本质区别，必须是 `register()` 函数体内的**提前 `return`**，让 `@server.tool()` 装饰器根本不被执行，而不是把判断逻辑放进工具函数体内部。
+- Semantic Scholar 若实现时携带了 `fields` 参数扩展字段范围，需注意这可能改变探测阶段记录的响应结构（探测只用了默认字段集），实现前建议做一次针对性验证而非直接照抄探测记录的字段清单。
+- CORE 的鉴权头格式（`Authorization: Bearer` vs 其他约定）探测阶段未逐一验证不同鉴权头写法的效果，若实现时用户已配置的真实 `CORE_API_KEY` 调用失败，应优先核实鉴权头格式是否符合 CORE 官方文档，而非假设 key 本身无效。
+
+---
+
+### 步骤 38：批次四实现——bioRxiv/medRxiv（浏览语义）+ ChEMBL（DOI 查询语义）
+
+#### 目标说明
+这两个数据源在 `goal.md` 约束条件与本计划书"v3.0.0 范围补充"小节中已被反复强调：参数签名与产品语义**不得**比照其余 10 个通用检索型数据源的 `query`+`max_results` 模式设计，必须分别体现"按分类+时间窗口浏览"与"DOI 必填的关联数据查询"两种不同语义。真实探测结果（`buildlog.md` 步骤 32/33）已完整覆盖两种数据源的核心路径，可直接据实编码，无需额外前置探测。
+
+#### 具体操作
+
+**38.1 bioRxiv/medRxiv（`src/uniarticles/sources/biorxiv.py`，一个文件覆盖两个 server）**
+- 端点：`https://api.biorxiv.org/details/{server}/{start_date}/{end_date}/{cursor}`，`server` 取值 `biorxiv`/`medrxiv`，`start_date`/`end_date` 为 `YYYY-MM-DD` 格式日期，`cursor` 为分页游标（整数，默认 `0`）。
+- **工具签名严格禁止出现 `query`/关键词参数**，签名设计为：
+  ```python
+  @server.tool()
+  async def biorxiv_paper_list_by_date_range(
+      server: str,
+      start_date: str,
+      end_date: str,
+      cursor: int = 0,
+  ) -> dict:
+      """Browse bioRxiv/medRxiv preprints within a date range (NOT keyword search —
+      the official API only supports browsing by date window). `server` must be
+      'biorxiv' or 'medrxiv'. Dates are YYYY-MM-DD. Use `cursor` (see response) to
+      page through results (30 per page)."""
+  ```
+- `server` 参数做枚举校验（`{"biorxiv", "medrxiv"}` 之外直接 `_err`，不透传给 API），`start_date`/`end_date` 建议做基础格式校验（正则或 `datetime.strptime` 尝试解析，失败直接 `_err`，不透传给 API 产生远端错误），`cursor` 默认 `0`。
+- 归一化字段（真实键名，来自 `buildlog.md` 步骤 32 探测记录）：分页信息 `total`/`count`/`cursor`（来自 `messages[0]`），逐条 `title`/`authors`/`doi`/`date`/`version`/`type`/`category`/`abstract`/`published`/`server`（来自 `collection[]`）。**分页信息如何呈现需权衡**：项目现有 `_ok`/`_err` 固定为 `{"ok","source","query","count","items","error"}` 五个键，不建议为容纳游标而扩展这一全局响应契约；折中做法是把翻页提示写进 `query` 描述文本（如 `"biorxiv 2026-07-01~2026-07-31 (cursor=30, has_more=true)"`），或在 docstring 中说明"如需更多结果，可加大日期区间或自行传入更大的 `cursor` 重新调用"，不强行支持自动翻页。具体取舍由 `project-builder-cn` 决定，需在 buildlog.md 中记录选择理由。
+- 边界：`cursor` 超出实际数据范围时探测已确认返回 200 且 `collection` 为空，工具层应正常返回 `_ok(items=[])` 而非误判为错误。
+
+**38.2 ChEMBL（`src/uniarticles/sources/chembl.py`）**
+- 端点：`https://www.ebi.ac.uk/chembl/api/data/document.json?doi={doi}`（判断是否收录+基础文献信息）+ `https://www.ebi.ac.uk/chembl/api/data/activity.json?document_chembl_id={id}`（收录情况下进一步查询 SAR/生物活性数据）。
+- **`doi` 严格必填，且必须在客户端前置校验非空**（`goal.md` QA-R011/约束条件明确要求，探测已确认空 `doi` 传给 API 会返回 200 全量分页数据而非报错，如果不做前置校验，空字符串调用会得到一个巨大的、与"这篇论文的 ChEMBL 数据"完全无关的错误结果，必须在工具层拦截）：
+  ```python
+  @server.tool()
+  async def chembl_bioactivity_lookup_by_doi(doi: str) -> dict:
+      """Look up whether a paper (by DOI) is indexed in ChEMBL and, if so, its
+      structured SAR/bioactivity data (IC50/MIC/Ki, etc.). This is NOT a keyword
+      search tool — doi is required and must be non-empty. Most papers are NOT in
+      ChEMBL (it covers ~99k medicinal-chemistry papers only); an empty result with
+      collected=false is a normal, expected outcome, not an error."""
+      normalized_doi = doi.strip() if doi else ""
+      if not normalized_doi:
+          return _err(query=doi, message="doi must not be empty")
+      try:
+          return await _lookup_chembl(doi=normalized_doi)
+      except Exception as exc:
+          return _err(query=normalized_doi, message=str(exc))
+  ```
+- 内部函数 `_lookup_chembl(doi)` 先请求 `document.json?doi=...`，`page_meta.total_count == 0` 时直接返回 `_ok(items=[{"collected": False, "doi": doi}])`（未收录是干净的预期结果，不是错误，探测已确认此路径响应结构清晰）；`total_count >= 1` 时取 `documents[0].document_chembl_id`，再请求 `activity.json?document_chembl_id=...`，把两次请求的结果合并进单个归一化 item：
+  - 文档层字段（真实键名）：`document_chembl_id`/`doi`/`title`/`authors`/`abstract`/`journal`/`pubmed_id`/`year`。
+  - 生物活性层字段（真实键名，`activities[]` 逐条）：`standard_type`（如 `IC50`）/`standard_value`/`standard_units`/`pchembl_value`/`canonical_smiles`/`target_pref_name`/`molecule_chembl_id`/`assay_description`。
+  - 归一化输出建议结构：`{"collected": True, "document": {...}, "activities": [...]}`，放入 `_ok()` 的 `items` 列表（单元素列表，与项目其余"单条详情类"工具如 `scopus_abstract_detail_by_eid` 的 `items=[normalized]` 风格一致）。
+- ChEMBL 文档层理论上可能返回多篇匹配文档（探测样本是 1 篇），若实现时发现为每篇都补查 `activities` 会显著增加请求次数/延迟，可先支持"仅处理第一条匹配文档"并在 docstring 注明这一简化，避免不必要的过度设计。
+
+#### 验证方法
+- bioRxiv/medRxiv：分别用 `server="biorxiv"` 与 `server="medrxiv"`、近期真实日期区间调用，确认 `ok: true` 且条目含真实标题/作者/DOI；用非法 `server` 值（如 `"arxiv"`）调用确认走 `_err`；用超出范围的 `cursor` 调用确认返回空 `items` 而非报错。
+- ChEMBL：用探测阶段已验证的"已收录"样本 DOI（`10.1021/jm401507s`）调用，确认返回 `collected: true` 且 `activities` 非空、含真实 `standard_type`/`standard_value` 等字段；用"未收录"样本（如 Higgs 论文 DOI `10.1016/j.physletb.2012.08.020`）调用，确认返回 `collected: false`；用空字符串调用，确认走 `_err` 而非把空 doi 透传给 API。
+
+#### 风险提示
+- bioRxiv/medRxiv 的工具描述、参数名、README 描述中**严禁**出现"搜索"/"检索关键词"等措辞，一律使用"浏览"/"按日期区间列出"等准确表述，这是 `goal.md` 反复强调的硬性要求，不是可选的措辞偏好。
+- ChEMBL 若因"图省事"而跳过客户端 `doi` 非空校验、直接透传给 API，会因空 `doi` 返回全量分页数据而产生一个极大且无意义的响应体，必须严格执行前置校验。
+- 两个工具的参数签名如果被实现成与其余 10 个通用检索源一致的 `query`+`max_results` 模式，属于对 `goal.md` 明确约束的违反，构建验证阶段应重点检查这一点。
+
+---
+
+### 步骤 39：dblp 实现（含已知网络波动风险提示 + 编码前字段结构补测）
+
+#### 目标说明
+dblp 是本轮 12 个数据源中唯一一个**尚未采集到完整真实字段结构**的候选——`goal.md` QA-R013 记录的用户第二次实测只确认了 HTTP 200 与响应根结构片段（`{"result":{"query":"...", "status":{"@code":"200","text":"OK"}, ...}}`，其余部分未完整记录），不足以直接支撑归一化编码。同时 dblp 是本轮唯一已知存在"间歇性网络失败"风险的数据源（三次实测分别为 TLS 握手失败/HTTP 500/完全成功），需要在实现与错误提示文案中体现这一特性，并严格遵循 `goal.md` QA-R013 新增的 `_verify/` 流程约束。
+
+#### 具体操作
+
+**39.1 编码前字段结构补测（强制前置步骤，性质同步骤 14/21）**
+- 使用真实网络环境，对 `https://dblp.org/search/publ/api?q={query}&format=json&h={h}` 发起真实请求，完整打印/记录响应体 JSON（可参考已有 `_verify/dblp_connectivity_test.py` 的请求逻辑，但该脚本目的是连通性诊断，需另编写一个聚焦"采集完整字段结构"的一次性探测脚本）。
+- 完整记录 `result.hits.hit[]` 下每条命中记录的真实字段结构（如 `@id`/`info.title`/`info.authors`/`info.venue`/`info.year`/`info.type`/`info.doi`/`info.url`/`info.key` 等——这些是根据 dblp 官方 API 文档的一般性认知列出的**待验证候选字段名**，**不是**已确认的真实抓包结果，不得照抄直接编码）。
+- **若本轮构建时（`project-builder-cn` 自身探测环境）再次遇到网络失败**（TLS 握手失败、超时或其他网络类错误）：**不得**直接判定 dblp 实现有问题或服务不可用，必须执行 `goal.md` QA-R013 新增的通用流程约束——把本次用于采集字段结构的探测脚本保存到仓库 `_verify/` 目录（可另起文件名如 `_verify/dblp_field_probe.py`，与已有的 `_verify/dblp_connectivity_test.py` 分工不同：后者诊断"连不连得通"，前者采集"连通后返回什么字段"），提交入库，在交付说明中明确告知用户"本环境未能采集到完整字段结构，已将探测脚本留在 `_verify/`，需要用户在其网络环境下运行并回报结果"，**不得**凭本环境的失败结果就跳过归一化实现或编造字段结构。
+- 若本轮构建时探测成功，正常记录完整字段清单供 39.2 编码使用，并在步骤 42 一并补记入 `project-docs/buildlog.md`。
+
+**39.2 工具实现（基于 39.1 补测结果编码，以下为待补测确认的骨架，字段名以补测结果为准调整）**
+```python
+@server.tool()
+async def dblp_publication_search_by_query(query: str, max_results: int = 10) -> dict:
+    """Search dblp (computer science bibliography) by keyword. dblp itself requires
+    no API key. NOTE: dblp.org has been observed to fail intermittently due to
+    network path variance (TLS handshake failures, occasional HTTP 500) in some
+    network environments — this reflects network conditions, not a bug in this
+    tool or dblp being down. If you see a connection error here, retrying later or
+    from a different network is often sufficient."""
+    normalized_query = query.strip()
+    if not normalized_query:
+        return _err(query=query, message="query must not be empty")
+    bounded = max(1, min(max_results, 25))
+    try:
+        return await _search_dblp(query=normalized_query, max_results=bounded)
+    except Exception as exc:
+        # dblp is known to fail intermittently for network reasons (see README/
+        # buildlog for QA-R013 background); surface that context in the error
+        # rather than a bare exception string, to avoid this being misread as a
+        # code bug on retry.
+        return _err(
+            query=normalized_query,
+            message=f"{exc}（dblp.org 可能因网络环境波动间歇性失败，非必然故障；建议稍后重试或更换网络环境）",
+        )
+```
+- `_search_dblp()` 内部函数：请求 `dblp.org/search/publ/api`，`q` 参数为关键词，`format=json`，`h` 参数控制返回条数（对应 `max_results`）；归一化字段以 39.1 补测结果为准。
+- **错误提示文案设计**（回应 `goal.md` QA-R013"建议在该数据源的工具实现和/或文档中向用户说明这一特性"的要求）：本步骤采用"在 `_err` 的 `message` 中追加固定提示文本"的方式，而非更复杂的方案（如自动重试+退避）——理由：(1) 自动重试会增加平均响应延迟且不保证解决问题（三次实测中有一次是应用层 500，重试可能有效，但另一次是 TLS 握手失败，短时间内重试大概率仍失败）；(2) 项目现有工具均无自行实现的重试机制（`arxiv` 库内置重试是第三方库自带能力，非本项目模式），新增重试逻辑会让 dblp 模块与其余数据源风格不一致；(3) 清晰的错误文案已足以让用户/LLM 客户端理解"这不是需要报 bug 的情况"，符合 `goal.md` 原文"可能需要标注强调"的表述程度，未要求实现自动容错机制。
+
+#### 验证方法
+- 39.1 的字段结构补测记录完整、可直接用于编码，或已按流程把探测脚本产出到 `_verify/` 交用户补充。
+- 真实调用 `dblp_publication_search_by_query(query="graph")`（复用 QA-R013 用户实测时使用的关键词，便于比对结果一致性），若本环境网络可达，确认返回 `ok: true` 且 `items` 为逐字段结构；若本环境网络不可达，确认走 `_err` 分支且错误信息包含"网络环境波动"提示文案，而非未捕获异常导致进程崩溃。
+- 空查询调用确认走 `_err`（`query must not be empty`），不透传给 API。
+
+#### 风险提示
+- 这是本轮唯一一个"实现前置探测本身就可能失败"的数据源，`project-builder-cn` 需要有心理预期：即便严格执行 39.1 的补测流程，本环境仍可能因网络原因无法采集到字段结构，此时应遵循 `_verify/` 流程约束而非强行编造字段结构继续往下走。
+- 若最终因本环境网络原因导致 39.1 补测彻底失败、无法拿到任何真实字段样本，`project-builder-cn` 可以参考 dblp 官方 API 文档的字段说明作为**临时占位实现**，但必须在 buildlog.md 与工具 docstring 中**明确标注"字段结构来自官方文档字面描述，尚未经过本项目真实抓包验证，待用户在可达网络环境下验证后可能需要调整"**，不得将其表述为已验证的真实结构——这是本项目"真实验证优先"原则在探测彻底受阻情况下的最低限度妥协，且必须显式留痕，不能悄悄降级为"看起来验证过"。
+
+---
+
+### 步骤 40：更新 `src/uniarticles/sources/__init__.py`，注册全部 12 个新数据源
+
+#### 目标说明
+步骤 35～39 完成后，12 个新数据源模块均已具备 `register(server)` 函数，但尚未被 `register_all_sources()` 调用，实际不会出现在 MCP 工具列表中。本步骤按步骤 34.4 已定案的分组顺序统一接入。
+
+#### 具体操作
+```python
+from mcp.server.fastmcp import FastMCP
+
+from .scopus import register as register_scopus_source
+from .sciencedirect import register as register_sciencedirect_source
+from .arxiv import register as register_arxiv_source
+from .paperscraper import register as register_paperscraper_source
+from .openalex import register as register_openalex_source
+from .crossref import register as register_crossref_source
+from .europepmc import register as register_europepmc_source
+from .doaj import register as register_doaj_source
+from .zenodo import register as register_zenodo_source
+from .hal import register as register_hal_source
+from .openaire import register as register_openaire_source
+from .semantic_scholar import register as register_semantic_scholar_source
+from .core import register as register_core_source
+from .dblp import register as register_dblp_source
+from .biorxiv import register as register_biorxiv_source
+from .chembl import register as register_chembl_source
+
+
+def register_all_sources(server: FastMCP) -> None:
+    # v2.x 既有数据源（Elsevier 全家桶 + arXiv + PubMed）
+    register_scopus_source(server)
+    register_sciencedirect_source(server)
+    register_arxiv_source(server)
+    register_paperscraper_source(server)
+    # v3.0.0 新增：通用检索型（标准 query 关键词检索模式）
+    register_openalex_source(server)
+    register_crossref_source(server)
+    register_europepmc_source(server)
+    register_doaj_source(server)
+    register_zenodo_source(server)
+    register_hal_source(server)
+    register_openaire_source(server)
+    register_semantic_scholar_source(server)  # 无 SEMANTIC_SCHOLAR_API_KEY 时不注册任何工具
+    register_core_source(server)
+    register_dblp_source(server)
+    # v3.0.0 新增：语义特殊型（非关键词检索）
+    register_biorxiv_source(server)  # 浏览语义（server/start_date/end_date/cursor）
+    register_chembl_source(server)   # DOI 必填查询语义
+```
+文件名/模块名与步骤 35～39 中各数据源实际落地的文件名保持一致，若实现阶段文件名与本计划书草拟的不同（例如 `europepmc.py` 改成了 `europe_pmc.py`），以实际文件名为准同步调整 import 语句，不强行拘泥于本计划书的命名。
+
+#### 验证方法
+- 启动服务，通过 MCP 工具枚举，确认：(a) 当前环境（无 `SEMANTIC_SCHOLAR_API_KEY`）下，v2.x 既有 12 个工具 + 10 个新数据源工具（OpenAlex 2 + Crossref 2 + Europe PMC 1 + DOAJ 1 + Zenodo 1 + HAL 1 + OpenAIRE 1 + CORE 1 + dblp 1，Semantic Scholar 0 因无 key、bioRxiv/medRxiv 1 + ChEMBL 1）均正常出现；(b) 顺序符合步骤 34.4 定案的分组顺序。
+- 精确统计当前环境下 MCP Server 实际注册的工具总数，供步骤 41/42 中 README 陈述引用（具体总数以实际统计为准，不在本步骤预先假定，因为 Semantic Scholar 的注册与否取决于当时环境是否已配置 key，需要如实反映实际环境状态或明确注明"视 Semantic Scholar key 是否配置而定"）。
+
+#### 风险提示
+- 若某个数据源模块在步骤 35～39 实现时文件名/函数名与本步骤预设的 import 语句不一致，会导致 `ImportError`，构建时需仔细核对每个 `from .xxx import register as register_xxx_source` 与实际文件是否匹配。
+- 12 个新 `register_xxx_source(server)` 调用顺序本身不影响功能正确性（各数据源相互独立），但为保持与 README 工具清单描述顺序一致，建议不要在后续维护中随意打乱本步骤确定的顺序。
+
+---
+
+### 步骤 41：README.md / README_ZH.md 全量更新 + `pyproject.toml` 版本号提升至 3.0.0（收尾）
+
+#### 目标说明
+延续本计划书"v3.0.0 范围补充"小节已确定的收尾策略——README 与版本号**不**跟随每批次更新，只在全部数据源实现完毕后统一执行一次。本步骤是 v3.0.0 全部代码改动完成后的收口动作。
+
+#### 具体操作
+1. **`## Available Tools`/`## 可用工具列表` 章节**：新增 12 个数据源对应的工具条目（Semantic Scholar 的 2 个工具需注明"仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册"；CORE 的 1 个工具注明"建议配置 `CORE_API_KEY` 以获得完整体验"；bioRxiv/medRxiv 的工具注明"按日期区间浏览，非关键词检索"；ChEMBL 的工具注明"`doi` 必填，非关键词检索"；dblp 的工具注明"可能因网络环境波动间歇性失败"）。中英文同步。
+2. **`## Features`/`## 功能特性` 章节**：补充新数据源覆盖说明，可按"通用学术检索"（OpenAlex/Crossref/Europe PMC/DOAJ/Zenodo/HAL/OpenAIRE/dblp/Semantic Scholar/CORE）与"专项数据源"（bioRxiv/medRxiv 预印本浏览、ChEMBL 药物化学关联数据）分组描述，避免逐一罗列 12 行导致该章节过于冗长。
+3. **Elsevier Key 说明章节的工具计数核实与修正**（`README.md`/`README_ZH.md` 现均为第 31 行）：现文案 `"Verified against the current 12 tools using a real non-commercial key."` / `"该结论已用真实的非商业 Key 对当前全部 12 个工具做过实测验证。"`。**构建时需先核实这句话的真实语义范围**——它字面上紧跟在 Elsevier Key 说明段落之后，理论上应特指"已用非商业 Elsevier key 验证过的 Elsevier 相关工具数"，但历次版本（v2.1.0→v2.2.0→v2.3.0，11→10→12）该数字恰好始终与"MCP Server 实际注册工具总数"精确相等（因为此前全部工具确实都是 Elsevier/arXiv/PubMed，全部工具都受同一枚 Elsevier key 影响验证范围），从未真正需要区分过这两个概念。v3.0.0 是第一次出现"新增工具与 Elsevier key 完全无关"的情况，需要按核实结果处理：
+   - 若核实确认这句话历史上就是"全部工具数"的口语化表达 → 需要拆成两句话：一句延续"MCP Server 当前共注册 N 个工具，覆盖 M 个数据源"（全局计数），另一句保留"其中 Elsevier 相关的 6 个工具已用真实非商业 key 验证"（不受本轮影响，数量不变）。
+   - 若核实确认这句话本来就应严格限定为 Elsevier 范围 → 维持原语义，只需确认数字仍为 12（Elsevier 工具本身数量未变），另在文档其他位置（如简介/徽章，若存在）新增一处独立的全局工具总数陈述。
+   - **无论采用哪种处理方式，全局工具总数陈述都必须明确标注"若未配置 `SEMANTIC_SCHOLAR_API_KEY`，Semantic Scholar 相关工具不会出现，总数为 21；配置后为 22"**（Elsevier 6 + arXiv 3 + PubMed 1 + 本轮新增 11 个不含 Semantic Scholar 的固定工具 + Semantic Scholar 视 key 而定的 0/2 个），不得用单一固定数字掩盖这一条件性。核实结论需记入 buildlog.md（步骤 42）。
+4. `.env.example` 新增步骤 34.3 确定的两行环境变量说明。
+5. `pyproject.toml` 第 7 行 `version = "2.3.0"` → 改为 `version = "3.0.0"`（`goal.md` QA-R010 已明确目标版本号）。
+
+#### 验证方法
+- 全文检索确认 12 个新数据源的工具名均出现在 `Available Tools` 章节，中英文对等。
+- 工具总数陈述（无论最终以何种形式呈现）与步骤 40 验证方法中实际统计的数字一致，且明确区分"Semantic Scholar key 已配置/未配置"两种情况下的数字差异。
+- `python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"` 输出 `3.0.0`。
+
+#### 风险提示
+- 第 31 行"12 个工具"的语义核实是本步骤最容易出错的一处，务必按"具体操作"第 3 条列出的两种可能情形分别处理，不强行套用本计划书的推测，以实际核实结论为准。
+- Semantic Scholar 的条件注册特性使得"总工具数"不再是固定值，这是本项目历史上第一次出现"工具数量取决于运行环境配置"的情况，README 措辞需要清晰处理这一新情况，不能简单照抄此前版本"精确固定数字"的写法。
+
+---
+
+### 步骤 42：`project-docs/buildlog.md` 记录本轮变更 + 整体回归验证（检查点）
+
+#### 目标说明
+记录步骤 34～41 的完整实现过程，并做一次覆盖全部数据源（v2.x 既有 4 个文件 12 个工具 + v3.0.0 新增 12 个数据源）的整体回归验证，确认 v3.0.0 全部范围（12 个确认落地数据源 + arXiv 补 `doi` 字段，PMC 排除）已完整交付，MCP 协议层未受影响。这是 v3.0.0 的最终交付检查点。
+
+#### 具体操作
+1. 在 `project-docs/buildlog.md` 的 `## v3.0.0 构建记录` 章节内（步骤 33 记录之后）新增本轮记录，逐条包含：
+   - 步骤 34 的架构决策摘要（Semantic Scholar 条件注册 vs CORE 不条件注册的理由、`Settings` 新增字段、`register_all_sources()` 分组方式）。
+   - 步骤 35～39 每个数据源的最终参数签名、归一化字段清单（若步骤 39 dblp 因网络原因未能在本环境完成补测，如实记录"字段结构待用户在 `_verify/` 下补充验证"这一状态，不得记录为已完成）。
+   - 步骤 40 的 `register_all_sources()` 最终顺序。
+   - 步骤 41 的 README/pyproject 修改摘要（含第 31 行语义核实结论）。
+   - 版本号变更：`2.3.0` → `3.0.0`。
+   - **v3.0.0 全轮范围收尾小结**：13 个立项候选的最终结果——12 个确认落地并完成实现（OpenAlex/Crossref/Europe PMC/DOAJ/Zenodo/HAL/OpenAIRE/bioRxiv·medRxiv/ChEMBL/Semantic Scholar/CORE/dblp）+ 1 个排除（PMC）+ arXiv 补 `doi` 字段独立完成，与 `goal.md` QA-R013 记录的范围现状完全对应。
+2. 整体回归验证：
+   - 用 `uv run uniarticles-mcp` 或 `python -m uniarticles` 启动服务，确认进程正常启动，`stdout` 未被污染（12 个新数据源模块均为本轮新增代码，是污染风险最集中的一批改动）。
+   - 若条件允许，在真实 Claude Desktop/Cherry Studio 中实际加载一次，确认工具列表数量与步骤 41 陈述的数字一致（含 Semantic Scholar 条件注册导致的数量差异）。
+   - 用真实网络环境手动调用全部新增工具各至少 1 次（含 dblp、Semantic Scholar 视 key 配置情况），确认均正常返回 `ok: true` 或结构清晰的 `_err`。
+   - 用真实 `.env`（`ELSEVIER_API_KEY`）手动调用现有 12 个 v2.x 工具中至少覆盖 4 个数据源各 1 个，确认未因本轮改动（尤其 `config.py` 新增字段、`sources/__init__.py` 改动）产生回归。
+
+#### 验证方法
+- buildlog.md 中能找到本轮全部数据源的最终参数签名与归一化字段记录，dblp 若未完成补测需有明确的"待用户验证"标注，不得含糊带过。
+- 整体回归验证的 4 项操作均通过，无 `ImportError`/`NameError`/未捕获异常。
+- v3.0.0 全轮范围与 `goal.md` QA-R013 记录的最终范围（12 落地 + 1 排除 + 1 独立增强）完全对应，无遗漏无多算。
+
+#### 风险提示
+- 本轮改动是本项目至今单轮新增代码量最大的一次（12 个新文件 + `config.py`/`sources/__init__.py`/README×2/`pyproject.toml` 改动），回归验证不能因为"每个数据源本身都不复杂"而简化整体验证覆盖面，尤其要重点验证 `config.py` 新增字段与现有 `elsevier_api_key`/`elsevier_insttoken` 字段共存不冲突（`Settings` 是 `frozen=True` dataclass，新增字段若书写不当可能影响整个类的实例化）。
+- 若 dblp 在本轮构建环境中始终未能完成字段结构补测（39.1 反复受阻），v3.0.0 不应因此被无限期拖延——可以先用官方文档字面描述的字段结构完成一版"待验证"实现（步骤 39 风险提示已允许这一妥协路径），正常收口本轮版本发布，待用户后续在可达网络环境下验证后再补一轮小版本修正，不必让整个 v3.0.0 卡在单个数据源的网络可达性问题上。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -1253,3 +1754,11 @@ v2.1.0 已把 README 的工具清单改到"11 个工具"的旧名字状态；本
 - **收尾文档更新策略**（`goal.md` 未指定，本计划书在"v3.0.0 范围补充"小节中给出方案并说明理由）：`project-docs/buildlog.md` 跟随每个探测/实现阶段或批次增量更新，避免长战线执行中途中断（例如步骤 33 交还用户判断后迟迟未获回复）导致已完成工作无落盘记录；`README.md`/`README_ZH.md` 与 `pyproject.toml` 版本号则**不**跟随每批次更新，只在最终实现清单确定且全部已确认数据源均落地完毕后统一执行一次，避免中间状态的 README 出现"这批做完了但还有候选没测完"的模糊表述，也避免引入本项目此前从未使用过的预发布版本号管理方式。
 - **ChEMBL（`doi` 必填查询语义）与 bioRxiv/medRxiv（分类+时间窗口浏览语义）** 在步骤 32 中已被有意与其余 9 个通用检索候选的探测方式区分对待，探测脚本与记录用词均需避免先入为主地套用"关键词检索"假设，为后续实现阶段的参数签名设计（`doi` 必填 / `server`+`start`+`end`+`cursor`，均不提供 `query` 关键词参数）预先埋下依据，避免实现阶段与其余通用检索型数据源的设计模式混淆。
 - **止损规则是本轮范围收敛的核心机制，贯穿步骤 28～33**：技术上确认不可行的候选可由 `project-builder-cn` 直接排除、无需二次确认用户（比照 `goal.md` QA-R002 先例）；但技术上可行、只是价值存疑（字段稀疏/需自行申请 key/限流严格/与现有数据源重叠）的候选，任何执行者都**不得**自行拍板剔除或纳入，必须整理成清晰的对比材料交还用户做最终判断——这一规则已在步骤 28、31（OpenAIRE 稳定性判定）、33 中反复强调，因为它是全轮最容易被无意间"图省事"违反的一条要求。
+
+---
+
+- （v3.0.0 分批实现阶段，2026-08-05）步骤 34～42 基于 `project-docs/goal.md` QA-R012/QA-R013 追加。步骤 33 交还用户裁决的 4 项候选已逐一定案：**Semantic Scholar 纳入**（key 申请中，需按 key 条件注册）、**PMC 排除**（与现有 `pubmed_paper_search_by_query` 同源 NCBI E-utilities，无稳定性增量）、**CORE 纳入**（key 已配置在 `.env`）、**dblp 纳入**（三轮网络环境实测确认服务端可用，记录已知的间歇性网络失败风险）。v3.0.0 最终确认落地 **12 个数据源**：OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、bioRxiv/medRxiv、ChEMBL、Semantic Scholar、CORE、dblp。
+- 步骤 34 是本轮唯一的"公共规范"步骤，正式落地两项此前留给本计划书自行判断的架构决策：**Semantic Scholar 采用"无 key 不注册工具"的条件注册模式（模块级，非细粒度），CORE 不采用**（无 key 时 CORE 仍可有限使用，Semantic Scholar 无 key 时核心检索确定性失败，二者处理方式不同的判断标准已在步骤 34.2 中明确记录，供未来同类决策复用）；`register_all_sources()` 采用"v2.x 既有 / v3.0.0 通用检索型 / v3.0.0 语义特殊型"三段分组。
+- 步骤 35～39 按**实现复杂度与代码结构共性**分批（区别于步骤 29～32 按"探测优先级"分批）：批次一（步骤 35）OpenAlex/Crossref/Europe PMC/DOAJ 为标准两件套模式；批次二（步骤 36）Zenodo/HAL/OpenAIRE 各有一个需要额外处理的结构性特点（资源类型过滤/Solr 字段选择/深层嵌套响应）；批次三（步骤 37）Semantic Scholar/CORE 集中处理条件注册架构；批次四（步骤 38）bioRxiv/medRxiv/ChEMBL 保持与其余 10 个通用检索源不同的参数模式；dblp（步骤 39）单列，因其真实字段结构尚未完整采集，编码前需先做一次补测（若本环境网络仍不可达，按 `goal.md` QA-R013 新增的 `_verify/` 流程约束处理，不得凭本环境失败结果下结论或编造字段）。
+- 步骤 40～42 为收尾：`register_all_sources()` 统一接入（步骤 40）→ README/`pyproject.toml` 版本号统一更新至 `3.0.0`（步骤 41，延续本计划书此前确定的"全部落地后统一更新"策略，并特别标注 Semantic Scholar 条件注册导致"总工具数视 key 配置而定"这一本项目历史上首次出现的情况）→ buildlog 记录 + 整体回归验证检查点（步骤 42，v3.0.0 最终交付节点）。
+- 步骤 1～33（v2.0/v2.1.0/v2.2.0/v2.3.0 构建 + v3.0.0 探测阶段）已全部执行完毕，保留在文档中作为历史记录，不受本轮改动影响。
