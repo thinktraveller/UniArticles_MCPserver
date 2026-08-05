@@ -854,4 +854,13 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
   - ChEMBL 已收录 `10.1021/jm401507s` → `collected:true, document_chembl_id=CHEMBL3120156, activities=50`（`standard_type` 等字段存在）；未收录物理论文 DOI → `collected:false`；经工具 wrapper 传空白 doi `"   "` → `ok:false, error="doi must not be empty"`（前置校验生效，未打 API）。
   - 说明：bioRxiv API 偶发响应慢（一次 30s ReadTimeout，重试即成功）——工具层 `try/except` 会把超时转为 `_err`，不崩溃；属服务端瞬态。
 
+### 步骤 39：dblp 实现（含 QA-R013 `_verify/` 流程落地）—— 完成于 2026-08-05 21:50
+
+- **新增文件**：`src/uniarticles/sources/dblp.py`（工具 `dblp_publication_search_by_query`）、`_verify/dblp_field_probe.py`（字段结构采集脚本，`git add -f` 强制入库，`_verify` 被用户未提交的 `.gitignore` 改动忽略——**未触碰**该 `.gitignore` 改动，比照 commit `9948687` 先例）。
+- **⚠️ 编码前字段结构补测（39.1）在本构建环境失败**：对 `https://dblp.org/search/publ/api?q=graph&format=json&h=2` 的真实请求**再次 TLS 握手失败**（`UNEXPECTED_EOF_WHILE_READING` / 握手超时，本轮多次重试与探测阶段步骤 28~33 现象完全一致）。按 **QA-R013 强制流程约束**：不凭本环境单次/多次失败判定 dblp 不可用或有 bug，不跳过实现、不阉割完整度。
+- **dblp.py 字段映射来源标注**：归一化字段（`id(@id)/title/authors(info.authors.author[].text)/venue/year/type/doi/url(info.url 或 info.ee)/key`）+ `_as_list()`（dblp 单元素 dict / 多元素 list 兼容，用于 `hits.hit` 与 `info.authors.author`）**依据 dblp 官方 API 文档字面结构编写，尚未经本项目真实抓包验证**——此标注同时写入工具 docstring 与本条，符合步骤 39.1/风险提示"必须显式留痕、不得表述为已验证真实结构"的要求。
+- **错误提示文案设计**：`_err.message` 追加固定中文提示"dblp.org 可能因网络环境波动间歇性失败，非必然故障；建议稍后重试或更换网络环境"（回应 QA-R013"在实现/文档中说明该特性"要求）。**未**实现自动重试/退避（理由同步骤 39.2：TLS 握手类失败短时重试大概率仍失败、项目现有工具均无自研重试、清晰文案已足够）。
+- **本环境验证**（不含真实字段，因网络不可达）：工具注册成功（`dblp_publication_search_by_query`）；空查询 → `ok:false, error="query must not be empty"`（前置校验生效）；真实网络调用 → 工具层 `try/except` 捕获 TLS 失败并返回 `ok:false`，`error` 含"网络环境波动"提示文案，**未崩溃**；`_verify/dblp_field_probe.py` 实跑复现 TLS 失败并输出面向用户的诊断结论。
+- **⏭️ 交还用户判断（QA-R013）**：**本构建环境测得对 `dblp.org` 的 TLS 握手失败，无法采集真实字段结构。已将采集脚本 `_verify/dblp_field_probe.py` 留在仓库供用户在其可达 dblp.org 的网络环境下运行并回报真实字段，据以核对/修正 `dblp.py` 的归一化映射。** dblp 工具本身已按官方文档结构实现并可注册、可运行（网络可达时应能返回结果），不因本环境网络受阻而降低实现完整度。
+
 ---
