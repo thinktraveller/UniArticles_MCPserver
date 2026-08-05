@@ -880,4 +880,26 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **`.env.example`**：步骤 34 已随 config 一并更新（新增 SS/CORE 两行），本步骤不重复改动。
 - **验证**：`tomllib` 读出 `version=3.0.0`；README 中 12 个新数据源工具名均已出现（中英对等）。
 
+### 步骤 42：buildlog 记录 + 整体回归验证（检查点，v3.0.0 最终交付节点）—— 完成于 2026-08-05 21:50
+
+- **整体回归验证（本地 src + 真实网络）**：
+  1. **stdout 洁净性**（最高优先级——12 个新模块是污染风险最集中的一批）：`python -c "from uniarticles.server import create_server; create_server()"` 的 stdout 经 `od -c` 确认为 **0 字节（完全为空）**，JSON-RPC 协议帧不受新增代码污染（`__init__.py` 的 root logger→stderr 抢占机制对新模块同样生效）。
+  2. **工具装配**：`create_server()` + `list_tools()` → **25 个工具**（无 SS key），顺序符合分组，无 `ImportError`/`NameError`。
+  3. **config 共存**：`Settings`（`frozen=True`）新增 `semantic_scholar_api_key`/`core_api_key` 后，与既有 `elsevier_api_key`/`elsevier_insttoken` 共存无冲突（elsevier set / core set / ss=None）。
+  4. **v2.x 回归**：`arxiv_paper_search_by_query` `ok:true count:2` 且 item 含 `doi` 键（步骤 27 增强未回归）；`pubmed_paper_search_by_query` `ok:true`。
+  5. **新源端到端**（经完整 server 的 tool wrapper 调用，非仅私有函数）：`crossref`/`doaj`/`chembl` 均 `ok:true`；`dblp` 在本环境 `ok:false` 且 `error` 含"网络环境波动"提示（符合预期，非崩溃）。批次 35~38 各新工具此前已逐一真实调用验证（见对应步骤条目）。
+- **v3.0.0 全轮范围收尾小结**（13 个立项候选最终结果，与 goal.md QA-R013 完全对应）：
+  - **12 个确认落地并完成实现**：OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、bioRxiv/medRxiv、ChEMBL（9 个探测阶段已确认）+ Semantic Scholar（条件注册，真实检索待用户 key）、CORE（真实 key 已验证）、dblp（本环境网络受阻，实现完成但真实字段待用户经 `_verify/dblp_field_probe.py` 复核）。
+  - **1 个排除**：PMC（与现有 `pubmed_paper_search_by_query` 同源 NCBI E-utilities，无稳定性增量，QA-R012 定案排除，未实现）。
+  - **1 个独立增强**：arXiv 三工具补 `doi` 字段（步骤 27 已完成）。
+  - **工具总数**：v2.x 12 + v3.0.0 新增 13（非 SS）= **25**（未配 SS key）/ **27**（配 SS key），版本号 `3.0.0`。
+- **交还用户判断事项（QA-R013）**：① **dblp**——本构建环境对 dblp.org TLS 握手反复失败，未能采集真实字段结构，`dblp.py` 字段映射依官方文档编写（已在 docstring/buildlog 显式标注未经真实抓包验证），采集脚本 `_verify/dblp_field_probe.py` 已入库供用户在可达网络运行核对；② **Semantic Scholar**——真实关键词检索待用户申请到 `SEMANTIC_SCHOLAR_API_KEY` 后自行验证（条件注册逻辑与 by-DOI 归一化本轮已验证）。
+- **README/版本号收尾策略兑现**：README×2 与 `pyproject.toml`/`uv.lock` 仅在全部数据源落地后于步骤 41 统一更新一次，未跟随每批次改动（符合计划书 v3.0.0 范围补充小节策略）。
+
+### 下一步计划
+- ✅ **v3.0.0 分批实现阶段（步骤 34~42）已全部执行完毕**，12 个确认数据源全部落地、注册、README/版本号收尾，整体回归验证通过。当前无待执行的计划步骤。
+- ⏭️ **待用户在可达 dblp.org 的网络环境运行 `_verify/dblp_field_probe.py`**，回报真实字段结构以核对/微调 `dblp.py` 归一化映射（若字段与官方文档一致则无需改动）。
+- ⏭️ **待用户配置 `SEMANTIC_SCHOLAR_API_KEY`** 后，Semantic Scholar 两工具将自动出现在工具列表，可自行验证真实关键词检索。
+- ⏭️ 打包发布（`uv build` + 发布 PyPI）由用户按既有流程自行执行，构建侧无待执行步骤。
+
 ---
