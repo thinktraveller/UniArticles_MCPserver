@@ -747,3 +747,29 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ README/pyproject 版本号按计划书策略在全部落地数据源实现完毕后统一更新，本轮不动。
 
 ---
+
+## 附加工具：dblp 网络连通性诊断脚本（非构建步骤）—— 完成于 2026-08-05 14:47
+
+> 本条目记录一个独立于 v3.0.0 数据源开发主线的诊断类小工具，不属于 project-plan.md 排定的构建步骤，未改动 project-plan.md。
+
+### 背景与关联
+- goal.md 的 **QA-R012** 将候选数据源 **dblp** 记为「待定」：此前探测阶段（步骤 28-33，commit 008d509）在探测环境下对 `dblp.org` 的 TLS 握手失败（requests+curl 双栈一致，HTTP 状态码 000），**无法核实 dblp.org 真实是否可用**。
+- 根因不是 API Key（dblp 公开 API 不要求 key），疑为主机级网络拦截；而 MCP Server 实际运行在终端用户机器上，其网络环境可能与探测环境不同，故未静默排除，交由用户在其它网络环境实测后再定案（预计补 QA-R013）。
+- 用户据此明确要求：编写一个简单的 dblp 连通性测试脚本，供其在不同网络环境下手动运行判断连通性。
+
+### 执行的任务
+- 新建分层诊断脚本 `_verify/dblp_connectivity_test.py`，将「能否访问 dblp.org」拆成 4 层逐步探测：**DNS 解析 → TCP 连接 → TLS 握手 → HTTP 实际请求**（真实调用 `https://dblp.org/search/publ/api?q=graph&format=json&h=1`）。任一层失败即停止并给出该层最可能的原因（DNS 污染 / 防火墙拦截 / TLS 中间人拦截 / 应用层限流等），末尾打印一段面向非技术用户的「诊断结论」。
+- 脚本无需 API Key、只读探测、不改任何文件；启动时强制 `sys.stdout` UTF-8，避免 Windows GBK 控制台下中文乱码。
+- 本机实跑验证通过：脚本按预期逐层输出，并在本探测环境复现了 QA-R012 记录的现象（DNS 成功、TCP 成功、TLS 握手失败 `UNEXPECTED_EOF_WHILE_READING`），结论逻辑正确。
+
+### 关键变更
+- 新增 `_verify/dblp_connectivity_test.py`：dblp 连通性分层诊断工具（面向用户手动运行）。
+
+### 遇到的问题及解决方案
+- **`_verify/` 被 gitignore**：用户本地有一处**未提交**的 `.gitignore` 改动新增了 `_verify` 忽略规则。本脚本按用户明确要求需提交入库并长期保留（区别于一次性验证脚本），故对该脚本单独使用 `git add -f` 强制纳入版本控制；**未触碰用户未提交的 `.gitignore` 改动**，保持其暂存/未提交原状。
+- 首次运行 Windows 控制台中文乱码（GBK）：在脚本启动处 `sys.stdout/stderr.reconfigure(encoding="utf-8")` 解决，重跑后中文正常显示。
+
+### 下一步计划
+- ⏭️ 等待用户在其部署/使用网络下运行本脚本，回报连通性结果，用于确定 dblp 的最终去留（预计对应 goal.md 的 QA-R013）。dblp 数据源本身在 v3.0.0 仍为「待定」，本条目不改变该状态。
+
+---
