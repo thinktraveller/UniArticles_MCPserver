@@ -814,4 +814,14 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **涉及文件**：`src/uniarticles/config.py`（新增 2 字段）、`.env.example`（新增 2 行）。
 - **验证**：`from uniarticles.config import settings` → `semantic_scholar_api_key=None`（当前环境未配置，正是条件注册的天然测试场景）、`core_api_key` 已加载（len 32）、`elsevier_api_key` 经旧名兼容层仍可读；`Settings`（`frozen=True`）新增字段后实例化无异常。
 
+### 步骤 35：批次一实现——OpenAlex / Crossref / Europe PMC / DOAJ —— 完成于 2026-08-05 21:50
+
+- **新增文件**：`src/uniarticles/sources/openalex.py`、`crossref.py`、`europepmc.py`、`doaj.py`，均自包含 `_ok/_err`（`source` 各填自身标识）+ `register()`，无 key。
+- **OpenAlex**（`openalex_work_search_by_query` / `openalex_work_detail_by_doi`）：端点 `api.openalex.org/works`（`search=` 检索）、`/works/https://doi.org/{doi}`（by-DOI）。归一化 `id/doi/title/authors/abstract/cited_by_count/publication_year/is_open_access/open_access_url/venue`。**关键坑点已处理**：`abstract_inverted_index`（倒排索引 `{词:[位置]}`）经 `_reconstruct_abstract()` 重建为可读文本——真实验证输出 "Scikit-learn is a Python module integrating..."，非 dict。
+- **Crossref**（`crossref_work_search_by_query` / `crossref_work_detail_by_doi`）：端点 `api.crossref.org/works`（`query=`）、`/works/{doi}`。**关键坑点已处理**：`title`/`container-title` 是**数组**→ `_first()` 取首项得字符串（验证 `type=str`）；`author[]` 的 `given`+`family` 拼接；`abstract` 的 JATS/`<p>` 标签经 `_clean_abstract()` 正则清除；`published.date-parts[[y,m,d]]` 经 `_format_published()` 展平为 `2019-11-28`；`cited_by_count` 取 `is-referenced-by-count`。携带 `mailto`（polite pool）。
+- **Europe PMC**（`europepmc_paper_search_by_query`）：端点 `ebi.ac.uk/europepmc/webservices/rest/search`，`resultType=core`（返回富字段集，编码前已补测确认）。归一化 `id/source/pmcid/title/doi/authors(authorString)/journal(journalInfo.journal.title)/publication_year/cited_by_count/is_open_access/in_epmc/in_pmc/has_pdf/first_publication_date`。EBI 维护（非 NCBI），未复用 paperscraper PubMed 逻辑；仅单页查询，docstring 已如实说明不暴露 `nextCursorMark` 游标。
+- **DOAJ**（`doaj_article_search_by_query`）：端点 `doaj.org/api/search/articles/{query}`——**query 拼进 URL 路径**，用 `urllib.parse.quote(query, safe='')` 转义（不裸拼用户输入）。归一化 `bibjson` 下 `title/authors/abstract/keywords/journal/doi(identifier 中 type==doi)/subjects(subject[].term)/year/links`。
+- **真实验证**（本地 src + 真实网络，一次性脚本 scratchpad 未提交）：4 源检索均 `ok:true` 且 `items` 为逐字段结构；OpenAlex/Crossref by-DOI 用 `10.1016/j.physletb.2012.08.020` 均正确返回 Higgs 论文；坏 DOI → 404 由 `raise_for_status` 抛出、工具层 `try/except` 转 `_err`（验证脚本直调私有函数复现 404 抛出，符合预期）。
+- **已知外部瞬态**：验证期间 **OpenAlex 间歇性返回 503 "Anonymous search is paused while the search cluster recovers from heavy load. Please retry shortly, or use a free API key"**（约 5/6 请求，偶发 200）——这是 OpenAlex 服务端对无 key 匿名检索的临时限流（其错误信息明示可重试或申请免费 key），**非本实现缺陷**：OpenAlex 在步骤 29/33 原始探测及本轮编码前 probe 均确认 200 可用、字段结构完整，重试后本轮亦取得 200 并验证归一化正确。工具遇 503 时正常走 `_err`（返回 OpenAlex 的错误文本），不崩溃。按项目"无自行重试"惯例（见步骤 39.2 理由）未加自动退避。属 QA-R013 语境下的服务端瞬态，非本环境网络拦截，故不单列 `_verify/` 脚本，仅此如实留痕。
+
 ---
