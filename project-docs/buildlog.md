@@ -844,4 +844,14 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
   - **SS by-DOI 归一化**（无 key 亦可，对应 buildlog 步骤 29）：`10.1016/j.physletb.2012.08.020` → `ok:true`，`paper_id/doi/year(2012)/cited_by_count(1323)/title` 正确，证明归一化字段映射无误。
 - **待用户验证**：真实 **关键词检索** 路径需用户申请到 `SEMANTIC_SCHOLAR_API_KEY` 后自行验证（QA-R012 记录 key 申请中；无 key 时共享池 429 锁死，非本实现问题）。条件注册逻辑与 by-DOI 归一化本轮已验证。
 
+### 步骤 38：批次四实现——bioRxiv/medRxiv（浏览语义）+ ChEMBL（DOI 查询语义）—— 完成于 2026-08-05 21:50
+
+- **新增文件**：`src/uniarticles/sources/biorxiv.py`（一文件覆盖两 server）、`chembl.py`。两者**均不采用** `query`+`max_results` 通用检索模式（QA-R011 硬性约束）。
+- **bioRxiv/medRxiv**（`biorxiv_paper_list_by_date_range(server, start_date, end_date, cursor=0)`）：**浏览语义，签名无 `query` 参数**。端点 `api.biorxiv.org/details/{server}/{start}/{end}/{cursor}`。`server` 枚举校验 `{biorxiv, medrxiv}`（非法直接 `_err` 不透传）、`start_date`/`end_date` 用 `datetime.strptime` 校验 `YYYY-MM-DD`、`cursor` clamp `>=0`。docstring 显式声明"NOT keyword search — 仅按日期窗口浏览，30 条/页"。归一化 `collection[]` 的 `title/authors/doi/date/version/type/category/abstract/published/server`。**分页呈现取舍**：不扩展全局 `{ok,source,query,count,items,error}` 契约，改把 `cursor/page_count/total` 写进 `query` 描述串（如 `biorxiv 2024-01-01~2024-01-05 (cursor=0, page_count=30, total=645); pass a larger cursor to page further`），docstring 说明可传更大 cursor 翻页，不做自动翻页。
+- **ChEMBL**（`chembl_bioactivity_lookup_by_doi(doi)`）：**DOI 必填查询语义，签名无 `query`**。`doi` 空值在客户端前置拦截直接 `_err`（不透传——探测确认空 doi 会返回全量分页）。端点先 `document.json?doi=`：`page_meta.total_count==0` → `_ok(items=[{collected:False, doi, document:None, activities:[]}])`（未收录是干净预期结果非错误）；`>=1` 取 `documents[0].document_chembl_id` 再查 `activity.json?document_chembl_id=`。归一化输出单 item `{collected, doi, document:{document_chembl_id/doi/title/authors/abstract/journal/pubmed_id/year}, activities:[{standard_type/standard_value/standard_units/pchembl_value/canonical_smiles/target_pref_name/molecule_chembl_id/assay_description}]}`。仅处理首篇匹配文档（docstring 注明简化）。
+- **真实验证**：
+  - bioRxiv `biorxiv`/`medrxiv` 近期日期区间均 `ok:true, count:30`，含真实 title/doi/server/category；超范围 `cursor=99999` → `ok:true, count:0`（非错误）；`_valid_date` 对 `2024-13-99` 返回 False、`2024-01-05` 返回 True。
+  - ChEMBL 已收录 `10.1021/jm401507s` → `collected:true, document_chembl_id=CHEMBL3120156, activities=50`（`standard_type` 等字段存在）；未收录物理论文 DOI → `collected:false`；经工具 wrapper 传空白 doi `"   "` → `ok:false, error="doi must not be empty"`（前置校验生效，未打 API）。
+  - 说明：bioRxiv API 偶发响应慢（一次 30s ReadTimeout，重试即成功）——工具层 `try/except` 会把超时转为 `_err`，不崩溃；属服务端瞬态。
+
 ---
