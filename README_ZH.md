@@ -19,6 +19,8 @@
   - **ScienceDirect**: 全文文章检索、文章对象（配图/表格/补充材料）元信息获取。
   - **ArXiv**: 论文搜索、最新论文列表、按 ID 读取论文元数据。
   - **Paperscraper API**: PubMed 检索。
+  - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、dblp、Semantic Scholar、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
+  - **专项数据源（v3.0.0）**: bioRxiv/medRxiv 预印本按日期区间浏览、ChEMBL 药物化学生物活性数据按 DOI 查询。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
@@ -28,7 +30,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（该结论已用真实的非商业 Key 对当前全部 12 个工具做过实测验证。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。自 v3.0.0 起，未配置 `SEMANTIC_SCHOLAR_API_KEY` 时本服务器共注册 **25 个工具**、覆盖 15 个数据源；配置后为 **27 个**；新增的非 Elsevier 数据源均不需要此 Key。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -163,6 +165,45 @@ python -m uniarticles      # 使用 pip 安装时
 
 ### Paperscraper
 - `pubmed_paper_search_by_query(query, max_results)`: 在 PubMed 检索论文。
+
+### OpenAlex
+- `openalex_work_search_by_query(query, max_results)`: 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。
+- `openalex_work_detail_by_doi(doi)`: 按 DOI 查询单篇文献。无需 Key。
+
+### Crossref
+- `crossref_work_search_by_query(query, max_results)`: 按关键词检索文献。无需 Key。
+- `crossref_work_detail_by_doi(doi)`: 按 DOI 查询单篇文献。无需 Key。
+
+### Europe PMC
+- `europepmc_paper_search_by_query(query, max_results)`: 检索 Europe PMC（EBI 生命科学聚合库，区别于 NCBI PubMed），仅返回首页结果。无需 Key。
+
+### DOAJ
+- `doaj_article_search_by_query(query, max_results)`: 检索开放获取期刊目录（DOAJ）。无需 Key。
+
+### Zenodo
+- `zenodo_record_search_by_query(query, max_results)`: 检索 Zenodo 中 publication 类型的记录（排除数据集/软件），仅返回文件元信息/链接。无需 Key。
+
+### HAL
+- `hal_document_search_by_query(query, max_results)`: 检索 HAL（法国/欧洲开放存档）。无需 Key。
+
+### OpenAIRE
+- `openaire_research_product_search_by_query(query, max_results)`: 检索 OpenAIRE（欧洲开放科学聚合库）。无需 Key。
+
+### Semantic Scholar
+- `semantic_scholar_paper_search_by_query(query, max_results)`: 按关键词检索 Semantic Scholar。**仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册**（无 Key 时关键词检索不可用）。
+- `semantic_scholar_paper_detail_by_doi(doi)`: 按 DOI 查询单篇文献。**仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册。**
+
+### CORE
+- `core_work_search_by_query(query, max_results)`: 按关键词检索 CORE（全球开放获取聚合库）。无 Key 亦可用但限流严格（约 5 次请求后锁定约 10 分钟），**建议配置 `CORE_API_KEY`** 以获得完整体验。
+
+### dblp
+- `dblp_publication_search_by_query(query, max_results)`: 按关键词检索 dblp（计算机科学文献库）。无需 Key。注意：dblp.org 在部分网络环境下可能因网络路径波动间歇性失败。
+
+### bioRxiv / medRxiv
+- `biorxiv_paper_list_by_date_range(server, start_date, end_date, cursor)`: 按日期区间浏览 bioRxiv/medRxiv 预印本（**按日期浏览，非关键词检索**）。`server` 取 `biorxiv` 或 `medrxiv`；日期为 `YYYY-MM-DD`；每页 30 条（用 `cursor` 翻页）。
+
+### ChEMBL
+- `chembl_bioactivity_lookup_by_doi(doi)`: 查询某 DOI 论文是否被 ChEMBL 收录及其结构化 SAR/生物活性数据（**`doi` 必填，非关键词检索**）。多数论文未被收录，`collected=false` 属正常结果。
 
 ---
 

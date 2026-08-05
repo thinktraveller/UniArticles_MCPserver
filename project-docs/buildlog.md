@@ -870,4 +870,14 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **注**：计划书步骤 41.3 预估的"21/22"基于"每源 1 工具"的估算（漏算 OpenAlex/Crossref 各含 search+by-DOI 两工具），实际以本步骤 `list_tools()` 统计的 **25/27** 为准（计划书本身要求"具体总数以实际统计为准"）。
 - **验证**：`list_tools()` 枚举 25 个工具，顺序符合分组；Semantic Scholar 两工具确不出现（无 key），条件注册在完整 server 装配下同样生效；无 `ImportError`/`NameError`。
 
+### 步骤 41：README×2 全量更新 + `pyproject.toml` 版本号 → 3.0.0 —— 完成于 2026-08-05 21:50
+
+- **涉及文件**：`README.md`、`README_ZH.md`、`pyproject.toml`、`uv.lock`。
+- **Features/功能特性**：新增两组描述——"通用学术检索（v3.0.0）"（OpenAlex/Crossref/Europe PMC/DOAJ/Zenodo/HAL/OpenAIRE/dblp/Semantic Scholar/CORE）与"专项数据源（v3.0.0）"（bioRxiv/medRxiv 浏览、ChEMBL DOI 查询），中英对等，避免逐行罗列 12 行。
+- **Available Tools/可用工具列表**：新增 12 个数据源分组的工具条目，中英对等。特别标注：Semantic Scholar 两工具"仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册"；CORE"建议配置 `CORE_API_KEY`"；bioRxiv/medRxiv"按日期浏览、非关键词检索"；ChEMBL"`doi` 必填、非关键词检索"；dblp"可能因网络波动间歇性失败"。
+- **第 31 行工具计数语义核实结论（步骤 41.3）**：核实原句"Verified against the current 12 tools / 对当前全部 12 个工具做过实测验证"属**口语化的"全部工具总数"表达**（历史上全部工具恰好都是 Elsevier/arXiv/PubMed，全部受同一 Elsevier key 影响，故 12=总数=受 key 验证数从未需要区分）。v3.0.0 首次出现"新增工具与 Elsevier key 无关"，故按步骤 41.3 情形一**拆成两句**：① Elsevier 相关的 **8** 个工具已用真实非商业 key 验证；② 全局工具总数——未配置 `SEMANTIC_SCHOLAR_API_KEY` 时 **25 个/15 数据源**、配置后 **27 个**，并明示新增非 Elsevier 源不需要 Elsevier key。**总数以步骤 40 `list_tools()` 实测的 25/27 为准**（非计划书预估的 21/22，见步骤 40 说明）。
+- **版本号**：`pyproject.toml` `2.3.0` → `3.0.0`；`uv lock` 自我纠偏，`uv.lock` 中 `uniarticles-mcp` 自身条目 `2.3.0` → `3.0.0`（diff 仅此一行，无其他依赖变化）。
+- **`.env.example`**：步骤 34 已随 config 一并更新（新增 SS/CORE 两行），本步骤不重复改动。
+- **验证**：`tomllib` 读出 `version=3.0.0`；README 中 12 个新数据源工具名均已出现（中英对等）。
+
 ---

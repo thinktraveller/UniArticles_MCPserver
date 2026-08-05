@@ -19,6 +19,8 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
   - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
   - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
   - **Paperscraper APIs**: PubMed search.
+  - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, Zenodo, HAL, OpenAIRE, dblp, Semantic Scholar, and CORE keyword/DOI lookup across open scholarly catalogs.
+  - **Specialized sources (v3.0.0)**: bioRxiv/medRxiv preprint browsing by date range, and ChEMBL medicinal-chemistry bioactivity lookup by DOI.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
@@ -28,7 +30,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (Verified against the current 12 tools using a real non-commercial key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. As of v3.0.0 the server registers **25 tools total** covering 15 data sources when `SEMANTIC_SCHOLAR_API_KEY` is not configured, or **27 tools** when it is; the newer non-Elsevier sources do not require this key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -165,6 +167,45 @@ If the process starts without import or configuration errors, the installation i
 
 ### Paperscraper
 - `pubmed_paper_search_by_query(query, max_results)`: Search papers from PubMed.
+
+### OpenAlex
+- `openalex_work_search_by_query(query, max_results)`: Search works by keyword (abstract reconstructed to readable text). No key needed.
+- `openalex_work_detail_by_doi(doi)`: Look up a single work by DOI. No key needed.
+
+### Crossref
+- `crossref_work_search_by_query(query, max_results)`: Search works by keyword. No key needed.
+- `crossref_work_detail_by_doi(doi)`: Look up a single work by DOI. No key needed.
+
+### Europe PMC
+- `europepmc_paper_search_by_query(query, max_results)`: Search Europe PMC (EBI life-sciences aggregator, distinct from NCBI PubMed) by keyword; first page of results only. No key needed.
+
+### DOAJ
+- `doaj_article_search_by_query(query, max_results)`: Search the Directory of Open Access Journals by keyword. No key needed.
+
+### Zenodo
+- `zenodo_record_search_by_query(query, max_results)`: Search Zenodo for publication-type records by keyword (datasets/software excluded); returns file metadata/links only. No key needed.
+
+### HAL
+- `hal_document_search_by_query(query, max_results)`: Search HAL (French/European open archive) by keyword. No key needed.
+
+### OpenAIRE
+- `openaire_research_product_search_by_query(query, max_results)`: Search OpenAIRE (European open science aggregator) by keyword. No key needed.
+
+### Semantic Scholar
+- `semantic_scholar_paper_search_by_query(query, max_results)`: Search Semantic Scholar by keyword. **Only registered when `SEMANTIC_SCHOLAR_API_KEY` is configured** (keyword search is unusable without a key).
+- `semantic_scholar_paper_detail_by_doi(doi)`: Look up a paper by DOI. **Only registered when `SEMANTIC_SCHOLAR_API_KEY` is configured.**
+
+### CORE
+- `core_work_search_by_query(query, max_results)`: Search CORE (global open-access aggregator) by keyword. Works without a key but is heavily rate-limited (~5 requests then a ~10-minute lockout); configuring `CORE_API_KEY` is strongly recommended.
+
+### dblp
+- `dblp_publication_search_by_query(query, max_results)`: Search dblp (computer science bibliography) by keyword. No key needed. Note: dblp.org may fail intermittently due to network path variance in some environments.
+
+### bioRxiv / medRxiv
+- `biorxiv_paper_list_by_date_range(server, start_date, end_date, cursor)`: Browse bioRxiv/medRxiv preprints within a date range (**browse by date, NOT keyword search**). `server` is `biorxiv` or `medrxiv`; dates are `YYYY-MM-DD`; 30 results per page (use `cursor` to page).
+
+### ChEMBL
+- `chembl_bioactivity_lookup_by_doi(doi)`: Look up whether a paper (by DOI) is indexed in ChEMBL and, if so, its structured SAR/bioactivity data (**`doi` required, NOT keyword search**). Most papers are not in ChEMBL; `collected=false` is a normal result.
 
 ---
 
