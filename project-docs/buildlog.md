@@ -863,4 +863,11 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **本环境验证**（不含真实字段，因网络不可达）：工具注册成功（`dblp_publication_search_by_query`）；空查询 → `ok:false, error="query must not be empty"`（前置校验生效）；真实网络调用 → 工具层 `try/except` 捕获 TLS 失败并返回 `ok:false`，`error` 含"网络环境波动"提示文案，**未崩溃**；`_verify/dblp_field_probe.py` 实跑复现 TLS 失败并输出面向用户的诊断结论。
 - **⏭️ 交还用户判断（QA-R013）**：**本构建环境测得对 `dblp.org` 的 TLS 握手失败，无法采集真实字段结构。已将采集脚本 `_verify/dblp_field_probe.py` 留在仓库供用户在其可达 dblp.org 的网络环境下运行并回报真实字段，据以核对/修正 `dblp.py` 的归一化映射。** dblp 工具本身已按官方文档结构实现并可注册、可运行（网络可达时应能返回结果），不因本环境网络受阻而降低实现完整度。
 
+### 步骤 40：`sources/__init__.py` 注册全部 12 个新数据源 —— 完成于 2026-08-05 21:50
+
+- **涉及文件**：`src/uniarticles/sources/__init__.py`——新增 12 个 `from .<name> import register as register_<name>_source`，`register_all_sources()` 按步骤 34.4 三段分组接入（v2.x 既有 4 → v3.0.0 通用检索型 openalex/crossref/europepmc/doaj/zenodo/hal/openaire/semantic_scholar/core/dblp → v3.0.0 语义特殊型 biorxiv/chembl），带分组注释。
+- **实际工具数精确统计**（`create_server()` + `list_tools()`，authoritative）：**当前环境（无 `SEMANTIC_SCHOLAR_API_KEY`）共 25 个工具**；配置 SS key 后为 **27 个**（+2 SS 工具）。构成：v2.x 既有 12（Elsevier 8 = scopus 6 + sciencedirect 2；arXiv 3；PubMed 1）+ v3.0.0 新增 13 个非 SS 固定工具（OpenAlex 2 + Crossref 2 + Europe PMC 1 + DOAJ 1 + Zenodo 1 + HAL 1 + OpenAIRE 1 + CORE 1 + dblp 1 + bioRxiv 1 + ChEMBL 1）+ SS 视 key 而定 0/2。
+- **注**：计划书步骤 41.3 预估的"21/22"基于"每源 1 工具"的估算（漏算 OpenAlex/Crossref 各含 search+by-DOI 两工具），实际以本步骤 `list_tools()` 统计的 **25/27** 为准（计划书本身要求"具体总数以实际统计为准"）。
+- **验证**：`list_tools()` 枚举 25 个工具，顺序符合分组；Semantic Scholar 两工具确不出现（无 key），条件注册在完整 server 装配下同样生效；无 `ImportError`/`NameError`。
+
 ---
