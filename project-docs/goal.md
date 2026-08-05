@@ -45,6 +45,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 18.（v3.0.0，QA-R010，已确认）新增 ChEMBL 数据源的 MCP 工具，产品语义为"给定一篇已知 DOI 的论文，查询其是否被 ChEMBL 收录及结构化 SAR/生物活性数据（IC50/MIC/Ki 等）"，是 DOI 输入型的文献关联数据查询，不是关键词检索工具，参数签名（`doi` 必填）与实现方式不应比照 Semantic Scholar/OpenAlex/Crossref 等关键词检索型工具设计。
 19.（v3.0.0，QA-R010，已确认）为现有 `arxiv_paper_search_by_query`/`arxiv_latest_paper_list_by_category`/`arxiv_paper_detail_by_id` 三个工具的输出补充 `doi` 字段（复用第三方 `arxiv` 库 `Result.doi` 属性，零额外请求成本），列为本轮一个独立、可优先完成的步骤，不依赖新数据源接入进度。
 20.（v3.0.0，QA-R010，已确认）目标发布版本号为 **`3.0.0`**，用户明确要求跳过此前遗留、尚未启动的 v2.4.0（`paperscraper.py` 改名等决策，原 QA-R009）；原 QA-R009 已由用户在主线程确认作废，对应内容已通过 `git revert c316c98`（提交 `d44d066`）从本文档移除。
+21.（v3.0.0，QA-R012，已确认）承接 project-builder-cn 步骤 28-33 真实探测后交还用户判断的 4 项"技术可行但价值存疑"候选（Semantic Scholar、PMC、CORE、dblp，止损规则见约束条件 QA-R011 相关条目），用户逐项给出最终去留：**Semantic Scholar 纳入**（key 申请中，且需按 key 是否配置条件注册工具，架构影响见约束条件）、**PMC 排除**（未满足用户自设的"比 paperscraper 现有实现更稳定"条件，理由见范围界定/排除）、**CORE 纳入**（key 已配置在 `.env` 的 `CORE_API_KEY`，此前限流顾虑解除）、**dblp 暂缓**（探测环境 SSL 握手失败，待用户在其他网络环境下用分层诊断脚本复测后另开 QA-R013 定案，本轮不代为判定）。至此 v3.0.0 通用检索型新数据源范围收窄为：11 个候选中确认落地 10 个（原 3 个推荐重点候选 + 7 个中等价值候选，扣除 PMC）+ dblp 悬而未决，加上此前已单独确认的 bioRxiv/medRxiv、ChEMBL、arXiv 补 `doi` 字段。
 
 ## 范围界定
 ### 包含
@@ -79,9 +80,9 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   1. **Semantic Scholar、OpenAlex、Crossref**（已确认纳入）：均为免费/公开、无需强制 key 的通用学术检索数据源，纳入前需 project-builder-cn 按本项目一贯方法论做真实 API 可行性验证（确认字段结构、限流表现），不得直接照抄参考项目的 Python 实现。
   2. **bioRxiv、medRxiv**（已确认纳入）：官方公开 API 语义为"按分类+时间窗口浏览"而非关键词全文检索，实现与文档需如实体现这一局限性，不能承诺关键词搜索体验。
   3. **ChEMBL**（已确认纳入，产品语义与其余数据源不同）：DOI 输入型的文献关联数据查询（查询已知 DOI 论文是否被 ChEMBL 收录及其结构化 SAR 数据），不是关键词检索工具，参数签名需以 `doi` 必填设计，不得比照关键词检索型工具的 `query`+`max_results` 模式。
-  4. **PMC、Europe PMC、DOAJ、CORE、Zenodo、HAL、dblp、OpenAIRE**（QA-R011 已确认全部纳入）：这 8 个数据源在 QA-R010 中被评估为"中等价值"，此前只核实了 README 描述与代码逻辑、未做过真实 API 探测；用户在 QA-R011 明确要求"把 11 个候选源全部纳入"且"对每一个源都进行真实性探测"、"先测试再说"（不预先取舍），因此这 8 个与前 3 个推荐重点候选（Semantic Scholar/OpenAlex/Crossref）合计 11 个，以同等地位纳入 v3.0.0 范围，一律先经真实探测再落地实现，探测顺序/分批方式由 project-planner-cn 决定（见约束条件的说明）。
+  4. **PMC、Europe PMC、DOAJ、CORE、Zenodo、HAL、dblp、OpenAIRE**（QA-R011 已确认全部纳入探测环节）：这 8 个数据源在 QA-R010 中被评估为"中等价值"，此前只核实了 README 描述与代码逻辑、未做过真实 API 探测；用户在 QA-R011 明确要求"把 11 个候选源全部纳入"且"对每一个源都进行真实性探测"、"先测试再说"（不预先取舍），因此这 8 个与前 3 个推荐重点候选（Semantic Scholar/OpenAlex/Crossref）合计 11 个，以同等地位纳入探测环节。**探测完成后的最终去留结论见 QA-R012（核心目标第 21 条）**：Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE 连同 Semantic Scholar/OpenAlex/Crossref 共 9 项已由 project-builder-cn 步骤 28-33 直接实测落地；CORE 因用户已配置 `CORE_API_KEY` 一并确认落地；PMC 已排除（见范围界定/排除）；dblp 因探测环境 SSL 握手失败暂缓，待用户另行网络环境复测后经 QA-R013 定案。
 - **（v3.0.0，QA-R010，已确认）arXiv 三个现有工具补充 `doi` 输出字段**，复用第三方 `arxiv` 库 `Result.doi` 属性，零额外请求成本，作为独立步骤，可先于新数据源接入完成。
-- **（v3.0.0，QA-R010/QA-R011，已确认）v3.0.0 最终范围合计新增 13 个数据源/功能点，是本项目至今规模最大的一轮版本**：11 个通用检索型新数据源（Semantic Scholar、OpenAlex、Crossref、PMC、Europe PMC、DOAJ、CORE、Zenodo、HAL、dblp、OpenAIRE）+ 2 个语义特殊的新数据源（bioRxiv/medRxiv 的浏览语义、ChEMBL 的 DOI 查询语义）+ 1 个现有工具增强（arXiv 三工具补 `doi` 字段）。project-planner-cn 制定构建计划书时必须如实体现这一规模量级，不得用"新增若干数据源"淡化描述。
+- **（v3.0.0，QA-R010/QA-R011，已确认）v3.0.0 立项之初范围合计规划新增 13 个数据源/功能点，是本项目至今规模最大的一轮版本**：11 个通用检索型新数据源（Semantic Scholar、OpenAlex、Crossref、PMC、Europe PMC、DOAJ、CORE、Zenodo、HAL、dblp、OpenAIRE）+ 2 个语义特殊的新数据源（bioRxiv/medRxiv 的浏览语义、ChEMBL 的 DOI 查询语义）+ 1 个现有工具增强（arXiv 三工具补 `doi` 字段）。**经 project-builder-cn 步骤 28-33 真实探测与 QA-R012 用户最终裁决后（详见核心目标第 21 条），13 个立项候选中已确认落地 11 个**（OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、bioRxiv/medRxiv、ChEMBL 共 9 个经真实探测直接落地，Semantic Scholar、CORE 经 QA-R012 用户裁决补充确认落地）+ **arXiv 补 `doi` 字段独立落地**，**明确排除 1 个（PMC）**，**悬而未决 1 个（dblp，等用户提供新网络环境探测结果后经 QA-R013 定案）**。project-planner-cn/project-builder-cn 制定后续文档时应引用 QA-R012 的最新结论作为范围现状，不再引用立项之初的"13 个"作为最终交付数量的等价表述。
 
 ### 排除
 | 功能 | 排除原因 |
@@ -106,6 +107,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 | CiteSeerX（v3.0.0，QA-R010） | 参考项目 README 明确标注端点间歇性不可用/重定向到网页存档，不稳定；用户在 QA-R010 认可排除 |
 | BASE（v3.0.0，QA-R010） | OAI-PMH 接口需机构 IP 注册才能返回实际结果，个人/非机构用户几乎不可用；用户在 QA-R010 认可排除 |
 | Google Scholar（v3.0.0，QA-R010，重申） | 本项目 v2.1.0 已因网络访问受限删除过同类工具（`searchScholarPapers`），参考项目同样标注 bot-detection 问题，无新证据支持重新评估；用户在 QA-R010 认可排除 |
+| PMC（v3.0.0，QA-R012） | 用户设定排除/纳入的判断条件为"若 PMC 实现比现有 `paperscraper.py` 依赖的第三方 API 更稳定，则考虑做"。技术核实：`paperscraper.py` 的 `_search_pubmed()` 底层调用 `paperscraper.pubmed.pubmed.get_pubmed_papers`，实质是对 NCBI Entrez 官方 API（`esearch`/`efetch`）的封装，并非真正的网页爬虫；候选 PMC 走的同样是 NCBI Entrez API（`esearch`/`esummary?db=pmc`），与现有 pubmed 工具是同一套后端基础设施，仅 `db` 参数从 `pubmed` 换成 `pmc`。因此 PMC 相较现有实现**没有稳定性提升**，唯一区别是内容范围收窄（PMC 仅覆盖全文开放获取子集，现有 pubmed 工具覆盖范围更广，含非开放获取文献摘要）。用户自设条件未成立，故排除，不纳入 v3.0.0 落地范围 |
 
 ## 约束条件
 - 当前 `SCOPUS_API_KEY` 为**基础级别、非商业性质**的 Elsevier 开发者 Key，未配置 `X-ELS-Insttoken`（机构令牌）。
@@ -143,6 +145,8 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   2. 若某候选**真实探测确认技术上可行**，但探测过程中发现的某些特性（如字段稀疏、需要用户自行申请免费 key 才能获得可用体验）让其实际价值明显低于预期，**这类"技术可行但价值存疑"的情况不应由 project-planner-cn/project-builder-cn 自行拍板剔除**，因为用户已在 QA-R011 明确表态"全部纳入"、"先测试再说"，说明用户本身就预期会看到探测结果后再做取舍——出现这种情况时应整理成清晰的探测结果汇总，交还给用户做最终去留判断，而不是代为决定。
   3. 简言之：**技术不可行 → 直接排除（沿用先例，无需二次确认）；技术可行但价值存疑 → 汇总后交用户判断（不擅自剔除）**。这一原则同样适用于此前已确认的 bioRxiv/medRxiv、ChEMBL 两个语义特殊候选。
 - **（v3.0.0，QA-R010，已确认）原 QA-R009（v2.4.0，`paperscraper.py` 改名/依赖选型/PubMed 新增 ESummary·ELink 的决策请求）已作废**：用户在 QA-R010 问题 6 的回答"本次版本就是3.0.0版本，跳过原本的2.4.0版本"实质确认不再需要该轮次；主线程已代为执行 `git revert c316c98`（提交 `d44d066`）将 QA-R009 从"澄清问答记录"中移除。QA-R010 正文中此前对 QA-R009 的引用（C.3、问题列表问题 6）已改为说明性编者按，不再指代实际存在的轮次。paperscraper.py 相关的技术债（改名/依赖精简/PubMed 功能扩展）如果未来仍需处理，需要作为一次新的、独立的目标澄清重新发起，不因并入 v3.0.0 而自动继承 QA-R009 已调研的内容。
+- **（v3.0.0，QA-R012，已确认，新增架构分支，需 project-planner-cn 在设计步骤 34+ 时明确纳入考量）Semantic Scholar 提出"无 key 则不注册工具"的条件注册需求，这是本项目至今第一次出现按 key 存在与否条件注册工具的模式**：用户要求"如果 json 配置中没有配置 Semantic Scholar 的 API key，就不启用/不注册该工具（而不是注册了但调用时报错）"，即在对应 source 模块的 `register(server)` 函数内，判断 `settings` 中是否存在 Semantic Scholar 的 key（需新增 `settings` 字段，例如 `semantic_scholar_api_key`），若为空则跳过该工具的 `@server.tool()` 注册，使其在无 key 时不出现在 MCP 工具列表里，而非注册后在调用时才返回 401/403。**这与现有 Elsevier（`scopus.py`/`sciencedirect.py`）套路不同**——现有套路是无论是否配置 key 都无条件注册全部工具，缺 key 时调用才在运行时报 401/403。project-planner-cn 需要在构建计划书中权衡：这种"按 key 条件注册"模式是仅限 Semantic Scholar 这一处使用，还是要回溯应用到未来其他需要 key 的数据源（如本轮的 CORE），由 planner 自行判断并写入计划书，本文档不代为决定。
+- **（v3.0.0，QA-R012，待定，非本 agent 代为判定）dblp 的最终去留悬而未决，等待用户提供新网络环境下的探测结果**：探测环境对 `dblp.org` 的 SSL 握手失败（requests+curl 双栈一致，HTTP 状态码 000），已排除是 API key 问题（dblp.org 公开 API 本身不要求 key），推测是探测环境的主机级网络拦截（防火墙/DNS 污染/TLS 中间人拦截），具体性质需换网络环境实测才能确认。已向用户提供分层诊断脚本（DNS 解析→TCP 连接→TLS 握手→HTTP 请求四层探测），用户尚未回报结果。**在用户回报新网络环境下的探测结果并经 QA-R013 正式定案前，dblp 不得被 project-planner-cn/project-builder-cn 视为已纳入或已排除**，不得代为假设任何一种结论后就开始设计/实现。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -508,6 +512,30 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - 核心目标 / 范围界定（包含） / 约束条件 / 备注
   <!-- GOAL-QA-R011-END -->
 
+### QA-R012：project-builder-cn 步骤28-33探测后"技术可行但价值存疑"4项候选（Semantic Scholar/PMC/CORE/dblp）的最终去留裁决
+<!-- GOAL-QA-R012-START -->
+- **提问时间**：2026-08-05 14:34
+- **提问目的**：project-builder-cn 完成步骤 28-33，对 13 个候选数据源/功能点逐一做真实 API 探测，9 个已确认落地并写入 buildlog.md（commit `008d509`），其余 4 个（Semantic Scholar、PMC、CORE、dblp）按约束条件中 QA-R011 已确认的止损规则——"技术可行但价值存疑"不由 project-planner-cn/project-builder-cn 自行拍板剔除，需汇总后交还用户做最终去留判断——被交还用户裁决。用户已在与本 agent（负责对话的助手）的交流中逐项回应，其中 PMC、Semantic Scholar 两项由该助手补充了技术核实依据，现将四项最终结论正式定案写入 goal.md。
+- **问题列表**
+  1. Semantic Scholar：探测阶段确认技术可行，但 API key 尚未到手，是否纳入 v3.0.0？
+  2. PMC：探测阶段确认技术可行（走 NCBI Entrez API），但与现有 `paperscraper.py` 的 pubmed 工具高度同构，是否纳入 v3.0.0？
+  3. CORE：探测阶段确认技术可行，但无 key 时限流严重（约 5 次请求锁 10 分钟），是否纳入 v3.0.0？
+  4. dblp：探测阶段因 SSL 握手失败（HTTP 000）未能验证可行性，是否纳入 v3.0.0，或如何处理这一不确定状态？
+- **用户回答**
+  1. API Key 正在申请中，届时可用；并提出新架构需求：若未配置 Semantic Scholar 的 key，应不注册该工具，而非注册后调用时才报错。
+  2. 用户设定判断条件："我想了解这个PMC和当前的paperscraper的实现上有多大的区别，如果PMC的实现会比依赖第三方API的paperscraper更稳定，则考虑做。"（助手随后核实：两者底层同为 NCBI Entrez API 封装，PMC 无稳定性优势，仅内容范围收窄，条件未成立）
+  3. API Key 已申请到，已配置在项目根目录 `.env` 文件的 `CORE_API_KEY` 变量下，此前限流顾虑解除。
+  4. 尚未回报新网络环境下的探测结果，本轮不做最终判定，等后续复测结果。
+- **提炼结论**
+  - **问题1（已确认，纳入）**：Semantic Scholar 纳入 v3.0.0，但落地方式需支持"无 key 不注册工具"的条件注册模式——这是本项目至今第一次出现的新架构分支，与现有 Elsevier 套路（无条件注册、缺 key 时运行时报错）不同，需 project-planner-cn 在构建计划书中明确设计并权衡是否推广到其他数据源（不在本轮 goal.md 中代为决定，见约束条件）。
+  - **问题2（已确认，排除）**：PMC 排除，不纳入 v3.0.0。依据是用户自设条件（"更稳定则做"）经技术核实未成立——`paperscraper.py` 的 `_search_pubmed()` 与候选 PMC 均为 NCBI Entrez 官方 API（`esearch`/`efetch`/`esummary`）的封装，仅 `db` 参数从 `pubmed` 换成 `pmc`，PMC 相较现有实现没有稳定性提升，唯一区别是内容范围收窄（仅覆盖 PMC 全文开放获取子集）。此推理链已记入范围界定/排除表格。
+  - **问题3（已确认，纳入）**：CORE 纳入 v3.0.0，key 已配置在 `.env` 的 `CORE_API_KEY`，此前"无 key 限流严重"的顾虑已解除，确认落地。
+  - **问题4（待定，不代为判定）**：dblp 本轮不做最终判定，明确记录为"待定，等待用户提供新网络环境下的 dblp 探测结果后再补充最终 QA 决策"（可能是 QA-R013）。探测环境 SSL 握手失败已排除是 API key 问题（dblp.org 公开 API 不要求 key），具体是否为主机级网络拦截需换网络环境用已提供的分层诊断脚本复测确认。
+  - **v3.0.0 范围现状小结**：13 个立项候选中，确认落地 11 个（OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、bioRxiv/medRxiv、ChEMBL、Semantic Scholar、CORE）；明确排除 1 个（PMC）；悬而未决 1 个（dblp，等 QA-R013）。
+- **影响的目标文档章节**
+  - 核心目标（新增第 21 条） / 范围界定（包含、排除） / 约束条件（新增 Semantic Scholar 条件注册架构提示、dblp 待定说明）
+  <!-- GOAL-QA-R012-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
@@ -531,3 +559,4 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   4. **ChEMBL 的参数签名有特殊要求**：必须是 `doi` 必填的查询工具语义，不能比照其余数据源的 `query`+`max_results` 关键词检索模式设计（详见"约束条件"）。
   5. **arXiv 补 `doi` 字段是独立、低风险、可优先完成的步骤**，不依赖 11 个新数据源的探测/实现进度，可以作为构建计划书里最先交付的一小步。
   6. 目标发布版本号为 **`3.0.0`**（当前 `pyproject.toml` 为 `2.3.0`），构建计划书应涵盖 `pyproject.toml` 版本号更新与 `project-docs/buildlog.md` 变更记录；由于规模庞大，工具总数的最终变化量需等真实探测结果出来后才能确定，不建议在计划书开头就假定"13 个"全部会变成对应数量的新工具（部分候选探测后可能被排除）。
+- （v3.0.0，QA-R012，2026-08-05）project-builder-cn 步骤 28-33 完成 13 个候选的真实探测（9 个直接落地，见 buildlog.md commit `008d509`），其余 4 个"技术可行但价值存疑"候选（Semantic Scholar、PMC、CORE、dblp）按 QA-R011 已确认的止损规则交还用户裁决，本轮全部逐项定案：**Semantic Scholar 纳入**（key 申请中；新增"无 key 不注册工具"的条件注册架构需求，需 project-planner-cn 在后续步骤中设计）、**PMC 排除**（技术核实其与现有 pubmed 工具同为 NCBI Entrez API 封装，无稳定性优势，用户自设的纳入条件未成立）、**CORE 纳入**（key 已配置在 `.env` 的 `CORE_API_KEY`，限流顾虑解除）、**dblp 暂缓**（探测环境 SSL 握手失败，待用户提供新网络环境探测结果后另开 QA-R013 定案，本轮不代为判定）。**v3.0.0 范围现状**：13 个立项候选中确认落地 11 个、明确排除 1 个（PMC）、悬而未决 1 个（dblp）。**下一步交接**：project-planner-cn 在设计步骤 34+（Semantic Scholar/CORE 的具体实现）时需一并纳入"按 key 条件注册"这一新架构分支的设计与权衡（见约束条件）；dblp 在 QA-R013 定案前不得被视为已纳入或已排除，不得代为假设结论。
