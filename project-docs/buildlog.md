@@ -800,3 +800,18 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 同上一条：等待用户在其网络下运行增强后的脚本，回报连通性/HTTP 诊断结果，用于确定 dblp 去留。dblp 在 v3.0.0 仍为「待定」，本条目不改变该状态。
 
 ---
+
+## v3.0.0 分批实现阶段（步骤 34~42，对应 project-plan.md，QA-R012/QA-R013）
+
+> 本阶段落地步骤 33 后用户裁决确认的 12 个数据源真实实现。组织：步骤 34 公共规范总纲 → 步骤 35~39 分批实现 → 步骤 40 统一注册 → 步骤 41 README/版本号收尾 → 步骤 42 buildlog + 整体回归。**编码前已用一次性探测脚本（scratchpad，未提交）复核了计划书要求的待确认字段结构**（Europe PMC 的 `doi`/`authorString`、HAL 的 `title_s`/`abstract_s`/`authFullName_s` 均为数组、OpenAIRE 的 `pid` 按 `@classid=="doi"` 筛选、CORE key 真实有效性），一切归一化以真实抓包键名为准。
+
+### 步骤 34：分批实现总纲——公共规范 + 条件注册架构决策 + 注册组织 —— 完成于 2026-08-05 21:50
+
+- **公共代码规范（34.1）**：12 个数据源每个独立文件 `src/uniarticles/sources/<name>.py`，暴露 `register(server)`；各文件自带本地 `_ok/_err`（`source` 填自身标识，**不复用** `scopus.py` 硬编码 `source="scopus"` 的版本）；HTTP 统一 `httpx.AsyncClient(timeout=30.0)` + `raise_for_status()`；异常在 `@server.tool()` 体内 `try/except Exception → _err`；字符串参数 `.strip()`、必填判空直接 `_err`、`max_results` clamp `[1,25]`；统一 polite User-Agent `"UniArticlesMCP/3.0.0 (https://github.com/thinktraveller/UniArticles_MCPserver)"`；无新增第三方依赖。
+- **条件注册决策（34.2，落地 QA-R012 开放问题）**：**不对称处理**——Semantic Scholar 采用「无 key 不注册」（`register()` 内若 `settings.semantic_scholar_api_key` 为空则提前 `return`，模块级、含 by-DOI 一并隐藏，贴合用户原话字面），CORE **不**采用（沿用现有 Elsevier 式无条件注册+运行时限流透明）。判断标准：无 key 时核心功能是否**确定性失败**——SS 关键词检索无 key 时 4/4 次 429（确定性失败），CORE 无 key 仍可有限使用（约 5 次后锁 10 分钟）。
+- **Settings 新增字段（34.3）**：`config.py` 新增 `semantic_scholar_api_key`（`SEMANTIC_SCHOLAR_API_KEY`）、`core_api_key`（`CORE_API_KEY`），均 `field(default_factory=lambda: os.getenv(...))`，可选、无兼容回退。`.env.example` 新增两行含注释。
+- **注册组织（34.4）**：`register_all_sources()` 采「v2.x 既有 / v3.0.0 通用检索型 / v3.0.0 语义特殊型」三段分组，具体在步骤 40 落地。
+- **涉及文件**：`src/uniarticles/config.py`（新增 2 字段）、`.env.example`（新增 2 行）。
+- **验证**：`from uniarticles.config import settings` → `semantic_scholar_api_key=None`（当前环境未配置，正是条件注册的天然测试场景）、`core_api_key` 已加载（len 32）、`elsevier_api_key` 经旧名兼容层仍可读；`Settings`（`frozen=True`）新增字段后实例化无异常。
+
+---

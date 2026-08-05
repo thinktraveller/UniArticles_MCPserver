@@ -37,6 +37,15 @@ def _resolve_elsevier_api_key() -> str | None:
 class Settings:
     elsevier_api_key: str | None = field(default_factory=_resolve_elsevier_api_key)
     elsevier_insttoken: str | None = os.getenv("ELSEVIER_INSTTOKEN")
+    # v3.0.0 optional keys (brand-new variables, no legacy-name migration needed).
+    # Semantic Scholar: if unset, its tools are NOT registered at all (its keyword
+    # search fails deterministically without a key — confirmed 429 on every request
+    # during probing; see buildlog step 33). CORE: if unset, its tool still works but
+    # is severely rate-limited (~5 requests before a 10-minute lockout).
+    semantic_scholar_api_key: str | None = field(
+        default_factory=lambda: os.getenv("SEMANTIC_SCHOLAR_API_KEY")
+    )
+    core_api_key: str | None = field(default_factory=lambda: os.getenv("CORE_API_KEY"))
 
 
 settings = Settings()
