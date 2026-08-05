@@ -27,9 +27,11 @@ def _as_list(value) -> list:
 
 
 def _extract_authors(authors_field) -> list[str]:
-    """dblp author shape (per official docs): info.authors.author is a dict/list of
-    {"@pid": "...", "text": "Author Name"}. NOTE: NOT yet verified by real capture in
-    the build environment — see module docstring / buildlog step 39."""
+    """dblp author shape (CONFIRMED by real capture, buildlog step 43): each author is
+    {"@pid": "...", "text": "Author Name"} at info.authors.author. The classic dblp
+    trap — a SINGLE author is a plain dict, MULTIPLE authors are a list of dicts — is
+    handled by _as_list() below (the real thesis sample captured had exactly one
+    author, arriving as a bare dict, and now parses correctly)."""
     if not isinstance(authors_field, dict):
         return []
     names = []
@@ -42,6 +44,17 @@ def _extract_authors(authors_field) -> list[str]:
 
 
 def _normalize(hit: dict) -> dict:
+    # Field paths verified against a real dblp capture (buildlog step 43):
+    #   hit.@id / hit.@score live at the OUTER hit level; everything else under hit.info.
+    #   Confirmed-real info keys: title, authors.author(.text), year, type, access, key,
+    #   ee (electronic edition = link to the actual paper), url (the dblp record page).
+    # `ee` and `url` are DISTINCT in real data (ee -> external paper, url -> dblp record),
+    # so they are surfaced as separate fields rather than merged.
+    # `venue` and `doi` come from dblp's official API docs and are genuine journal/
+    # conference fields, but were ABSENT from the captured "Books and Theses" sample and
+    # are therefore not yet confirmed against a real journal-article response; kept with
+    # a safe .get() (None when missing, never raises) both for doc fidelity and to keep
+    # the cross-source normalized shape's `doi` field uniform with every other source.
     info = hit.get("info", {}) or {}
     return {
         "id": hit.get("@id"),
@@ -50,8 +63,10 @@ def _normalize(hit: dict) -> dict:
         "venue": info.get("venue"),
         "year": info.get("year"),
         "type": info.get("type"),
+        "access": info.get("access"),
         "doi": info.get("doi"),
-        "url": info.get("url") or info.get("ee"),
+        "ee": info.get("ee"),
+        "url": info.get("url"),
         "key": info.get("key"),
     }
 
@@ -77,9 +92,11 @@ def register(server: FastMCP) -> None:
         tool or dblp being down. If you see a connection error here, retrying later or
         from a different network is often sufficient.
 
-        (Field mapping is based on dblp's official API docs and has NOT yet been
-        verified against a real response capture in this build environment; run
-        `_verify/dblp_field_probe.py` on a network that can reach dblp.org to confirm.)"""
+        (Field mapping was corrected against a real dblp response capture in buildlog
+        step 43: the outer @id/@score vs. inner info.* split, the single-vs-multiple
+        author dict/list shape, and the access/ee/url fields are all confirmed. The
+        venue/doi fields remain documented-but-not-yet-capture-confirmed because the
+        available sample was a thesis record that omits them.)"""
         normalized_query = query.strip()
         if not normalized_query:
             return _err(query=query, message="query must not be empty")

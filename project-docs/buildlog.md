@@ -903,3 +903,49 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 打包发布（`uv build` + 发布 PyPI）由用户按既有流程自行执行，构建侧无待执行步骤。
 
 ---
+
+### 步骤 43：dblp 真实抓包字段修正 + v3.0.0 发布备货 —— 完成于 2026-08-05 22:54
+
+> 用户在可达 dblp.org 的网络下运行了步骤 39 留库的 `_verify/dblp_field_probe.py`，回报了真实抓包样本（`?q=graph&format=json&h=2` 的 hit[0]，单作者 "Books and Theses" 类型）。本步骤据此修正 `dblp.py` 归一化映射，并把 v3.0.0 打包到"可直接 uv publish"状态。
+
+**A. dblp.py 字段修正（`src/uniarticles/sources/dblp.py`）**
+- **单/多态作者兼容——已确认正确、无需改动**：真实样本 `info.authors.author` 是**单个 dict**（`{"@pid","text"}`），步骤 39 已用的 `_as_list()` 模式正确把它归一为 `["Michel Burlet"]`。这正是 dblp 经典陷阱（单作者=dict、多作者=list），既有实现已覆盖，本步骤仅更新注释把"依官方文档、未经真实验证"改为"真实抓包已确认"。
+- **新增 `access` 字段**：真实样本含 `info.access="open"`，此前归一化结构漏采，本步骤补入 `"access": info.get("access")`。
+- **`ee`/`url` 由"合并"改为"拆分两字段"**：真实样本证实两者是**不同语义的独立字段**——`ee`=电子版/论文实际链接（`https://tel.archives-ouvertes.fr/...`）、`url`=dblp 记录页（`https://dblp.org/rec/...`）。原实现 `info.get("url") or info.get("ee")` 会丢失论文实际链接，改为分别输出 `"ee"` 与 `"url"` 两个字段。
+- **`venue`/`doi` 保留但标注为"文档依据、尚未真实抓包确认"**：本次样本是缺字段的论文类型（无 venue/volume/pages/doi 等期刊常见字段）。按用户约束"没见过真实数据的字段不臆造路径"——`info.venue`/`info.doi` 系 dblp 官方 API 文档字面路径（非臆造），且 `doi` 是跨数据源统一归一化结构里的一等字段（其他源都输出 doi），故保留、用安全 `.get()` 兜底（缺失即 `None`，绝不报错），并在代码注释与 docstring 显式标注"待期刊类型样本真实确认"。**未**因这一条缺字段样本反向删除或改动它们的路径。
+- **docstring 更新**：移除步骤 39 遗留的"字段映射未经真实抓包验证"整段警示，改为准确描述"外层 @id/@score vs 内层 info.*、单/多作者形态、access/ee/url 均已真实确认；venue/doi 仍待期刊样本确认"。
+
+**B. dblp 真实回归验证情况**
+- **离线回归（已通过，脱离网络独立完成）**：用用户回报的真实 JSON hit 直接喂给 `_normalize()`——单作者 dict → `["Michel Burlet"]`、`access="open"` 正确采集、`ee`/`url` 正确拆分、`venue`/`doi` 缺失时安全为 `null` 不报错；另用合成多作者+含 venue/doi 样本验证 list 形态与期刊字段路径可正常解析。字段层修正确认无误。
+- **⚠️ 本环境真实网络回归仍缺**：本构建环境对 `dblp.org` 的 TLS 握手**再次超时失败**（`ConnectTimeout: handshake operation timed out`，与步骤 28~33/39 现象完全一致，属 QA-R013 已知网络波动，**非代码问题**）。故**未能**在本环境实际调用 `dblp_publication_search_by_query` 工具做真实端到端回归。**代码层字段修正已依用户真实抓包完成并通过离线回归审查；真实端到端回归待用户在可达网络下自行触发一次即可。**
+
+**C. Semantic Scholar "无 key 不发布"现状复核（已确认成立）**
+- 实际执行 `create_server()` → `list_tools()`，在 `SEMANTIC_SCHOLAR_API_KEY` **未设置**（`.env` 本就只含 `SCOPUS_API_KEY`/`CORE_API_KEY`，无 SS key）情况下：**工具总数 25、Semantic Scholar 两工具均不出现**、其余 15 数据源工具全部正常注册。条件注册架构（步骤 37/38）行为符合预期，满足用户"SS 暂不发布、其余照发"诉求，**无需任何额外代码改动**。
+- **README 无需改动**：README×2 早在步骤 41 已用与 Elsevier key 一致的说明模式写明 Semantic Scholar 两工具"仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册"（README.md 195-196 / README_ZH.md 193-194），顶部限制段亦已说明 25/27 工具计数差异（第 33 行）。按用户"已有类似说明模式可照抄、勿重新发明"要求，本步骤不重复添加。
+
+**D. v3.0.0 打包备货**
+- **清理 dist/**：删除残留旧版本产物（`uniarticles_mcp-2.2.0.*`、`uniarticles_mcp-2.3.0.*` 共 4 个文件），避免重演"未清 dist 导致 publish 同时上传新旧版本"的教训。清理后 dist/ 仅剩 `.gitignore`。
+- **版本号复核**：`pyproject.toml` `version = "3.0.0"`，步骤 41 改动未被后续误改回，确认无误。
+- **`uv build`**：成功生成 `dist/uniarticles_mcp-3.0.0.tar.gz` + `dist/uniarticles_mcp-3.0.0-py3-none-any.whl`，dist/ 内**仅**此版本产物、无旧版本混入。
+- **产物内容核验**：解包 wheel 确认 `uniarticles/sources/dblp.py` 已含本步骤修正（`access`/`ee` 字段、step 43 注释），`METADATA` 版本为 `3.0.0`——即打进包的确实是修正后的代码。
+
+**E. 最终整体回归（全部通过）**
+- `create_server()` 正常构建；
+- **stdout 洁净性**：fd 级捕获 import+build+`list_tools()` 全程 stdout = **0 字节**（MCP stdio 协议硬性要求，paperscraper/urllib3 的警告均走 stderr，不污染协议帧）；
+- **工具总数核对**：未配 SS key 时 **25 工具 / 15 数据源**，与步骤 40/41 实测基线一致。
+
+**涉及文件**
+- `src/uniarticles/sources/dblp.py`：`_normalize()` 新增 `access`、拆分 `ee`/`url`、注释与 docstring 依真实抓包更新；`_extract_authors()` 注释更新（逻辑未变）。
+- `project-docs/buildlog.md`：本步骤记录。
+- `dist/`：清理旧版本 + `uv build` 生成 3.0.0 产物（dist/ 由 `.gitignore` 忽略，不进 git）。
+
+**遇到的问题及解决方案**
+- 本环境 dblp.org TLS 握手超时 → 按 QA-R013 判为网络波动非代码 bug，转为离线回归（用真实抓包 JSON 喂 `_normalize`）完成字段修正审查，真实端到端回归如实注明待用户在可达网络触发。
+
+### 下一步计划
+- ✅ **本轮（步骤 43）dblp 字段修正 + v3.0.0 发布备货已完成**：dist/ 内为干净的 3.0.0 单版本产物，整体回归（构建/stdout 洁净/工具计数）通过。构建侧无待执行步骤。
+- ⏭️ **发布由用户手动执行**：在项目根目录运行 `uv publish`（凭据按 uv 既有配置/环境变量提供）。dist/ 已确认仅含 3.0.0 产物，可直接发布。
+- ⏭️ **dblp 真实端到端回归**：用户可在可达 dblp.org 的网络下调用一次 `dblp_publication_search_by_query` 做最终确认（代码层字段已依真实抓包修正，预期正常）。
+- ⏭️ **venue/doi 期刊类型样本确认（可选）**：若用户日后取得一条 dblp 期刊/会议论文真实响应，可顺手核对 `info.venue`/`info.doi` 路径（当前依官方文档、安全兜底，缺失不报错）。
+
+---
