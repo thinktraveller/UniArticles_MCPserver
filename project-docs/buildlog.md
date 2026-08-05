@@ -832,4 +832,16 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **OpenAIRE**（`openaire_research_product_search_by_query`）：端点 `api.openaire.eu/search/researchProducts`（`keywords=`）。**深层嵌套坑点已处理**：`response.results.result[]` → `metadata["oaf:entity"]["oaf:result"]`；自包含 `_as_list()`（单元素 dict / 多元素 list 兼容，不跨文件导入 scopus 版本）+ `_text()`（取 `{"$":...}` 文本载荷）。**编码前 probe 确认的筛选写法**：`title` 从 `title[]` 中挑 `@classid=="main title"`（否则取首项）、`doi` 从 `pid[]` 中挑 `@classid=="doi"` 的 `$`、`creator[].$`、`subject[].$`、`bestaccessright.@classname`、`publisher.$`、`dateofacceptance.$`。归一化 `title/authors/doi/publisher/publication_date/best_access_right/subjects`。docstring 附注参考项目历史 403、本环境未复现。
 - **真实验证**（本地 src + 真实网络）：3 源检索均 `ok:true`；HAL 标量字段确为字符串（非数组）；OpenAIRE `title` 展平为文本（非 dict），窄关键词单结果经 `_as_list` 正确处理（VoxResNet count=1），验证单元素被压缩为 dict 的兼容分支。
 
+### 步骤 37：批次三实现——Semantic Scholar（条件注册）/ CORE —— 完成于 2026-08-05 21:50
+
+- **新增文件**：`src/uniarticles/sources/semantic_scholar.py`（条件注册）、`core.py`（无条件注册）。
+- **Semantic Scholar**（`semantic_scholar_paper_search_by_query` / `semantic_scholar_paper_detail_by_doi`）：端点 `api.semanticscholar.org/graph/v1/paper/search` 与 `/paper/DOI:{doi}`，有 key 走 `x-api-key` 头。**模块级条件注册**：`register()` 内若 `settings.semantic_scholar_api_key` 为空则**提前 `return`**（`@server.tool()` 根本不执行），两工具全部不注册——**不是**"注册后工具内报错"。请求携带 `fields=title,abstract,authors,year,citationCount,externalIds`（默认字段过薄）。归一化 `paper_id/doi(externalIds.DOI)/arxiv_id(ArXiv)/pubmed_id(PubMed)/title/abstract/authors/year/cited_by_count(citationCount)`。
+- **CORE**（`core_work_search_by_query`）：端点 `api.core.ac.uk/v3/search/works`，有 key 走 `Authorization: Bearer`。**无条件注册**（对齐 Elsevier 式）。**关键实现细节**：(a) `follow_redirects=True`——CORE 会间歇性 301 重定向，不跟随会把正常请求当 3xx 错误；(b) 429 时不抛裸异常，而是把 `x-ratelimit-retry-after`/`Retry-After` 头整理进 `_err.message`（含"配置 CORE_API_KEY 提额"提示）。归一化 `title/authors/abstract/doi/cited_by_count(citationCount)/download_url(downloadUrl)/arxiv_id/pubmed_id`，`download_url` 只暴露链接、不塞 `fullText` 全文。
+- **CORE key 有效性核实**：编码前 probe 发现直连一度 401/429，逐层排查确认根因是**独立探测脚本未 `load_dotenv` 导致 key 未加载**；用 `.env` 真实 `CORE_API_KEY`（len 32）+ Bearer 头请求返回 **200**，key 确实有效（对应计划书步骤 37 风险提示"key 调用失败先核实鉴权头/加载而非假设 key 无效"）。
+- **真实验证**：
+  - **CORE**（真实 key）：`ok:true, count:2`，字段正确（title/doi/authors/cited_by_count）。
+  - **Semantic Scholar 条件注册专项**（本步骤最重要验证）：用临时 `FastMCP` + `list_tools()` 三态验证——① 当前环境无 key → SS 工具数 **0**（不出现）；② 注入测试用 `SEMANTIC_SCHOLAR_API_KEY` 并 reload config/模块 → SS 工具数 **2**（均出现）；③ 再移除 key + reload → 工具数回到 **0**（无缓存/残留状态）。逻辑正确。
+  - **SS by-DOI 归一化**（无 key 亦可，对应 buildlog 步骤 29）：`10.1016/j.physletb.2012.08.020` → `ok:true`，`paper_id/doi/year(2012)/cited_by_count(1323)/title` 正确，证明归一化字段映射无误。
+- **待用户验证**：真实 **关键词检索** 路径需用户申请到 `SEMANTIC_SCHOLAR_API_KEY` 后自行验证（QA-R012 记录 key 申请中；无 key 时共享池 429 锁死，非本实现问题）。条件注册逻辑与 by-DOI 归一化本轮已验证。
+
 ---
