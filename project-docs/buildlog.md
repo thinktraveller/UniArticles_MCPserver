@@ -824,4 +824,12 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - **真实验证**（本地 src + 真实网络，一次性脚本 scratchpad 未提交）：4 源检索均 `ok:true` 且 `items` 为逐字段结构；OpenAlex/Crossref by-DOI 用 `10.1016/j.physletb.2012.08.020` 均正确返回 Higgs 论文；坏 DOI → 404 由 `raise_for_status` 抛出、工具层 `try/except` 转 `_err`（验证脚本直调私有函数复现 404 抛出，符合预期）。
 - **已知外部瞬态**：验证期间 **OpenAlex 间歇性返回 503 "Anonymous search is paused while the search cluster recovers from heavy load. Please retry shortly, or use a free API key"**（约 5/6 请求，偶发 200）——这是 OpenAlex 服务端对无 key 匿名检索的临时限流（其错误信息明示可重试或申请免费 key），**非本实现缺陷**：OpenAlex 在步骤 29/33 原始探测及本轮编码前 probe 均确认 200 可用、字段结构完整，重试后本轮亦取得 200 并验证归一化正确。工具遇 503 时正常走 `_err`（返回 OpenAlex 的错误文本），不崩溃。按项目"无自行重试"惯例（见步骤 39.2 理由）未加自动退避。属 QA-R013 语境下的服务端瞬态，非本环境网络拦截，故不单列 `_verify/` 脚本，仅此如实留痕。
 
+### 步骤 36：批次二实现——Zenodo / HAL / OpenAIRE —— 完成于 2026-08-05 21:50
+
+- **新增文件**：`src/uniarticles/sources/zenodo.py`、`hal.py`、`openaire.py`，均无 key。
+- **Zenodo**（`zenodo_record_search_by_query`）：端点 `zenodo.org/api/records`，**固定携带 `type=publication`**（Zenodo 是通用仓库含数据集/软件，不过滤会混入非论文；不作为可选参数暴露）。归一化 `doi/conceptdoi/title/authors(metadata.creators[].name)/description/publication_date/resource_type/resource_subtype/file_links`。`file_links` 只取 `files[].{key→filename, size, links.self→link}`，**不搬运文件内容**（对齐 `sciencedirect_article_object_by_identifier` 只暴露元信息/链接原则）。验证：3 条结果 `resource_type` 全为 `publication`。
+- **HAL**（`hal_document_search_by_query`）：端点 `api.archives-ouvertes.fr/search/`（Solr），**`fl` 显式指定字段** `docid,title_s,abstract_s,authFullName_s,doiId_s,uri_s,docType_s`。**编码前 probe 确认**：`title_s`/`abstract_s`/`authFullName_s` 均为**数组**→ `title`/`abstract` 用 `_first()` 取首项得字符串（验证 `type=str`）、`authors` 保留列表；`doiId_s`/`uri_s`/`docType_s`/`docid` 为标量。docstring 如实标注 HAL 偏法语/欧洲文献覆盖。
+- **OpenAIRE**（`openaire_research_product_search_by_query`）：端点 `api.openaire.eu/search/researchProducts`（`keywords=`）。**深层嵌套坑点已处理**：`response.results.result[]` → `metadata["oaf:entity"]["oaf:result"]`；自包含 `_as_list()`（单元素 dict / 多元素 list 兼容，不跨文件导入 scopus 版本）+ `_text()`（取 `{"$":...}` 文本载荷）。**编码前 probe 确认的筛选写法**：`title` 从 `title[]` 中挑 `@classid=="main title"`（否则取首项）、`doi` 从 `pid[]` 中挑 `@classid=="doi"` 的 `$`、`creator[].$`、`subject[].$`、`bestaccessright.@classname`、`publisher.$`、`dateofacceptance.$`。归一化 `title/authors/doi/publisher/publication_date/best_access_right/subjects`。docstring 附注参考项目历史 403、本环境未复现。
+- **真实验证**（本地 src + 真实网络）：3 源检索均 `ok:true`；HAL 标量字段确为字符串（非数组）；OpenAIRE `title` 展平为文本（非 dict），窄关键词单结果经 `_as_list` 正确处理（VoxResNet count=1），验证单元素被压缩为 dict 的兼容分支。
+
 ---
