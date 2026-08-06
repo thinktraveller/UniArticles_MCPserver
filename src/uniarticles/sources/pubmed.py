@@ -208,6 +208,65 @@ async def _search(query: str, max_results: int) -> dict:
     return _ok(query=query, items=items)
 
 
+# --------------------------------------------------------------------------- #
+# ESummary (lightweight batch metadata)
+# --------------------------------------------------------------------------- #
+def _clean_pmids(pmids: list[str], cap: int) -> list[str]:
+    """Normalize a PMID list: defensive comma-split (some MCP clients may pass a
+    single comma-joined string element), strip, drop empties, dedupe (order-preserving),
+    cap the batch size (NCBI recommends <=200 IDs per GET)."""
+    flat: list[str] = []
+    for raw in pmids:
+        if raw is None:
+            continue
+        for part in str(raw).split(","):
+            part = part.strip()
+            if part:
+                flat.append(part)
+    seen: set[str] = set()
+    deduped = [p for p in flat if not (p in seen or seen.add(p))]
+    return deduped[:cap]
+
+
+def _normalize_summary(entry: dict) -> dict:
+    uid = entry.get("uid")
+    if entry.get("error"):
+        # Invalid/not-found PMID: surface it as a per-item error so the caller sees
+        # exactly which requested IDs failed, while the overall call stays ok=True.
+        return {"pmid": uid, "error": entry.get("error"), "title": None, "authors": [],
+                "journal": None, "publication_date": None, "doi": None, "pmcid": None,
+                "pii": None, "pubstatus": None, "pmcrefcount": None, "elocationid": None}
+    ids = {a.get("idtype"): a.get("value") for a in entry.get("articleids", []) or [] if isinstance(a, dict)}
+    authors = [a.get("name") for a in entry.get("authors", []) or [] if isinstance(a, dict) and a.get("name")]
+    return {
+        "pmid": uid,
+        "error": None,
+        "title": entry.get("title"),
+        "authors": authors,
+        "journal": entry.get("fulljournalname") or entry.get("source"),
+        "publication_date": entry.get("pubdate") or entry.get("epubdate"),
+        "doi": ids.get("doi"),
+        "pmcid": ids.get("pmc"),  # e.g. "PMC6286148"; absent when no PMC full text
+        "pii": ids.get("pii"),
+        "pubstatus": entry.get("pubstatus"),
+        "pmcrefcount": entry.get("pmcrefcount"),
+        "elocationid": entry.get("elocationid"),
+    }
+
+
+async def _esummary(pmids: list[str]) -> list[dict]:
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        response = await client.get(
+            f"{BASE_URL}esummary.fcgi",
+            params=_params({"id": ",".join(pmids), "retmode": "json"}),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    result = payload.get("result", {}) or {}
+    uids = result.get("uids", []) or []
+    return [_normalize_summary(result[uid]) for uid in uids if uid in result]
+
+
 def register(server: FastMCP) -> None:
     # Unconditional registration (mirrors CORE/Elsevier): NCBI works without a key,
     # NCBI_API_KEY only raises the rate limit. Tools added in steps 45~48.
@@ -226,3 +285,19 @@ def register(server: FastMCP) -> None:
             return await _search(query=normalized_query, max_results=bounded)
         except Exception as exc:  # noqa: BLE001
             return _err(query=normalized_query, message=str(exc))
+
+    @server.tool()
+    async def pubmed_paper_summary_lookup_by_pmids(pmids: list[str]) -> dict:
+        """Look up lightweight PubMed metadata for a batch of PMIDs via ESummary.
+        Faster than a full fetch and carries fields the search tool lacks (pmcid,
+        pubstatus, pmcrefcount, elocationid). Invalid PMIDs are returned as items
+        with a per-item ``error`` field rather than failing the whole call. Max 200
+        PMIDs per call (excess is truncated)."""
+        cleaned = _clean_pmids(pmids or [], cap=200)
+        query = ",".join(cleaned)
+        if not cleaned:
+            return _err(query=query, message="pmids must not be empty")
+        try:
+            return _ok(query=query, items=await _esummary(cleaned))
+        except Exception as exc:  # noqa: BLE001
+            return _err(query=query, message=str(exc))

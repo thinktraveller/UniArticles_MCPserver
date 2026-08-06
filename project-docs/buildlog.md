@@ -1032,3 +1032,24 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 46：新增 `pubmed_paper_summary_lookup_by_pmids`（ESummary 批量，`list[str]` 入参 + 逗号字符串两方案兼容性均需验证）。
 
 ---
+
+### 步骤 46(v3.1.0)：新增 pubmed_paper_summary_lookup_by_pmids（ESummary 批量元数据）—— 完成于 2026-08-07 02:08
+
+**执行的任务**
+- 参数签名 `pmids: list[str]`（依计划书首选方案，类型清晰）。**对冲 FastMCP `list[str]` 客户端兼容性风险**：`_clean_pmids` 做防御性逗号拆分——若某客户端把整批 PMID 作为**单个逗号串元素**传入（`['a,b']`），内部 `str(raw).split(",")` 仍能正确拆分；同时去空、去重（保序）、上限 200 截断（NCBI GET 建议）。
+- `_normalize_summary`：有效条目提取 `pmid`/`title`/`authors`（`[{name}]`→字符串数组，与 EFetch 的 authors 形态跨工具一致）/`journal`（fulljournalname 优先）/`publication_date`/`doi`/`pmcid`（`articleids[idtype='pmc']`，如 `PMC6286148`）/`pii`/`pubstatus`/`pmcrefcount`/`elocationid`；无效 PMID（ESummary 返回 `error='cannot get document summary'`）作为**带 `error` 字段的 item** 返回，顶层保持 `ok:true`（部分成功，明确标注哪些 PMID 失败）。
+- `_esummary`：`result.uids` 遍历 → `_normalize_summary`。
+- register() 新增工具 `pubmed_paper_summary_lookup_by_pmids`（空输入报错，其余走 `_ok`）。
+
+**验证结果（真实 NCBI 调用）**
+- 单个 PMID 22745249（Jinek 2012）：pmcid=`PMC6286148`、pii、pubstatus、pmcrefcount=38、doi、6 位作者全部解析——确认 ESummary 提供 EFetch 检索工具没有的差异化字段（立项依据成立）。
+- 批量 `['22745249','25430774','999999999',' 22745249 ','']`：`_clean_pmids` 正确得到 3 个去重值；无效 `999999999` 作为 `error='cannot get document summary'` 的 item 返回，其余有效项正常。
+- 单元素逗号串 `['22745249,25430774']`：防御性拆分为两个 PMID，兼容非标准客户端传参。
+
+**遇到的问题及解决方案**
+- FastMCP `list[str]` 入参在真实 Cherry Studio 客户端的编解码行为本环境无法直接验证（无真实客户端）→ 采用"list[str] 首选 + 单元素逗号串防御性拆分"双保险，两种传参形态均可正确解析，把兼容性风险降到最低（步骤 52 若有真实客户端可再复核）。
+
+**下一步计划**
+- ⏭️ 步骤 47：新增 `pubmed_related_article_search_by_pmid`（ELink neighbor，取 `pubmed_pubmed` 分组、剔除自身、切片 max_results）。
+
+---
