@@ -1092,3 +1092,29 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 49：`sources/__init__.py` 接入改名（register_pubmed_source）+ `pyproject.toml` 移除 paperscraper/pandas + 用户执行 uv lock/sync（环境操作，提供命令）+ 全仓库检索确认无遗留 + `__init__.py` stdout 防御代码去留决策。
 
 ---
+
+### 步骤 49(v3.1.0)：__init__.py 接入改名 + 移除依赖 + 检索确认 + stdout 防御决策 —— 完成于 2026-08-07 02:30
+
+**执行的任务**
+- `src/uniarticles/sources/__init__.py`：`from .paperscraper import register as register_paperscraper_source` → `from .pubmed import register as register_pubmed_source`；`register_all_sources()` 内调用改为 `register_pubmed_source(server)`，**位置维持在 v2.x 既有数据源分组内不变**（本轮非 QA-R006 顺序调整任务，不动无关注册顺序）。
+- `pyproject.toml`：`dependencies` 移除 `"paperscraper"` 与 `"pandas>=2.0.0"` 两行（后者为计划书基于全仓库检索确认"仅 paperscraper.py 引用 pandas"的衍生决策）。
+- **`src/uniarticles/__init__.py` stdout 防御代码去留决策 —— 选择【方案二：保留作为通用防御】**（计划书倾向方案二）。理由：`logging.basicConfig(stream=sys.stderr,...)` 抢占 root logger 这层防线的边际成本仅数行代码，远低于"未来某新依赖再次 `basicConfig(stream=sys.stdout)` 污染协议帧、又要重排查一次"的风险；这正是本项目从 paperscraper 事件学到的教训，主动放弃无收益。已把注释从"根因是 paperscraper"改为**通用措辞**（不再点名具体包，仅把 paperscraper 作为历史一例提及）。
+- **全仓库检索确认无遗留代码引用**（实际执行，非印象）：
+  - `src/` 下搜 `register_paperscraper_source`/`"paperscraper"`(值)/`from .paperscraper`/`import pandas`/`pandas as pd`：**仅剩 `pubmed.py:35` 一条说明性注释**（标注 source 字段历史值变化），无任何实际代码引用（计划书 step 49.4 允许说明性注释保留）。
+  - 全仓库（含文档）`paperscraper`(大小写不敏感)命中 10 文件：`src` 3 文件均为说明性注释/docstring；`README.md`/`README_ZH.md`/`teach.md` 属步骤 50 待改；`goal.md`/`project-plan.md`/`buildlog.md` 为历史记录如实保留；`uv.lock` 待用户 `uv lock` 重生成。
+
+**验证结果（代码层，不依赖 uv sync）**
+- `.venv` 下 `import uniarticles` + `create_server()` + `list_tools()`：**exit 0，无 ImportError**（代码已不再 import paperscraper，即使 .venv 尚未 sync 也正常）。
+- **工具总数 28**（未配 `SEMANTIC_SCHOLAR_API_KEY`），4 个 pubmed 工具全部注册：`pubmed_paper_search_by_query`/`pubmed_paper_summary_lookup_by_pmids`/`pubmed_related_article_search_by_pmid`/`pubmed_pmc_linkage_lookup_by_pmid`。符合 25→28（配 SS key 则 30）。
+- stderr 仅剩一条 urllib3/requests 版本不匹配警告（他包引入，走 stderr 无害），paperscraper 的 biorxiv/chemrxiv dump 缺失警告已消失（不再被 import）。
+
+**待用户执行的环境操作（依安全规范/计划书 step 49.3，不静默运行）**
+- `uv lock`（重生成锁文件，移除 paperscraper 及传递依赖 pymed-paperscraper/scholarly/boto3/matplotlib/seaborn/matplotlib-venn 等）→ `uv sync`（同步 .venv）→ `uv pip show paperscraper`/`uv pip show pymed-paperscraper`（确认已移除）。命令已在完成汇报中原样提供给用户。**uv.lock 的重生成与 .venv 物理清理待用户执行；本步骤仅完成 pyproject.toml/代码层改动。**
+
+**遇到的问题及解决方案**
+- 无。
+
+**下一步计划**
+- ⏭️ 步骤 50：README.md/README_ZH.md/CLAUDE.md/teach.md 文档同步（新增 3 工具行、计数 25/27→28/30、新增 NCBI_API_KEY 说明、paperscraper→pubmed 引用替换）。
+
+---
