@@ -1053,3 +1053,22 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 47：新增 `pubmed_related_article_search_by_pmid`（ELink neighbor，取 `pubmed_pubmed` 分组、剔除自身、切片 max_results）。
 
 ---
+
+### 步骤 47(v3.1.0)：新增 pubmed_related_article_search_by_pmid（ELink neighbor）—— 完成于 2026-08-07 02:14
+
+**执行的任务**
+- `_links_for(payload, linkname)`：通用辅助，按指定 `linkname` 提取纯 ID 列表；linkname 缺失时返回 `[]`——**明确区分"结构缺失导致的合法空结果"（如新文献 NCBI 尚未算出 neighbor）与"解析失败"**（步骤 47 风险点要求），不把前者误判为后者。
+- `_related(pmid, max_results)`：调用 ELink `cmd=neighbor`，取 **`pubmed_pubmed`** 分组（经典"相似文献"，按相关度排序），links 为纯 PMID 字符串**无 score**（步骤 43 确认）；**剔除查询 PMID 自身**（通常是首个 neighbor），再切片 `max_results`。归一化为 `[{"pmid": id}]`；**不在工具内对每个相关 PMID 再发 EFetch/ESummary**（避免 N+1，职责单一，与 get_article_objects"只给链接不二次拉取"原则一致）。
+- register() 新增 `pubmed_related_article_search_by_pmid`（`pmid` 单值，空报错；`max_results` clamp `[1,100]`）。命名用 `_search`（结果是列表、非单值查找），符合方案 A 风格。
+
+**验证结果（真实 NCBI 调用）**
+- 成熟 PMID 22745249（max 5）：返回 5 条 `['27096362','22949671','23563642','22965054','23535272']`，**自身已剔除**、正确切片。
+- 新文献 PMID 42560391（max 10）：返回 count=0（neighbor 未计算，走 `ok:true, items:[]` 合法空结果，非报错）。
+
+**遇到的问题及解决方案**
+- 无。
+
+**下一步计划**
+- ⏭️ 步骤 48：新增 `pubmed_pmc_linkage_lookup_by_pmid`（ELink PMC，`pubmed_pmc`=自身全文 / `pubmed_pmc_refs`=被引 PMC 文章，两分组明确区分）。
+
+---

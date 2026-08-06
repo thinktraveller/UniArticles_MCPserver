@@ -267,6 +267,40 @@ async def _esummary(pmids: list[str]) -> list[dict]:
     return [_normalize_summary(result[uid]) for uid in uids if uid in result]
 
 
+# --------------------------------------------------------------------------- #
+# ELink neighbor (related articles)
+# --------------------------------------------------------------------------- #
+def _links_for(payload: dict, linkname: str) -> list[str]:
+    """Extract the plain PMID/ID list under a specific ELink ``linkname``.
+
+    Returns [] when the linkname is absent — which is a legitimately empty result
+    (e.g. a brand-new article NCBI hasn't computed neighbors for yet), NOT a parse
+    failure. Callers rely on this distinction (see plan step 47 risk note)."""
+    for linkset in payload.get("linksets", []) or []:
+        for db in linkset.get("linksetdbs", []) or []:
+            if db.get("linkname") == linkname:
+                return [str(x) for x in (db.get("links", []) or [])]
+    return []
+
+
+async def _related(pmid: str, max_results: int) -> list[dict]:
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        response = await client.get(
+            f"{BASE_URL}elink.fcgi",
+            params=_params(
+                {"dbfrom": "pubmed", "db": "pubmed", "id": pmid, "cmd": "neighbor", "retmode": "json"}
+            ),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    # "pubmed_pubmed" is the canonical "Similar articles" neighbor set (ranked by
+    # relevance). Links are plain PMID strings with NO score field (confirmed step 43).
+    related = _links_for(payload, "pubmed_pubmed")
+    # The query PMID itself is typically the first neighbor — drop it, then slice.
+    filtered = [pid for pid in related if pid != str(pmid)][:max_results]
+    return [{"pmid": pid} for pid in filtered]
+
+
 def register(server: FastMCP) -> None:
     # Unconditional registration (mirrors CORE/Elsevier): NCBI works without a key,
     # NCBI_API_KEY only raises the rate limit. Tools added in steps 45~48.
@@ -301,3 +335,18 @@ def register(server: FastMCP) -> None:
             return _ok(query=query, items=await _esummary(cleaned))
         except Exception as exc:  # noqa: BLE001
             return _err(query=query, message=str(exc))
+
+    @server.tool()
+    async def pubmed_related_article_search_by_pmid(pmid: str, max_results: int = 10) -> dict:
+        """Find PubMed articles topically related to a given PMID (NCBI ELink
+        'Similar articles' / pubmed_pubmed neighbor set, ranked by relevance).
+        Returns a list of related PMIDs (the source PMID itself is excluded). Call
+        pubmed_paper_summary_lookup_by_pmids on the results for their metadata."""
+        normalized_pmid = pmid.strip()
+        if not normalized_pmid:
+            return _err(query=pmid, message="pmid must not be empty")
+        bounded = max(1, min(max_results, 100))
+        try:
+            return _ok(query=normalized_pmid, items=await _related(normalized_pmid, bounded))
+        except Exception as exc:  # noqa: BLE001
+            return _err(query=normalized_pmid, message=str(exc))
