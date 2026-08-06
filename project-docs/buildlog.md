@@ -1072,3 +1072,23 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 48：新增 `pubmed_pmc_linkage_lookup_by_pmid`（ELink PMC，`pubmed_pmc`=自身全文 / `pubmed_pmc_refs`=被引 PMC 文章，两分组明确区分）。
 
 ---
+
+### 步骤 48(v3.1.0)：新增 pubmed_pmc_linkage_lookup_by_pmid（ELink PMC）—— 完成于 2026-08-07 02:20
+
+**执行的任务**
+- `_pmc_linkage(pmid)`：调用 ELink `dbfrom=pubmed&db=pmc`，复用 `_links_for` 提取**两个语义不同的 linkname 分组，明确不合并**（步骤 48 核心风险点）：`pubmed_pmc`=该文献**自身的 PMC 全文记录**、`pubmed_pmc_refs`=**引用它的其他 PMC 文章**。返回单 item（对齐 chembl 单值查询的 `items=[单个含分组 dict]` 模式）：`pmid`/`has_pmc_fulltext`(bool)/`own_pmc_fulltext`(PMC 前缀 id 列表)/`cited_by_pmc_count`/`cited_by_pmc_articles`(PMC 前缀 id 列表)。PMC 内部 id 统一加 `PMC` 前缀为规范 PMCID。
+- register() 新增 `pubmed_pmc_linkage_lookup_by_pmid`（`pmid` 单值，空报错）。docstring 显式说明两分组区别，防止调用方把"被引"误读为"有全文"。
+
+**验证结果（真实 NCBI 调用）**
+- PMID 22745249：`has_pmc_fulltext=True`、`own_pmc_fulltext=['PMC6286148']`、`cited_by_pmc_count=7515`（样例 `['PMC13441120','PMC13440432','PMC13440110']`）——两分组清晰区分。
+- 新文献 PMID 42560391：两组均空、`has_pmc_fulltext=False`、`cited_by_pmc_count=0`、`ok:true`（正常非错误）。
+
+**设计说明**：`cited_by_pmc_articles` 可能很大（本例 7515 条），额外提供 `cited_by_pmc_count` 便于调用方在不遍历全列表时即知规模；计划书 step 48 签名为 `pmid: str`（无 max_results/分页），故如实返回完整列表，不擅自加分页参数改变契约。
+
+**遇到的问题及解决方案**
+- 无。至此步骤 45~48 的 4 个 pubmed 工具全部实现并真实验证通过（尚未接入 `sources/__init__.py`，步骤 49 统一接入）。
+
+**下一步计划**
+- ⏭️ 步骤 49：`sources/__init__.py` 接入改名（register_pubmed_source）+ `pyproject.toml` 移除 paperscraper/pandas + 用户执行 uv lock/sync（环境操作，提供命令）+ 全仓库检索确认无遗留 + `__init__.py` stdout 防御代码去留决策。
+
+---

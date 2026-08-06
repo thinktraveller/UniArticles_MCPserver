@@ -301,6 +301,33 @@ async def _related(pmid: str, max_results: int) -> list[dict]:
     return [{"pmid": pid} for pid in filtered]
 
 
+# --------------------------------------------------------------------------- #
+# ELink PMC (own full text vs. citing PMC articles)
+# --------------------------------------------------------------------------- #
+async def _pmc_linkage(pmid: str) -> dict:
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        response = await client.get(
+            f"{BASE_URL}elink.fcgi",
+            params=_params({"dbfrom": "pubmed", "db": "pmc", "id": pmid, "retmode": "json"}),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    # Two DISTINCT relationships (step 43 confirmed the linknames) — must NOT be
+    # merged, or a caller could mistake "articles that cite it" for "it has full text":
+    #   pubmed_pmc      -> this article's OWN PMC full-text record
+    #   pubmed_pmc_refs -> other PMC articles that cite/reference this article
+    own = _links_for(payload, "pubmed_pmc")
+    cited_by = _links_for(payload, "pubmed_pmc_refs")
+    item = {
+        "pmid": str(pmid),
+        "has_pmc_fulltext": bool(own),
+        "own_pmc_fulltext": [f"PMC{x}" for x in own],
+        "cited_by_pmc_count": len(cited_by),
+        "cited_by_pmc_articles": [f"PMC{x}" for x in cited_by],
+    }
+    return _ok(query=str(pmid), items=[item])
+
+
 def register(server: FastMCP) -> None:
     # Unconditional registration (mirrors CORE/Elsevier): NCBI works without a key,
     # NCBI_API_KEY only raises the rate limit. Tools added in steps 45~48.
@@ -348,5 +375,20 @@ def register(server: FastMCP) -> None:
         bounded = max(1, min(max_results, 100))
         try:
             return _ok(query=normalized_pmid, items=await _related(normalized_pmid, bounded))
+        except Exception as exc:  # noqa: BLE001
+            return _err(query=normalized_pmid, message=str(exc))
+
+    @server.tool()
+    async def pubmed_pmc_linkage_lookup_by_pmid(pmid: str) -> dict:
+        """Look up a PMID's PubMed Central (PMC) linkages. Returns TWO distinct
+        groups, kept separate on purpose: 'own_pmc_fulltext' (this article's own
+        open-access PMC full-text record, if any — check 'has_pmc_fulltext') and
+        'cited_by_pmc_articles' (other PMC articles that cite it). Both empty is a
+        normal result, not an error."""
+        normalized_pmid = pmid.strip()
+        if not normalized_pmid:
+            return _err(query=pmid, message="pmid must not be empty")
+        try:
+            return await _pmc_linkage(normalized_pmid)
         except Exception as exc:  # noqa: BLE001
             return _err(query=normalized_pmid, message=str(exc))
