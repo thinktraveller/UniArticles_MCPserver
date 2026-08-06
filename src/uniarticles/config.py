@@ -46,6 +46,11 @@ class Settings:
         default_factory=lambda: os.getenv("SEMANTIC_SCHOLAR_API_KEY")
     )
     core_api_key: str | None = field(default_factory=lambda: os.getenv("CORE_API_KEY"))
+    # v3.1.0 optional key (unconditional registration, mirroring CORE — NOT Semantic
+    # Scholar). NCBI Entrez works fine WITHOUT a key; a key only raises the official
+    # rate limit from 3 to 10 requests/sec. So all pubmed tools register regardless of
+    # whether this is set (see buildlog step 44 / goal.md QA-R014).
+    ncbi_api_key: str | None = field(default_factory=lambda: os.getenv("NCBI_API_KEY"))
 
 
 settings = Settings()

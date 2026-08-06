@@ -986,3 +986,25 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 44：`config.py` 新增 `ncbi_api_key` 字段（无条件注册，对齐 `core_api_key`）+ 新建 `pubmed.py` 公共骨架（`BASE_URL`/`USER_AGENT`/`_ok`/`_err`/`_params`/`_headers`，`source="pubmed"`）。
 
 ---
+
+### 步骤 44(v3.1.0)：config.py 新增 ncbi_api_key + pubmed.py 公共骨架 —— 完成于 2026-08-07 01:48
+
+**执行的任务**
+- `src/uniarticles/config.py`：`Settings` 新增 `ncbi_api_key: str | None = field(default_factory=lambda: os.getenv("NCBI_API_KEY"))`，紧邻 `core_api_key`，注释明确其为**无条件注册**语义（对齐 CORE，非 Semantic Scholar 的条件注册）。
+- 新建 `src/uniarticles/sources/pubmed.py` 公共骨架：`BASE_URL`（eutils）、`USER_AGENT`（暂 `3.0.0`，与 v3.0.0 兄弟模块一致，步骤 51 统一核对版本号）、`_ok`/`_err`（`source="pubmed"`）、`_headers()`、`_params(extra)`（注入 tool/email/api_key，`db` 默认 pubmed 且可被 ELink PMC 覆盖为 pmc）。`register()` 暂 `pass`，工具在步骤 45~48 填充。
+- **限速策略决策（写入代码注释）**：不做客户端主动节流，对齐 core.py"仅在收到 429 时返回限速上下文"的既有模式；单次工具调用仅 1~2 个 HTTP 请求，远低于 NCBI 每秒上限，令牌桶/滑窗属过度设计；若步骤 52 真实观察到 429 再补。
+
+**关键变更**
+- `src/uniarticles/config.py`：新增 `ncbi_api_key` 字段。
+- `src/uniarticles/sources/pubmed.py`：新建（骨架，未接入 `__init__.py`，避免中间态注册半成品）。
+
+**验证结果**
+- `.venv` 下 import 验证：`settings.ncbi_api_key` 读到真实 key（present=True，不打印值）；`pubmed` 模块 import 无错；`_ok` 的 `source` 为 `"pubmed"`；`_params` 正确注入 `tool/email/db=pubmed/api_key`。
+
+**遇到的问题及解决方案**
+- 无（import 时 paperscraper 的 dump 缺失警告来自 `sources/__init__.py` 仍引用旧模块，走 stderr，步骤 49 移除后消失，非本步骤问题）。
+
+**下一步计划**
+- ⏭️ 步骤 45：`git mv paperscraper.py`→已新建 pubmed.py，改为删除旧 `paperscraper.py`；实现 `_esearch`+`_efetch`+`_normalize_article`（XML 解析，处理结构化摘要/列表标签缺失），重写 `pubmed_paper_search_by_query`。
+
+---
