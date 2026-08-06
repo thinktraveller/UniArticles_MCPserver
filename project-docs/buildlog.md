@@ -949,3 +949,40 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ **venue/doi 期刊类型样本确认（可选）**：若用户日后取得一条 dblp 期刊/会议论文真实响应，可顺手核对 `info.venue`/`info.doi` 路径（当前依官方文档、安全兜底，缺失不报错）。
 
 ---
+
+## v3.1.0 构建记录
+
+> 本轮（v3.1.0，QA-R014/QA-R015）：PubMed 数据源从第三方包 `paperscraper` 重构为直连 NCBI Entrez API，重写 1 个工具 + 新增 3 个工具 + 移除 `paperscraper`/`pandas` 依赖，工具总数由 25/27 增至 28/30，版本号 3.0.0 → 3.1.0。步骤编号 43~52 与 v3.0.0 收尾阶段的"步骤 43(v3.0.0)"是不同批次，git 提交以 `(v3.1.0)` 后缀区分（沿用 `构建步骤 43(v3.0.0)` 的既有区分约定）。
+
+### 步骤 43(v3.1.0)：NCBI 5 个端点真实复测 —— 完成于 2026-08-07 01:41
+
+**执行的任务**
+- 新建 `_verify/pubmed_eutils_field_probe.py`（比照 `_verify/dblp_field_probe.py`：standalone、仅标准库 `urllib`/`xml.etree.ElementTree`/`json`、只读、IPv4 脱敏、api_key 打码、支持从环境变量读取可选 `NCBI_API_KEY`）。
+- 用 `.env` 中真实 `NCBI_API_KEY`（36 字符）在**本构建环境**成功对 5 个端点各发起真实请求，全部 HTTP 200，**探测完全成功，无需走"待用户验证"妥协路径**。
+- 因首个样本 PMID（42560391，2026-08-06 新发布）的 ELink 关联尚未计算完成，另用高被引成熟 PMID `22745249`（Jinek 2012 CRISPR）补测 ELink neighbor/PMC 的**非空**真实结构。
+
+**关键探测结论（步骤 44~48 归一化/解析的权威依据）**
+- **ESearch（`esearch.fcgi?...&retmode=json`）**：PMID 列表在 `esearchresult.idlist`（字符串数组）；另有 `count`/`retmax`/`querytranslation`/`translationset`。带 key / 不带 key 均返回 200；NCBI **不在响应体标注实际生效限速值**，无法从响应体直接验证 3→10 请求/秒差异，仅确认两种调用方式均可用（如实记录，未编造）。
+- **EFetch（`efetch.fcgi?...&rettype=abstract&retmode=xml`）真实 XML 结构与陷阱**：
+  - 顶层 `.//PubmedArticle`，`PMID` 在 `MedlineCitation/PMID`（带 `Version` 属性），也在 `PubmedData/ArticleIdList/ArticleId[@IdType='pubmed']`。
+  - `ArticleTitle`：确需 `"".join(el.itertext())`（可能内嵌子标签）。
+  - **`Abstract/AbstractText` 二态实测确认**：样本[0] 单段无 Label；样本[1] **4 段带 Label**（`RATIONALE`/`METHODS`/`RESULTS`/`CONCLUSIONS`）——归一化须遍历全部分段并按 Label 拼接，不能只取第一段。
+  - `AuthorList/Author`：`LastName`+`ForeName`（+`Initials`/`Identifier[@Source='ORCID']`/`AffiliationInfo/Affiliation`）；机构作者用 `CollectiveName`（本批样本未出现，仍需判空）。
+  - **`KeywordList` 可整体缺失**实测确认（样本[1] 无 KeywordList）——必须 `.find(...) is not None` 判空。
+  - `doi` 双来源：`Article/ELocationID[@EIdType='doi']` 与 `ArticleIdList/ArticleId[@IdType='doi']`（本探测用后者成功取到）；`pii` 在 `ELocationID[@EIdType='pii']`。
+  - 日期双来源：`Article/ArticleDate`（Year/Month/Day 纯数字）与 `Journal/JournalIssue/PubDate`（Month 可能是 `Aug` 文本），需容错。
+  - 期刊：`Journal/Title` + `Journal/ISOAbbreviation` + `ISSN`。
+- **ESummary（`esummary.fcgi?...&retmode=json`）**：`result.uids` + 每 uid 一个字典。**pmcid 真实位置是 `articleids[]` 中 `idtype='pmc'`（值形如 `PMC6286148`）**，顶层 `pmcid` 键对无 PMC 全文的文献为空字符串/缺失。含差异化字段 `fulljournalname`、`elocationid`（形如 `pii: 86. doi: ...`）、`pubstatus`、`history`（发表状态历史列表）、`pmcrefcount`、`source`（期刊简称）。`authors` 为 `[{name, authtype, clusterid}]` 结构（与 EFetch 的 LastName/ForeName 拆分不同，归一化时统一形态）。
+- **ELink neighbor（`elink.fcgi?dbfrom=pubmed&db=pubmed&cmd=neighbor&retmode=json`）**：`linksets[0].linksetdbs[]` 含多个 linkname；**`pubmed_pubmed` 是经典"相似文献"列表**（成熟 PMID `22745249` 返回 100 条），另有 `pubmed_pubmed_citedin`（被引，7755 条）/`pubmed_pubmed_refs`（参考文献）/`pubmed_pubmed_reviews` 等。`links[]` 是**纯字符串 PMID，无 score/权重字段**；**首元素常为查询 PMID 自身，需过滤**。→ 步骤 47 取 `pubmed_pubmed` 分组、剔除自身、切片 max_results。
+- **ELink PMC（`elink.fcgi?dbfrom=pubmed&db=pmc&retmode=json`）**：`linksetdbs[]` 两个 linkname 恰好对应步骤 48 两分组——**`pubmed_pmc`=该文献自身的 PMC 全文**（`22745249` → PMC id `6286148`）、**`pubmed_pmc_refs`=引用/关联它的 PMC 文章列表**（7515 条）。新文献（42560391）`linksetdbs=0`，即两分组均空，属正常非错误。
+
+**关键变更**
+- 新增 `_verify/pubmed_eutils_field_probe.py`（`git add -f` 强制入库；`.gitignore:52` 的 `_verify` 规则是本机未提交改动，按 CLAUDE.md 约定不予改动，沿用 dblp 探测脚本的强制添加方式）。
+
+**遇到的问题及解决方案**
+- 首样本 PMID 太新导致 ELink 关联为空 → 用成熟高被引 PMID `22745249` 补测，采集到 neighbor/PMC 的真实非空结构，两种情况（有/无关联）均已覆盖。
+
+**下一步计划**
+- ⏭️ 步骤 44：`config.py` 新增 `ncbi_api_key` 字段（无条件注册，对齐 `core_api_key`）+ 新建 `pubmed.py` 公共骨架（`BASE_URL`/`USER_AGENT`/`_ok`/`_err`/`_params`/`_headers`，`source="pubmed"`）。
+
+---
