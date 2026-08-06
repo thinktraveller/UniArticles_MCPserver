@@ -86,6 +86,46 @@ def register_all_sources(server: FastMCP) -> None:
 2. **按实现特征分批（步骤 35～39）**：不再沿用探测阶段"推荐重点/中等价值"的分档（那是探测优先级维度，探测阶段已完成使命），改按**实现复杂度与代码结构共性**重新分批——批次一（步骤 35）是 4 个字段结构清晰、无 key 要求的标准检索源（OpenAlex/Crossref/Europe PMC/DOAJ）；批次二（步骤 36）是 3 个需要额外结构处理的检索源（Zenodo 的资源类型过滤、HAL 的 Solr 字段选择、OpenAIRE 的深层嵌套响应）；批次三（步骤 37）是 2 个需要"按 key 条件注册"新架构的源（Semantic Scholar/CORE，架构设计集中在同一步骤便于对照验证）；批次四（步骤 38）是 2 个语义特殊源（bioRxiv/medRxiv 浏览语义、ChEMBL DOI 查询语义），延续与其余 10 个通用检索源不同的参数模式约束；dblp（步骤 39）单列，因其"探测环境网络受限、真实字段结构尚未完整采集"+"已知间歇性网络失败风险"两个特殊性质，需要独立的编码前置探测与错误提示文案设计，不适合与其他任何批次合并处理。
 3. **收尾（步骤 40～42）**：`register_all_sources()` 统一接入全部 12 个新数据源（步骤 40）→ README/`pyproject.toml` 版本号统一更新至 `3.0.0`（步骤 41，延续本计划书此前确定的"全部落地后统一更新"策略）→ `buildlog.md` 记录 + 整体回归验证检查点（步骤 42，v3.0.0 最终交付节点）。
 
+### v3.1.0 范围补充（QA-R014/QA-R015，2026-08-07）
+
+v3.0.0 已在 QA-R013 全部定案发布（当前 `pyproject.toml` 版本号 `3.0.0`）。本轮范围源自用户重启此前作废的 QA-R009（2026-08-04，v2.4.0 调研）遗留决策点——"PubMed 检索改为直连 NCBI Entrez API"，经 QA-R014（范围对应方案C/新能力是否一并纳入/`NCBI_API_KEY` 注册模式）与 QA-R015（命名/字段对等性/版本号）两轮问答，`goal.md` 已完整闭环，无遗留待定事项。
+
+**本轮性质：重构 + 新增混合，且是一次用户已知情并接受的破坏性变更**，与此前 v2.3.0/v3.0.0（纯新增）不同，反而更接近 v2.2.0（QA-R004）"无过渡期破坏性变更"的先例——但范围窄得多，只涉及一个数据源模块：
+
+1. **重写**：现有 `pubmed_paper_search_by_query`（工具名不变）底层由"调用第三方包 `paperscraper`（内部依赖 `pymed_paperscraper`）"改为"直接 `httpx` 调用 NCBI 官方 Entrez `esearch.fcgi` + `efetch.fcgi`，自行解析返回 XML"。
+2. **改名**（破坏性，无过渡期，比照 v2.2.0 先例处理）：源码文件 `src/uniarticles/sources/paperscraper.py` → `pubmed.py`；`sources/__init__.py` 中 `register_paperscraper_source` → `register_pubmed_source`；`CLAUDE.md`/`README.md`/`README_ZH.md`/`project-docs/teach.md` 中对该文件名/函数名的引用同步更新；`_ok`/`_err` 硬编码写入 JSON 响应体的 `"source"` 字段值从 `"paperscraper"` 改为 `"pubmed"`（面向调用方可见的行为变化，用户已明确接受，无需设计兼容层或新旧字段值并存）。
+3. **新增 3 个独立工具**（同批交付，非独立评估，工具总数由当前 25/27 增至 **28/30**）：
+
+| 工具名（本计划书拟定，方案 A 命名风格） | 状态 | 对接端点 | 拟定参数 |
+|---|---|---|---|
+| `pubmed_paper_search_by_query` | 重写（工具名不变，仅底层实现与 `source` 字段值变化） | `esearch.fcgi` + `efetch.fcgi` | `query: str`, `max_results: int = 10` |
+| `pubmed_paper_summary_lookup_by_pmids` | 新增 | `esummary.fcgi` | `pmids: list[str]` |
+| `pubmed_related_article_search_by_pmid` | 新增 | `elink.fcgi`（`cmd=neighbor`） | `pmid: str`, `max_results: int = 10` |
+| `pubmed_pmc_linkage_lookup_by_pmid` | 新增 | `elink.fcgi`（`dbfrom=pubmed&db=pmc`） | `pmid: str` |
+
+   **命名说明**：延续项目既定"数据源_对象_动作(_by_限定词)"风格，与 `chembl_bioactivity_lookup_by_doi`（单值查询用 `_lookup_by_`）、`dblp_publication_search_by_query`/`biorxiv_paper_list_by_date_range`（列表类结果用 `_search_by_`/`_list_by_`）等既有命名保持同构：ESummary 是"给一批 PMID、查一批轻量元数据"的批量查找，故用 `summary_lookup_by_pmids`；ELink neighbor 返回的是"检索出的相关文献列表"，语义更接近搜索而非单值查找，故用 `related_article_search_by_pmid`；ELink PMC 关联查询是"给一个 PMID、查它在 PMC 的单一关联结果（内含两组子信息）"，故用 `pmc_linkage_lookup_by_pmid`。以上命名为本计划书拟定，非不可更改的最终方案——`project-builder-cn` 若在真实探测（步骤 43）后认为有更贴切的命名，可以调整，但须说明理由并保持方案 A 风格不变（同 v2.3.0 先例的处理方式）。
+
+4. **新增可选环境变量 `NCBI_API_KEY`**，采用**无条件注册模式**（对齐 Elsevier/CORE 先例）：不管是否配置该 key，全部 4 个 pubmed 相关工具均注册；配置了 key 时请求带上该参数，NCBI 官方限速从 3 请求/秒提升到 10 请求/秒；未配置时仍可正常使用。**与 Semantic Scholar 的条件注册模式明确区分**：Semantic Scholar 无 key 时确定性失败（实测 429），故 QA-R012 引入"无 key 不注册工具"；NCBI 官方 Entrez API 无 key 也完全可用、只是限速更严，不满足"确定性失败"的条件，因此本轮不扩大条件注册模式的适用范围，用户已在 QA-R014 明确选择维持无条件注册（`goal.md` 约束条件已记录这一区分依据）。用户确认 key 已配置在 `.env` 的 `NCBI_API_KEY` 变量中，具备真实验证条件。
+5. **字段归一化不预先规定**：重写后的检索工具与 3 个新工具的返回字段集合，均按 `project-builder-cn` 真实探测 NCBI 各端点返回结构（EFetch 为 XML，ESummary/ELink 通常可用 `retmode=json`）后如实确定，不强制与现有 `paperscraper` 输出字段一一对齐，允许有增有减——延续本项目"先探测再定字段，不凭空编字段"的一贯做法（同 QA-R006 对 `get_abstract_details`/`retrieve_article`、QA-R007/QA-R008 对 `serial_title_search`/`subject_classifications` 归一化任务的处理方式）。
+6. **依赖移除**：`pyproject.toml`/`uv.lock` 中的 `paperscraper` 依赖声明彻底移除；`pymed-paperscraper` 从未作为直接依赖出现在 `pyproject.toml`（是 `paperscraper` 拉入的传递依赖），随 `paperscraper` 移除、`uv lock` 重新生成锁文件后会自动一并清除，无需单独处理。**本计划书新增一项 `goal.md` 未逐字提及、但经代码核实后应一并处理的衍生决策**（比照 v2.1.0 步骤 8"清理 `ARXIV_DOWNLOAD_DIR` 死配置"先例，在此明确标注来源，避免被误认为超出授权范围或临场发挥）：`pandas>=2.0.0` 这条依赖经全仓库检索确认**仅被 `paperscraper.py` 一处引用**（`_to_items()` 用于把 `paperscraper` 返回的 `pd.DataFrame` 转成 `list[dict]`），本项目其余任何模块均未使用 `pandas`；重写后的 `pubmed.py` 自行解析 XML/JSON，不再需要 `pandas`，因此建议**一并从 `pyproject.toml` 移除 `pandas` 依赖**，减少不必要的依赖体积（这也是本轮"依赖精简"这一原始动机的一部分，见 `goal.md` 背景与动机）。
+7. **正式实现前必须先做真实 API 复测**：`goal.md`（QA-R014/约束条件）明确指出，本轮大量决策依据已作废的 QA-R009 探测结论（ESummary/ELink 三项候选端点实测 200 可用、无需 Key），但探测发生在数日之前，且本计划书截稿时仍未对 ESearch/EFetch 做过字段级真实抓包（此前 `paperscraper.py` 的间接实现从未暴露过 EFetch 原始 XML 结构）。因此本计划书将"真实复测"列为独立的强制前置步骤（步骤 43），比照 `_verify/dblp_field_probe.py` 的既有模式，覆盖 ESearch/EFetch/ESummary/ELink（neighbor）/ELink（PMC）共 5 个真实请求，产出诊断脚本到 `_verify/`（`goal.md` QA-R013 已确立的通用流程约束——不得仅凭 agent 自身探测环境的单次结果下结论）。
+
+**目标版本号 `3.1.0`**（当前 `pyproject.toml` 为 `3.0.0`），工具总数由 25 个（或配置 `SEMANTIC_SCHOLAR_API_KEY` 时 27 个）增至 **28 个（或 30 个）**，README.md/README_ZH.md 的工具清单/计数与文件名引用需同步更新。
+
+**本计划书组织的步骤 43～52**：
+- 步骤 43：NCBI 5 个端点真实复测（编码前置探测，产出脚本到 `_verify/`）。
+- 步骤 44：`config.py` 新增 `NCBI_API_KEY` + `pubmed.py` 公共骨架（`_ok`/`_err`/公共请求参数/限速处理策略）。
+- 步骤 45：重写检索工具 `pubmed_paper_search_by_query`（ESearch+EFetch，XML 解析）。
+- 步骤 46：新增 `pubmed_paper_summary_lookup_by_pmids`（ESummary）。
+- 步骤 47：新增 `pubmed_related_article_search_by_pmid`（ELink neighbor）。
+- 步骤 48：新增 `pubmed_pmc_linkage_lookup_by_pmid`（ELink PMC）。
+- 步骤 49：`sources/__init__.py` 接入改名 + 移除 `paperscraper`/`pandas` 依赖（含需用户确认的 `uv` 命令）+ 确认无遗留引用。
+- 步骤 50：文档同步更新（README.md/README_ZH.md/CLAUDE.md/`project-docs/teach.md`）。
+- 步骤 51：`pyproject.toml` 版本号提升至 `3.1.0`。
+- 步骤 52：`project-docs/buildlog.md` 记录本轮变更 + 整体回归验证（v3.1.0 最终交付检查点）。
+
+步骤 1～42（v2.0～v3.0.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
 ## 可行性分析
 
 ### 技术可行性评估
@@ -1718,6 +1758,347 @@ def register_all_sources(server: FastMCP) -> None:
 
 ---
 
+### 步骤 43：NCBI 5 个端点真实复测（编码前置探测，产出脚本到 `_verify/`）
+
+#### 目标说明
+`goal.md` 明确要求：本轮大量决策依据已作废的 QA-R009 探测结论，但探测发生在数日之前，且从未对 ESearch/EFetch 的真实响应结构做过字段级抓包（现有 `paperscraper.py` 是对第三方包的间接调用，从未直接看过 NCBI 原始响应）。按本项目一贯的"真实验证优先"方法论（同 QA-R001/QA-R002/QA-R007/QA-R013 的处理方式）及 QA-R013 新增的通用流程约束（验证脚本必须产出到 `_verify/` 供用户独立验证，不得仅凭 agent 自身探测环境的单次结果下结论），本步骤是步骤 44～48 编码工作的强制前置步骤，不得跳过直接编写归一化代码。
+
+#### 具体操作
+1. 在 `_verify/` 目录下新增 `pubmed_eutils_field_probe.py`，比照 `_verify/dblp_field_probe.py` 的既有模式：standalone、仅用标准库（`urllib.request`/`xml.etree.ElementTree`/`json`），不依赖项目自身代码或第三方包，可独立运行、只读、不改任何文件。
+2. 脚本依次对以下 5 个真实端点各发起一次请求（统一 base：`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/`），选用一个已知存在的真实 PMID 作为样本（建议用第 1 步 ESearch 返回的第一个真实命中 PMID，而非硬编码猜测的 PMID，避免样本本身不存在导致后续 4 个端点全部空转）：
+   - `esearch.fcgi?db=pubmed&term=<query>&retmax=5&retmode=json`：确认返回 `esearchresult.idlist` 结构与真实字段名。
+   - `efetch.fcgi?db=pubmed&id=<pmid>&rettype=abstract&retmode=xml`：**逐层打印完整 XML 树结构**（标签路径、每个候选归一化字段的真实出现次数）——比照 `dblp.py` 中"单作者是 dict、多作者是 list"的陷阱，PubMed XML 里 `AuthorList/Author`/`KeywordList/Keyword`/`MeshHeadingList/MeshHeading` 等列表型标签虽然 `ElementTree.findall()` 恒返回 `list`（不存在 JSON 那种 dict/list 二义性），但存在"整个列表标签缺失"（如机构统一署名、无关键词的老文献）这一容易被忽视的边界情况，脚本输出需明确标注。
+   - `esummary.fcgi?db=pubmed&id=<pmid>&retmode=json`：打印完整 JSON 结构，重点核对 `goal.md` 提到的"PMCID/PII/期刊全名/发表状态历史"等字段的真实键名。
+   - `elink.fcgi?dbfrom=pubmed&db=pubmed&id=<pmid>&cmd=neighbor&retmode=json`：打印 `linksets[].linksetdbs[].links[]` 真实结构，确认是否带 score/权重字段。
+   - `elink.fcgi?dbfrom=pubmed&db=pmc&id=<pmid>&retmode=json`：打印返回结构，确认"该文献自身在 PMC 有无全文"与"哪些 PMC 文章引用/关联了它"分别对应哪个 `linkname`/字段路径（`goal.md` 描述这是两种不同信息，需要脚本输出中明确区分，具体 `linkname` 取值不得凭记忆硬编码）。
+3. 脚本应支持可选传入 `NCBI_API_KEY`（读取环境变量 `NCBI_API_KEY`，若已在本机 shell 中设置则自动带上 `&api_key=`；未设置则跳过），对 ESearch 分别测一次带 key、一次不带 key，对比响应是否有可观察差异；若 NCBI 未在响应体中明确标注实际生效的限速值，应如实记录"无法从响应体直接验证限速差异，仅能确认两种调用方式均返回 200"，不得编造观测不到的结论。
+4. 脚本输出建议复用 `_verify/dblp_field_probe.py` 的 `_print()`/IPv4 脱敏封装风格（保持项目 `_verify/` 脚本的一致性），并在结尾提示用户"请把完整输出复制反馈"。
+5. 用 `git add -f _verify/pubmed_eutils_field_probe.py` 强制添加（`CLAUDE.md` 已记录：本机 `.gitignore` 有未提交改动会排除 `_verify/`，不要动用户待处理的 `.gitignore` 改动）。
+6. 若本环境探测部分/全部失败（网络类失败），按 QA-R013 通用流程约束处理：如实记录失败现象，不据此直接判定端点不可用，把脚本留在 `_verify/` 交用户在其网络环境下运行验证，步骤 44 之后的编码工作可以先按 QA-R009 历史结论 + NCBI 官方文档字面描述的字段结构起草一版，并显式标注"待用户真实验证反馈确认"（比照步骤 39 dblp 允许的妥协路径）。
+
+#### 验证方法
+- 脚本能独立运行（`python _verify/pubmed_eutils_field_probe.py`），无需安装项目本身或额外第三方包。
+- 5 个端点的真实响应结构（或如实记录的失败现象）已被完整捕获并可供后续步骤引用，不存在"跳过探测直接假设字段名"的情况。
+- 若本环境探测成功，产出物应包含至少一条真实、完整的 EFetch XML 样例（供步骤 45 编写解析逻辑的直接依据）。
+
+#### 风险提示
+- **PubMed EFetch XML 的真正陷阱不是"单值/列表二义性"（`ElementTree.findall()` 类型稳定），而是"标签整体缺失"**：`AbstractText` 可能被拆成多个带 `Label`/`NlmCategory` 属性的结构化分段、`ArticleTitle` 可能内嵌斜体/上下标子标签（需 `.itertext()` 而非 `.text`）、`AuthorList` 可能整体缺失或退化为 `CollectiveName`（机构作者），这些都需要在探测脚本输出中如实呈现，而不是假设"标准结构总是存在"。
+- 若探测环境完全无法访问 `eutils.ncbi.nlm.nih.gov`（网络拦截/DNS 问题），不得直接得出"NCBI 端点不可用"的结论——比照 dblp 先例，记录现象、留脚本给用户，不擅自 downgrade 或跳过后续步骤。
+- 样本 PMID 若选取到已撤稿（retracted）或非常规文献类型（书籍章节、临床试验注册记录等），字段结构可能与常规期刊论文有差异；建议额外用 1～2 篇结构简单的常规期刊论文样本交叉验证，避免归一化方案被单一样本的特殊性带偏。
+
+---
+
+### 步骤 44：`config.py` 新增 `NCBI_API_KEY` + `pubmed.py` 公共骨架
+
+#### 目标说明
+落地 `goal.md` 已确认的无条件注册模式（对齐 Elsevier/CORE 先例），并为步骤 45～48 的 4 个工具准备好共享的请求参数构造、认证注入、`_ok`/`_err` 统一结构等公共代码，避免 4 个工具各自重复实现。
+
+#### 具体操作
+1. `src/uniarticles/config.py`：在 `Settings` frozen dataclass 中新增字段，写法对齐现有 `core_api_key`（同为"无条件注册、缺 key 仅限速更严"语义，不对齐 `semantic_scholar_api_key` 的"缺 key 不注册"语义）：
+   ```python
+   ncbi_api_key: str | None = field(default_factory=lambda: os.getenv("NCBI_API_KEY"))
+   ```
+2. 新建 `src/uniarticles/sources/pubmed.py`（先建骨架，具体检索/新工具逻辑在步骤 45～48 中补充），包含：
+   - `BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"`
+   - `USER_AGENT`，风格对齐现有模块（如 `dblp.py`/`core.py` 的 `UniArticlesMCP/3.0.0 (...)`，随步骤 51 版本号最终确定后统一核对回填，不要在骨架阶段硬编码后忘记同步）。
+   - `_ok(query, items)`/`_err(query, message)`，`source="pubmed"`（对应本轮破坏性变更后的新值）。
+   - `_params(extra: dict) -> dict`：公共参数注入函数，统一处理 `db=pubmed`、`tool=uniarticles-mcp`、`email`（NCBI 官方礼仪建议提供 `tool`/`email` 标识调用方，非强制但被官方文档推荐，`email` 可用 `pyproject.toml` 现有作者邮箱或省略，由 `project-builder-cn` 决定）、以及 `settings.ncbi_api_key`（若已配置则注入 `api_key` 参数）。
+   - 限速处理策略（**明确不做客户端主动节流，理由需写入代码注释**）：本项目其余数据源模块均未实现请求速率限制（如 `core.py` 只在收到 429 时通过 `_err` 把限流上下文原样返回给调用方），NCBI 的限速是"每秒请求数"级别的服务端策略，而单次 MCP 工具调用通常只触发 1～2 个 HTTP 请求；因此本轮同样采用"不主动节流、429 时按 `core.py` 先例把限速上下文清晰返回"的策略，不引入令牌桶/滑动窗口等主动限速机制，避免为低概率场景引入不必要的复杂度。若步骤 52 整体回归验证中真实观察到 429，再按需补充节流逻辑，不预先过度设计。
+3. 该步骤只搭骨架、不实现 `register()` 内的具体工具，`sources/__init__.py` 的接入改动放到步骤 49（避免中间态破坏现有 `paperscraper_source` 的可运行状态）。
+
+#### 验证方法
+- `Settings()` 能正常实例化，`settings.ncbi_api_key` 在 `.env` 已配置 `NCBI_API_KEY` 时能正确读到真实值（用一次性 `python -c "from uniarticles.config import settings; print(bool(settings.ncbi_api_key))"` 验证，不打印真实 key 值本身）。
+- `pubmed.py` 骨架代码能被正常 import，不因尚未实现 `register()` 内容而报错（`register()` 函数体可暂时留空或 `pass`，供步骤 45 起逐步填充）。
+
+#### 风险提示
+- `Settings` 是 `frozen=True` dataclass，新增字段需使用 `field(default_factory=...)` 写法（与 `core_api_key`/`semantic_scholar_api_key` 一致），不要误用直接赋值写法（会在类定义时立即求值，与其他 v3.0.0 新增字段的风格不统一）。
+- 骨架阶段不要提前把 `pubmed.py` 加入 `sources/__init__.py` 的 import——此时 `register()` 还未实现完整工具，若中途因步骤 45～48 分批提交，提前接入会导致 `register_all_sources()` 调用一个空/半成品的 `register()`，MCP Server 实际可用工具数与预期不符，容易造成中间态混乱。
+
+---
+
+### 步骤 45：重写检索工具 `pubmed_paper_search_by_query`（ESearch + EFetch，XML 解析）
+
+#### 目标说明
+落地 `goal.md` 核心目标 7/23、方案 C：现有 `pubmed_paper_search_by_query` 工具名不变，但底层实现从"调用第三方包 `paperscraper`"改为"直接 `httpx` 调用 `esearch.fcgi` 检索 PMID 列表 + `efetch.fcgi` 按 PMID 批量拉取 XML 并自行解析"，`source` 字段值同步改为 `"pubmed"`。这是本轮范围内改动量最大、也是唯一涉及 XML 解析的一步——本项目此前所有数据源模块均只处理 JSON 响应，这是本项目第一次需要解析 XML，需额外谨慎。
+
+#### 具体操作
+1. 用 `git mv src/uniarticles/sources/paperscraper.py src/uniarticles/sources/pubmed.py`（若步骤 44 已直接新建 `pubmed.py`，改为直接删除旧的 `paperscraper.py`，保留新文件；两种做法二选一，`project-builder-cn` 按实际操作顺序选择，结果一致即可）。
+2. 实现 `_esearch(query: str, retmax: int) -> list[str]`：
+   ```python
+   async def _esearch(query: str, retmax: int) -> list[str]:
+       async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+           response = await client.get(
+               f"{BASE_URL}esearch.fcgi",
+               params=_params({"term": query, "retmax": retmax, "retmode": "json"}),
+           )
+           response.raise_for_status()
+           payload = response.json()
+       return payload.get("esearchresult", {}).get("idlist", []) or []
+   ```
+   保留现有实现已有的 `max_results` clamp 逻辑（`[1, 9998]`，对应 NCBI ESearch 官方单次最多取回 9999 条的限制），命名与既有代码风格一致。
+3. 实现 `_efetch(pmids: list[str]) -> list[dict]`，用标准库 `xml.etree.ElementTree` 解析（**不引入新依赖**，`ElementTree` 是 Python 标准库，符合本项目一贯"能用标准库/现有依赖就不额外引入新包"的偏好）：
+   ```python
+   import xml.etree.ElementTree as ET
+
+   async def _efetch(pmids: list[str]) -> list[dict]:
+       async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+           response = await client.get(
+               f"{BASE_URL}efetch.fcgi",
+               params=_params({"id": ",".join(pmids), "rettype": "abstract", "retmode": "xml"}),
+           )
+           response.raise_for_status()
+       root = ET.fromstring(response.text)
+       return [_normalize_article(el) for el in root.findall(".//PubmedArticle")]
+   ```
+4. `_normalize_article(el: ET.Element) -> dict`：**具体字段与路径以步骤 43 真实探测结果为准**，此处仅给出以 NCBI 官方文档字面描述、待步骤 43 确认/修正的起点（比照 `dblp.py` 中"文档记载但未经真实抓包确认"字段的注释处理方式，明确标注哪些是已确认、哪些待确认）：
+   - `pmid`：`.//PMID`（注意 `ArticleIdList` 下也可能有一个 `IdType="pubmed"` 的 `ArticleId`，与顶层 `PMID` 标签是否总是一致，需步骤 43 确认）。
+   - `title`：`.//ArticleTitle`（内容可能包含内嵌斜体/上下标等子标签，需用 `"".join(el.itertext())` 而非 `.text` 直接取值，避免截断）。
+   - `abstract`：`.//Abstract/AbstractText`（**注意结构化摘要**——部分文献的摘要被拆成多个带 `Label`/`NlmCategory` 属性的 `AbstractText` 分段，如 `BACKGROUND`/`METHODS`/`RESULTS`/`CONCLUSIONS`，需要拼接而非只取第一个）。
+   - `authors`：`.//AuthorList/Author`，每个作者取 `LastName`+`ForeName`（或 `CollectiveName` 用于机构作者，需判空处理）。
+   - `journal`：`.//Journal/Title` 或 `.//Journal/ISOAbbreviation`。
+   - `doi`：`.//ArticleIdList/ArticleId[@IdType='doi']`。
+   - `publication_date`：`.//Article/ArticleDate` 或 `.//Journal/JournalIssue/PubDate`（字段完整性不一，很多历史文献只有年份，需容错到"年-月-日均可选"）。
+   - `keywords`：`.//KeywordList/Keyword`。
+   - 现有 `paperscraper` 输出还含 `methods`/`conclusions`/`results`/`copyrights` 等字段——这些实际来自结构化摘要的分段标签（`Label="METHODS"` 等），**不强制保留**（`goal.md` 已明确允许有增有减），若步骤 43 探测确认这些分段有稳定的 `Label` 属性，可选择性保留为独立字段，否则合并进统一的 `abstract` 字段即可，由 `project-builder-cn` 视真实探测结果决定，不在计划书中预先拍板。
+5. `register()` 内工具签名/校验逻辑基本保持现有 `paperscraper.py` 风格不变（`query.strip()`、`max_results` clamp、空 query 报错），仅内部改为调用 `_esearch`+`_efetch` 并处理"ESearch 返回 0 个 PMID"这一正常空结果场景（返回 `ok: true`、`items: []`，不是错误）。
+
+#### 验证方法
+- 用真实存在的关键词（如 `"CRISPR"`）调用 `pubmed_paper_search_by_query`，确认 `ok: true`，`items` 中字段为真实解析值（非空、非硬编码占位），`source` 字段值为 `"pubmed"`（不是 `"paperscraper"`）。
+- 用一个几乎不可能命中的生僻关键词组合，确认 ESearch 返回 0 条时走的是正常空结果分支而非误判为错误。
+- 对比同一关键词在改造前（`paperscraper.py`）与改造后的返回条数量级是否合理（不要求完全一致，因为两者检索语法/排序可能有差异，但不应出现数量级失真，如改造后始终只返回 1 条）。
+- 用一个已知有多位作者的真实 PMID 抽查 `authors` 字段是否完整解析出全部作者。
+
+#### 风险提示
+- **本项目首次引入 XML 解析，`ElementTree` 对命名空间/HTML 实体等边界情况的处理需格外小心**：PubMed XML 中偶见 HTML 实体转义（如 `&amp;`）与内嵌斜体标签（`<i>`/`<sup>`/`<sub>`），直接用 `.text` 只取第一段纯文本会丢失后续内容，务必用 `.itertext()` 拼接完整文本。
+- **`AuthorList`/`KeywordList` 等列表型标签"整个标签缺失"是真实存在的边界情况**（如无关键词的老文献、机构统一署名的文献），必须用 `.find(...) is not None` 判空，不能假设标签总存在。
+- ESearch/EFetch 是两次独立请求，中间若 ESearch 成功但 EFetch 因 PMID 列表过长/网络问题失败，需在 `_err` 中如实说明是哪一步失败，不要笼统报错让调用方无法定位问题。
+- 这是一次面向已发布工具的破坏性变更：**任何硬编码依赖旧 `source: "paperscraper"` 字段值做逻辑判断的外部调用方/工作流会在本版本发布后失效**，比照 `goal.md` 约束条件已记录的"无过渡期"处理方式，不在代码层面做兼容判断，但应在步骤 50 的文档更新与步骤 52 的 buildlog 记录中显著提示这一变化，方便用户对外通知自己的下游调用方。
+
+---
+
+### 步骤 46：新增 `pubmed_paper_summary_lookup_by_pmids`（ESummary 批量元数据）
+
+#### 目标说明
+接入 `esummary.fcgi`，对应 `goal.md` 核心目标 24：比 EFetch 更轻量，含 PMCID/PII/期刊全名/发表状态历史等现有实现没有的字段，给定一批 PMID 批量取回。
+
+#### 具体操作
+1. 参数设计：`pmids: list[str]`（也可设计为逗号分隔字符串，但 `list[str]` 更符合 MCP 工具入参的类型清晰度；FastMCP 对 `list[str]` 类型有原生支持，但与本项目其余工具入参多为标量字符串不同，属于本轮新引入的参数类型，构建时需确认真实 MCP 客户端环境下的兼容性，见风险提示）。
+2. 输入校验：去重、过滤空值，限制批量数量上限（NCBI 官方文档建议 GET 方式不超过约 200 个 ID，超出建议改用 POST；本步骤先按 GET + 上限 200 实现，超出上限截断并在返回结果中提示，不做自动分批递归请求这种更复杂的方案，除非步骤 43 探测发现 200 这个数字需要调整）。
+3. 实现 `_esummary(pmids: list[str]) -> list[dict]`：
+   ```python
+   async def _esummary(pmids: list[str]) -> list[dict]:
+       async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+           response = await client.get(
+               f"{BASE_URL}esummary.fcgi",
+               params=_params({"id": ",".join(pmids), "retmode": "json"}),
+           )
+           response.raise_for_status()
+           payload = response.json()
+       result = payload.get("result", {})
+       uids = result.get("uids", []) or []
+       return [result[uid] for uid in uids if uid in result]
+   ```
+4. 归一化字段：**待步骤 43 真实探测确认**，起点参考 `goal.md` 已提及的 `pmcid`（若有 PMC 全文）、`elocationid`（含 PII 信息）、`fulljournalname`、`pubstatus`（发表状态，如 epublish/ppublish）等；建议同时保留 `title`/`authors`（ESummary 的 `authors` 通常是 `[{"name": "...", ...}]` 结构，与 EFetch 的 `LastName`+`ForeName` 拆分不同，归一化时统一成本项目习惯的字符串数组或 `{name}` 字典数组，与步骤 45 的 `authors` 字段形态保持跨工具一致，便于调用方复用解析逻辑）。
+5. 对不存在的 PMID：ESummary 通常会在 `result.uids` 中省略该 ID 或在对应键下返回一个错误结构，需真实探测确认后按"部分成功、跳过无效 ID 并在 items 中体现"的方式处理，不要因为批量请求中混入 1 个无效 ID 就让整个调用失败。
+
+#### 验证方法
+- 用真实存在的 1 个 PMID、以及一批（如 5 个）真实 PMID 分别调用，确认批量场景下 `items` 数量与请求的有效 PMID 数量一致。
+- 混入 1 个明显不存在的 PMID（如 `"1"`），确认不会导致整个请求失败，能正常返回其余有效 PMID 的结果并对无效 ID 做出清晰说明。
+- 抽查返回字段确实包含现有 EFetch 实现没有的信息（如 `pmcid`），验证"ESummary 更轻量但字段有差异化价值"这一 `goal.md` 立项依据成立。
+
+#### 风险提示
+- FastMCP 对 `list[str]` 类型入参的 JSON Schema 生成与实际客户端（Cherry Studio 等）传参兼容性此前未在本项目验证过（其余 25 个工具入参均为标量），若真实客户端环境下 `list[str]` 传参存在兼容性问题，需考虑退化为逗号分隔字符串入参（`pmids: str`，内部 `.split(",")`）这一更保守的方案，构建时应两种方案都验证一次，不要只测试通过 Python 直接调用（那不能反映真实 MCP 客户端的参数编解码行为）。
+- 批量请求的部分失败处理若设计不当，容易让调用方误以为"整批都失败了"或"缺失的 PMID 被静默忽略而不自知"，归一化时应在返回结构中明确标注哪些请求的 PMID 未返回结果。
+
+---
+
+### 步骤 47：新增 `pubmed_related_article_search_by_pmid`（ELink 相关文献查询）
+
+#### 目标说明
+接入 `elink.fcgi`（`cmd=neighbor`），对应 `goal.md` 核心目标 24：给定 PMID，返回主题相关的其他 PubMed 文献 PMID 列表。
+
+#### 具体操作
+1. 参数：`pmid: str`（单值，与 `chembl_bioactivity_lookup_by_doi` 单值查询的参数模式一致）、`max_results: int = 10`（ELink neighbor 官方接口本身不提供 limit 参数，返回全部相关结果，需要客户端侧对结果做切片。**这里的"客户端侧切片"与 QA-R004 明确禁止的"`list_papers` 客户端侧二次过滤"性质不同**——后者是本该由服务端按分类过滤、却被错误地实现成客户端全量拉取后过滤，属于实现偷懒；这里是服务端本身不支持分页/限量参数、只能返回全部结果，客户端侧截断只是为了控制返回给 LLM 的结果体积，不构成对既有先例的违反）。
+2. 实现：
+   ```python
+   async def _related(pmid: str, max_results: int) -> list[dict]:
+       async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+           response = await client.get(
+               f"{BASE_URL}elink.fcgi",
+               params=_params({"dbfrom": "pubmed", "db": "pubmed", "id": pmid, "cmd": "neighbor", "retmode": "json"}),
+           )
+           response.raise_for_status()
+           payload = response.json()
+       linksets = payload.get("linksets", []) or []
+       # 具体 key 路径（linksetdbs[].links[].id/score）待步骤 43 真实探测确认
+       items = [...]
+       return items[:max_results]
+   ```
+3. 归一化输出：至少含相关文献的 `pmid`（可能还有 `score`，若步骤 43 探测确认该字段真实存在）；不在本工具内自动对每个相关 PMID 再发起 EFetch/ESummary 请求补全标题等信息（避免 1 次调用放大成 N+1 次请求，若用户需要相关文献的详细信息，应再调用 `pubmed_paper_summary_lookup_by_pmids`，工具之间保持职责单一，这与 `get_article_objects`"只给元信息链接、不做二次下载"的既有产品原则一致）。
+
+#### 验证方法
+- 用一个真实存在且有一定引用/主题关联度的 PMID 调用，确认返回非空的相关 PMID 列表。
+- 用一个几乎没有关联文献的冷门 PMID（如非常新/非常小众的文献）调用，确认空结果走的是 `ok: true`、`items: []` 而非误判为错误。
+- `max_results` 切片逻辑正确（请求 5 条时最多返回 5 条，即使服务端实际返回更多）。
+
+#### 风险提示
+- 若步骤 43 探测发现 `linksets` 结构本身可能为空列表（该 PMID 暂无 NCBI 计算出的相关文献，这是正常情况非错误），归一化逻辑需要能区分"结构缺失/字段路径变化导致的解析失败"与"结构完整但确实没有相关结果"两种情况，不要把后者误判成前者从而返回一个掩盖真实解析问题的假"空结果"。
+- 命名用 `_search` 而非 `_lookup`：因为结果本质是一个列表（多条相关文献），与 ChEMBL"给一个 DOI 查一条收录记录"的单值语义不同；若后续真实探测发现该端点本质更接近"关联关系图谱查询"而非"检索"，命名可在步骤 43 后调整，需说明理由。
+
+---
+
+### 步骤 48：新增 `pubmed_pmc_linkage_lookup_by_pmid`（ELink PMC 全文/引用关联查询）
+
+#### 目标说明
+接入 `elink.fcgi`（`dbfrom=pubmed&db=pmc`），对应 `goal.md` 核心目标 24：给定 PMID，返回该文献在 PMC 是否有开放获取全文、以及哪些 PMC 文章引用/关联了它——这是两种不同性质的信息（"这篇文献本身的 PMC 全文"vs"引用/关联它的其他 PMC 文章"），归一化时需要在返回结构中明确区分，不能混为一谈。
+
+#### 具体操作
+1. 参数：`pmid: str`（单值，命名与语义同 `chembl_bioactivity_lookup_by_doi` 一致——"给一个已知标识符，查它的一条关联信息记录"）。
+2. 实现思路：ELink 支持在同一次 `dbfrom=pubmed&db=pmc` 请求中通过不同 `linkname`（如该文献自身的 PMC 全文对应一种 `linkname`，引用它的 PMC 文章对应另一种 `linkname`，**确切取值需步骤 43 真实探测确认，不得凭 NCBI 文档记忆直接硬编码**）区分这两种关联，返回结构中应有清晰分组，例如：
+   ```python
+   {
+       "own_pmc_fulltext": [...],       # 该文献自身若被 PMC 收录，对应的 PMC ID
+       "cited_by_pmc_articles": [...],  # 引用/关联它的其他 PMC 文章
+   }
+   ```
+   具体键名与是否需要额外的 `linkname` 参数区分，均以步骤 43 探测结果为准。
+3. 若该 PMID 在 PMC 完全没有任何关联信息（既无全文也未被引用），返回 `ok: true`，两个分组均为空列表，不是错误。
+
+#### 验证方法
+- 用一个已知在 PMC 有开放获取全文的真实 PMID 调用，确认 `own_pmc_fulltext` 非空。
+- 用一个已知被其他 PMC 文章引用过的真实 PMID 调用（若能找到测试样本），确认 `cited_by_pmc_articles` 非空。
+- 用一个较新、大概率两类关联都还没有的 PMID 调用，确认两个分组均正常返回空列表而非报错。
+
+#### 风险提示
+- 这是本轮 4 个工具中语义最容易被简化/混淆的一个——若归一化时不小心把"自身全文"和"被引用"两组信息合并成一个扁平列表，会让调用方误判某篇文献"有开放获取全文"，实际上那条记录只是"引用了它的其他文章"，造成误导性结果，构建与验证阶段需重点覆盖这一区分逻辑。
+- 与步骤 47 相同，不在本工具内自动对关联的 PMC 文章再做进一步的详情请求，保持工具职责单一。
+
+---
+
+### 步骤 49：`sources/__init__.py` 接入改名 + 移除 `paperscraper`/`pandas` 依赖（含需用户确认的 `uv` 命令）+ 确认无遗留引用
+
+#### 目标说明
+把步骤 44～48 完成的 `pubmed.py` 正式接入 `register_all_sources()`，同时从依赖清单中彻底移除不再需要的第三方包，并做一次全仓库检索确认没有任何其他模块/文档仍在引用旧的 `paperscraper` 相关命名——这是"重命名+依赖移除"类改动最容易遗漏、也是用户特别要求关注的风险点。
+
+#### 具体操作
+1. `src/uniarticles/sources/__init__.py`：
+   ```python
+   from .pubmed import register as register_pubmed_source
+   ```
+   替换原有 `from .paperscraper import register as register_paperscraper_source`；`register_all_sources()` 内 `register_paperscraper_source(server)` 调用改为 `register_pubmed_source(server)`，**调用位置维持在原有"v2.x 既有数据源"分组内不变**（`goal.md` QA-R014/R015 未要求调整注册顺序分组，本轮不是 QA-R006 那种顺序调整任务，不应顺带改动无关的注册顺序）。
+2. `pyproject.toml` 的 `dependencies` 列表中删除 `"paperscraper"` 与 `"pandas>=2.0.0"` 两行（后者是本计划书附带确认的衍生决策，见"v3.1.0 范围补充"小节说明）。
+3. **依赖变更需要用户在环境中执行以下命令确认**（涉及重新生成锁文件、修改本地 `.venv`，属于环境影响操作，`project-builder-cn` 应在执行前把以下命令原样提供给用户确认，而非静默直接跑）：
+   ```powershell
+   # 1. 修改 pyproject.toml 后，重新生成锁文件（会同步移除 paperscraper 及其全部传递依赖：
+   #    pymed-paperscraper、scholarly、boto3、matplotlib、seaborn、matplotlib-venn 等）
+   uv lock
+
+   # 2. 按新锁文件同步本地虚拟环境
+   uv sync
+
+   # 3. 确认 paperscraper 及其传递依赖已从环境中移除（应无输出或报 "not found"）
+   uv pip show paperscraper
+   uv pip show pymed-paperscraper
+   ```
+4. 全仓库检索确认无遗留引用（`project-builder-cn` 应实际执行检索，不能仅凭"应该改完了"的印象下结论）：
+   - 搜索 `paperscraper`（大小写不敏感）：预期仅剩 `project-docs/goal.md`、`project-docs/teach.md`（历史记录/需按语境判断是否需要同步，见步骤 50）、`project-docs/buildlog.md` 历史条目（如实保留，不得篡改历史记录）中出现，其余 `src/`、`README.md`、`README_ZH.md`、`CLAUDE.md`、`tutorial/` 下不应再有任何引用。
+   - 搜索 `register_paperscraper_source`：应仅在 `git log` 历史中可见，当前工作区代码中不应再出现。
+   - 搜索硬编码字符串 `"paperscraper"`（JSON 响应体 `source` 字段值）：应仅在 `pubmed.py` 的说明性注释（如有提及历史命名）中出现，不应再作为实际返回值出现。
+5. `src/uniarticles/__init__.py` 中为压制 `paperscraper` 包 `logging.basicConfig(stream=sys.stdout, ...)` 而设的 stderr-handler-抢占防御性代码——**`goal.md` 已明确这是一个开放决策，留给 `project-builder-cn` 按代码实际情况判断，本计划书不预先规定答案**，但要求 `project-builder-cn` 在此步骤中必须显式做出选择并说明理由（二选一，均可接受）：
+   - **方案一（简化）**：既然 `paperscraper` 依赖已移除，其"顶层执行 `logging.basicConfig(stream=sys.stdout, ...)`"这一根因已不存在，可以移除这段 workaround 代码及其注释，简化 `__init__.py`。
+   - **方案二（保留作为通用防御）**：即便当前没有已知第三方依赖会污染 stdout，未来任何新增依赖都可能引入同样的问题（"库在 import 时抢占 root logger"这类行为并不罕见），保留这段防御性代码作为面向未来的通用防线，代价极低（约 12 行代码），仅需把注释中"根因是 paperscraper"的表述改为更通用的措辞（不再点名具体某个包）。
+   - **本计划书倾向方案二**（防御性代码保留的边际成本远低于"未来某个新依赖重蹈覆辙、又要排查一次 stdout 污染"的风险，且这正是本项目从 `paperscraper` 事件中学到的教训，主动放弃这层防御没有必要的收益），但最终决定权与理由说明留给 `project-builder-cn`，并要求把选择与理由记入步骤 52 的 `buildlog.md` 记录。
+
+#### 验证方法
+- `uv run uniarticles-mcp` 能正常启动（或 `python -m uniarticles`），无 `ImportError`。
+- `uv pip list` 中确认 `paperscraper`、`pymed-paperscraper`、`pandas`、`scholarly`、`boto3`、`matplotlib`、`seaborn`、`matplotlib-venn` 均已不在已安装依赖列表中（后 5 项是 `paperscraper` 的传递依赖，随之一并清除；`goal.md` 背景与动机中点名的依赖臃肿问题应在此步骤后得到实质缓解，值得在验证记录中对比移除前后的依赖数量）。
+- 全仓库检索结果（步骤 4 的三项搜索）与预期一致，无意外遗漏。
+
+#### 风险提示
+- **`uv lock`/`uv sync` 是会实际修改本地 `.venv` 与 `uv.lock` 文件的环境操作**，务必按上述命令顺序执行并让用户知情，不要在用户不知情的情况下静默改动依赖环境。
+- 若全仓库检索发现遗漏（例如某处文档遗漏了改名），应回头修正而不是记录为"已知遗留问题"带入下一版本——这与破坏性变更本身（用户已接受）是两回事，遗漏引用是本步骤应该发现并修复的执行质量问题，不是需要用户额外决策的产品问题。
+- `matplotlib`/`seaborn`/`matplotlib-venn`/`boto3`/`scholarly` 等包体积较大，若用户本地 `.venv` 此前已下载过，`uv sync` 后磁盘空间会明显释放，属于预期中的正常现象，不是异常。
+
+---
+
+### 步骤 50：文档同步更新（README.md/README_ZH.md/CLAUDE.md/`project-docs/teach.md`）
+
+#### 目标说明
+`goal.md` 核心目标 26 明确要求这几处文档的引用需同步更新，避免"代码已改名但文档仍写旧名字"的落差；同时工具总数变化（25/27→28/30）需要在 README 的工具清单/计数中如实体现。
+
+#### 具体操作
+1. `README.md`/`README_ZH.md`：
+   - Features/Available Tools 章节：`Available Tools` 表格新增 3 个新工具的行（工具名、简要说明、对接端点），并把现有 `pubmed_paper_search_by_query` 行的实现说明从"基于 `paperscraper`"改为"直连 NCBI Entrez API"。
+   - 工具总数计数（延续 v2.2.0 步骤 17、v2.3.0 步骤 23 已发现的"计数不在表格内、容易被遗漏"这一风险点，本次同样需要专门核对）：`25 tools`/`27 tools`（视 `SEMANTIC_SCHOLAR_API_KEY` 是否配置）改为 `28 tools`/`30 tools`。
+   - 环境变量配置示例（`.env`/JSON 配置片段）新增 `NCBI_API_KEY`（标注为可选，说明"提速用，缺省可用但限速更严"，与 `CORE_API_KEY` 的现有说明风格一致）。
+   - 若 README 中存在提及 `paperscraper` 依赖臃肿问题的历史说明（若有），同步更新为"已移除，改为直连 NCBI API"。
+2. `CLAUDE.md`：
+   - "Project overview" 段落中 "PubMed (via `paperscraper`)" 改为 "PubMed (via direct NCBI Entrez API calls)"。
+   - "Configuration" 段落的 `.env` 示例新增 `NCBI_API_KEY=your_ncbi_api_key   # optional — see conditional/unconditional registration note`。
+   - 工具总数 "25 tools / 27 tools" 改为 "28 tools / 30 tools"。
+   - "Source module pattern" 或相关段落中若有列举各数据源文件名的地方，同步把 `paperscraper.py` 改为 `pubmed.py`。
+3. `project-docs/teach.md`：**注意执行分工边界**——该文档按项目既定分工由 `project-explainer-cn` 工作流独立维护，本计划书/`project-builder-cn` 通常不应跨界改写其讲解性内容；但 `goal.md` 已明确要求这一次例外同步"文件名引用"（核心目标 26 逐字列出 `project-docs/teach.md`），因此本步骤的操作范围**严格限定为**：把文档中明确指代"当前代码状态"的 `paperscraper.py`/`paperscraper` 相关字面提及替换为 `pubmed.py`/`pubmed`，**不改写其余讲解性文字、不重新组织章节结构、不补充新内容**——这是一次机械的引用同步，不是内容维护，执行完毕后应如实告知用户"teach.md 可能因本次机械同步而与 `project-explainer-cn` 下次维护时的预期略有出入，如有需要可请 `project-explainer-cn` 复核"。
+
+#### 验证方法
+- 在 README.md/README_ZH.md/CLAUDE.md 中全文检索 `paperscraper`，确认已无残留（历史 CHANGELOG/buildlog 类章节除外，那些属于历史记录不应修改）。
+- README 的工具计数与 `src/uniarticles/sources/__init__.py` 实际注册的工具数量一致（可通过启动服务后实际列出工具名核对，而非仅靠人工数表格行数）。
+
+#### 风险提示
+- 与 v2.2.0/v2.3.0 步骤 17/23 同类风险：工具计数散落在正文段落中（不止 Available Tools 表格），容易漏改，需要全文搜索数字而非只改表格。
+- `project-docs/teach.md` 的改动务必控制在"文件名引用替换"范围内，不得借这次机会顺带补充/重写讲解内容——这不是本步骤的授权范围，即便发现 teach.md 有其他过时之处也应留给 `project-explainer-cn` 处理，不越界代劳。
+
+---
+
+### 步骤 51：`pyproject.toml` 版本号提升至 `3.1.0`
+
+#### 目标说明
+`goal.md` QA-R015 已明确目标发布版本号为 `3.1.0`（当前 `3.0.0`）。
+
+#### 具体操作
+1. `pyproject.toml` 第 7 行 `version = "3.0.0"` 改为 `version = "3.1.0"`。
+2. 核对 `src/uniarticles/sources/*.py` 中各模块 `USER_AGENT` 字符串里硬编码的版本号（如 `"UniArticlesMCP/3.0.0 (...)"`，目前 `dblp.py`/`chembl.py`/`biorxiv.py`/`core.py` 等模块均有此字符串），**是否需要同步改为 `3.1.0` 由 `project-builder-cn` 核实项目既往版本发布时是否有同步更新这一约定**（若历次版本发布时未同步更新过 `USER_AGENT` 里的版本号，说明这本身就不是本项目的既有约定，不必在本轮特意补上；若历次确实同步更新过，本轮也应一并更新，保持一致性）。此项为本计划书基于代码巡查发现、`goal.md` 未提及的细节点，明确标注来源避免被误认为超出授权范围。
+
+#### 验证方法
+- `pyproject.toml` 版本号确认为 `3.1.0`。
+- 若决定同步更新 `USER_AGENT` 版本号，抽查 2～3 个模块文件确认已改。
+
+#### 风险提示
+- 版本号改动本身风险极低，唯一需要注意的是不要漏改（`pyproject.toml` 是唯一权威版本号来源，`src/uniarticles/__init__.py` 中若有独立的 `__version__` 字段——经查当前为 `"1.0.0"`，与 `pyproject.toml` 早已不同步，这是**本项目已存在、非本轮引入的历史不一致**，是否借此机会一并修正，超出 `goal.md` 本轮授权范围，不在本步骤处理，如实记录供用户后续单独决策，不擅自顺带修改）。
+
+---
+
+### 步骤 52：`project-docs/buildlog.md` 记录本轮变更 + 整体回归验证（v3.1.0 最终交付检查点）
+
+#### 目标说明
+记录步骤 43～51 的完整实现过程，并做一次覆盖全部数据源（v2.x 既有工具 + v3.0.0 新增 12 个数据源 + 本轮重写/新增的 pubmed 4 个工具）的整体回归验证，确认 v3.1.0 全部范围已完整交付、MCP 协议层未受影响、依赖精简目标达成。这是 v3.1.0 的最终交付检查点。
+
+#### 具体操作
+1. 在 `project-docs/buildlog.md` 新增 `## v3.1.0 构建记录` 章节，逐条包含：
+   - 步骤 43 的真实探测结果摘要（5 个端点的真实字段结构要点，或如实记录的探测失败/待用户验证状态）。
+   - 步骤 44～48 每个工具的最终参数签名、归一化字段清单、命名是否与本计划书拟定一致（如有调整需说明理由）。
+   - 步骤 49 的架构决策记录：`register_all_sources()` 最终接入方式、`pandas`/`paperscraper` 依赖移除结果（含移除前后依赖数量对比）、`__init__.py` stdout 防御代码的最终处理方案与理由（步骤 49.5 二选一的最终选择）。
+   - 步骤 50 的文档更新摘要。
+   - 版本号变更：`3.0.0` → `3.1.0`。
+   - **本轮范围收尾小结**：1 个工具重写 + 3 个新增工具 + 1 个可选环境变量 + 2 个依赖移除，工具总数由 25/27 增至 28/30，与 `goal.md` QA-R014/QA-R015 记录的范围完全对应。
+2. 整体回归验证：
+   - 用 `uv run uniarticles-mcp` 或 `python -m uniarticles` 启动服务，确认进程正常启动，`stdout` 未被污染（`pubmed.py` 是本轮唯一改动的模块，但依赖环境发生了较大变化——`paperscraper` 及其一大批传递依赖被移除——需确认启动过程无残留的 import 报错或路径问题）。
+   - 若条件允许，在真实 Claude Desktop/Cherry Studio 中实际加载一次，确认工具列表数量与步骤 50 陈述的数字一致。
+   - 用真实网络环境分别在**配置 `NCBI_API_KEY`** 与**不配置 `NCBI_API_KEY`**两种情况下各调用一遍全部 4 个 pubmed 工具，确认均正常返回 `ok: true` 或结构清晰的 `_err`，且两种配置下均可用（无条件注册模式的核心验收标准）。
+   - 用真实 `.env`（`ELSEVIER_API_KEY`）随机抽查现有其余数据源中至少 3～4 个工具，确认未因本轮改动（尤其 `config.py` 新增字段、`sources/__init__.py` 改动、依赖环境变化）产生回归。
+   - 确认步骤 49 的三项全仓库检索结果仍然成立（未在后续步骤中意外引入新的遗留引用）。
+
+#### 验证方法
+- buildlog.md 中能找到本轮全部改动的完整记录，探测失败/待验证项若存在需有明确标注，不得含糊带过。
+- 整体回归验证的各项操作均通过，无 `ImportError`/`NameError`/未捕获异常，无 stdout 污染。
+- v3.1.0 全轮范围与 `goal.md` QA-R014/QA-R015 记录的最终范围完全对应，无遗漏无多算。
+
+#### 风险提示
+- 本轮虽然只改动 1 个数据源模块，但**依赖环境的改动幅度不小**（移除 7～8 个包），整体回归验证不能因为"只是一个模块的改动"而简化验证覆盖面，尤其要重点验证依赖移除没有意外破坏其余模块（虽经检索确认 `pandas` 仅被 `paperscraper.py` 引用，但仍建议实际启动一次服务、跑一轮其余工具的抽查作为双重确认，而非只依赖静态检索结论）。
+- 若步骤 43 的真实探测在构建环境中持续受阻（网络原因），比照步骤 39 dblp 先例的妥协路径：可以先用 NCBI 官方文档字面描述的字段结构完成一版"待验证"实现，正常收口本轮版本发布，待用户在可达网络环境下用 `_verify/pubmed_eutils_field_probe.py` 验证反馈后再补一轮小版本修正，不必让 v3.1.0 无限期卡在单一探测环节。
+- 这是一次对已发布工具的破坏性变更（`source` 字段值变化 + 文件/函数改名），发布后应在 buildlog 中显著提示这一变化，避免用户在未察觉的情况下升级后因硬编码判断 `source == "paperscraper"` 的下游逻辑静默失效。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -1762,3 +2143,11 @@ def register_all_sources(server: FastMCP) -> None:
 - 步骤 35～39 按**实现复杂度与代码结构共性**分批（区别于步骤 29～32 按"探测优先级"分批）：批次一（步骤 35）OpenAlex/Crossref/Europe PMC/DOAJ 为标准两件套模式；批次二（步骤 36）Zenodo/HAL/OpenAIRE 各有一个需要额外处理的结构性特点（资源类型过滤/Solr 字段选择/深层嵌套响应）；批次三（步骤 37）Semantic Scholar/CORE 集中处理条件注册架构；批次四（步骤 38）bioRxiv/medRxiv/ChEMBL 保持与其余 10 个通用检索源不同的参数模式；dblp（步骤 39）单列，因其真实字段结构尚未完整采集，编码前需先做一次补测（若本环境网络仍不可达，按 `goal.md` QA-R013 新增的 `_verify/` 流程约束处理，不得凭本环境失败结果下结论或编造字段）。
 - 步骤 40～42 为收尾：`register_all_sources()` 统一接入（步骤 40）→ README/`pyproject.toml` 版本号统一更新至 `3.0.0`（步骤 41，延续本计划书此前确定的"全部落地后统一更新"策略，并特别标注 Semantic Scholar 条件注册导致"总工具数视 key 配置而定"这一本项目历史上首次出现的情况）→ buildlog 记录 + 整体回归验证检查点（步骤 42，v3.0.0 最终交付节点）。
 - 步骤 1～33（v2.0/v2.1.0/v2.2.0/v2.3.0 构建 + v3.0.0 探测阶段）已全部执行完毕，保留在文档中作为历史记录，不受本轮改动影响。
+
+---
+
+- （v3.1.0，2026-08-07）步骤 43～52 基于 `project-docs/goal.md` QA-R014/QA-R015 追加，源自用户重启此前作废的 QA-R009（v2.4.0 调研）遗留决策点——"PubMed 检索改为直连 NCBI Entrez API"。本轮是重构+新增混合性质的一次面向已发布工具的破坏性变更（用户已明确接受）：① 重写 `pubmed_paper_search_by_query`（新文件 `pubmed.py`，改为直接 `httpx` 调用 `esearch.fcgi`+`efetch.fcgi`，移除 `paperscraper`/`pymed-paperscraper` 依赖）；② 新增 3 个独立工具（`pubmed_paper_summary_lookup_by_pmids`/`pubmed_related_article_search_by_pmid`/`pubmed_pmc_linkage_lookup_by_pmid`，命名为本计划书拟定）；③ 新增 `NCBI_API_KEY` 可选环境变量，无条件注册模式（对齐 Elsevier/CORE 先例，非 Semantic Scholar 式条件注册）；④ 源码文件/注册函数名/README/CLAUDE.md/teach.md 引用同步改名，JSON 响应体 `source` 字段值由 `"paperscraper"` 改为 `"pubmed"`。目标版本号 `3.1.0`（当前 `3.0.0`），工具总数由 25/27 增至 28/30。
+- 步骤 43（NCBI 5 个端点真实复测）是应 `goal.md` 明确要求新增的强制前置步骤——本轮大量决策依据已作废的 QA-R009 探测结论，探测发生在数日之前且从未对 EFetch 做过字段级抓包，比照 `_verify/dblp_field_probe.py` 先例产出诊断脚本到 `_verify/`（`goal.md` QA-R013 通用流程约束），步骤 45～48 的归一化字段方案均以该步骤的真实探测结果为准，不得凭空编写。
+- 步骤 49 中"一并移除 `pandas` 依赖"是本计划书基于代码巡查（全仓库检索确认 `pandas` 仅被 `paperscraper.py` 一处引用）发现的衍生决策，`goal.md` 未逐字提及，已在步骤中明确标注来源，比照 v2.1.0 步骤 8"清理 `ARXIV_DOWNLOAD_DIR` 死配置"的处理先例，避免被误认为超出授权范围或临场发挥。
+- 步骤 49.5 中 `src/uniarticles/__init__.py` 的 stdout 防御性代码是否随 `paperscraper` 依赖移除而简化，`goal.md` 已明确留给 `project-builder-cn` 按代码实际情况判断，本计划书给出两个可接受方案（保留作通用防御 / 简化移除）并倾向"保留"，但不代为拍板，要求最终选择与理由记入步骤 52 的 buildlog 记录。
+- 步骤 1～42（v2.0～v3.0.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
