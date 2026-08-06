@@ -14,6 +14,8 @@ The public tools are defined in ``register()`` (added incrementally in steps
 step 49, to avoid registering a half-built source mid-refactor.
 """
 
+import xml.etree.ElementTree as ET
+
 import httpx
 from mcp.server.fastmcp import FastMCP
 
@@ -62,10 +64,165 @@ def _params(extra: dict) -> dict:
     return params
 
 
+# --------------------------------------------------------------------------- #
+# XML parsing helpers (grounded in step 43 real EFetch capture, not doc guesses)
+# --------------------------------------------------------------------------- #
+def _itertext(el: ET.Element | None) -> str | None:
+    """Join all descendant text of an element (ArticleTitle/AbstractText may embed
+    <i>/<sup>/<sub> subtags; plain ``.text`` would truncate them)."""
+    if el is None:
+        return None
+    text = "".join(el.itertext()).strip()
+    return text or None
+
+
+def _parse_abstract(article: ET.Element) -> str | None:
+    """Concatenate Abstract/AbstractText segments.
+
+    Step 43 confirmed the two-state trap: a single unlabeled AbstractText, OR
+    several labeled segments (RATIONALE/METHODS/RESULTS/CONCLUSIONS). Labeled
+    segments are prefixed with their label so the structure is preserved in one
+    string; unlabeled segments are joined plainly.
+    """
+    segments = article.findall(".//Abstract/AbstractText")
+    if not segments:
+        return None
+    parts: list[str] = []
+    for seg in segments:
+        text = _itertext(seg)
+        if not text:
+            continue
+        label = seg.get("Label")
+        parts.append(f"{label}: {text}" if label else text)
+    return "\n".join(parts) if parts else None
+
+
+def _parse_authors(article: ET.Element) -> list[str]:
+    """Author display names. ``LastName ForeName`` for personal authors, or the
+    ``CollectiveName`` for group/institutional authors. AuthorList may be absent."""
+    authors: list[str] = []
+    for author in article.findall(".//AuthorList/Author"):
+        collective = _itertext(author.find("CollectiveName"))
+        if collective:
+            authors.append(collective)
+            continue
+        last = _itertext(author.find("LastName"))
+        fore = _itertext(author.find("ForeName"))
+        name = " ".join(p for p in (last, fore) if p)
+        if name:
+            authors.append(name)
+    return authors
+
+
+def _parse_pubdate(article: ET.Element) -> str | None:
+    """Publication date as ``YYYY[-MM[-DD]]``. Prefers Article/ArticleDate
+    (numeric), falls back to Journal/JournalIssue/PubDate (Month may be text like
+    'Aug'). Many historical records carry only a year, so month/day are optional."""
+    for path in (".//Article/ArticleDate", ".//Journal/JournalIssue/PubDate"):
+        node = article.find(path)
+        if node is None:
+            continue
+        year = _itertext(node.find("Year"))
+        if not year:
+            # Some PubDate carry a free-text <MedlineDate> (e.g. "2020 Jan-Feb").
+            medline = _itertext(node.find("MedlineDate"))
+            if medline:
+                return medline
+            continue
+        month = _itertext(node.find("Month"))
+        day = _itertext(node.find("Day"))
+        return "-".join(p for p in (year, month, day) if p)
+    return None
+
+
+def _find_article_id(article: ET.Element, id_type: str) -> str | None:
+    for aid in article.findall(f".//ArticleIdList/ArticleId[@IdType='{id_type}']"):
+        text = _itertext(aid)
+        if text:
+            return text
+    return None
+
+
+def _find_elocation(article: ET.Element, eid_type: str) -> str | None:
+    for el in article.findall(f".//ELocationID[@EIdType='{eid_type}']"):
+        text = _itertext(el)
+        if text:
+            return text
+    return None
+
+
+def _normalize_article(article: ET.Element) -> dict:
+    doi = _find_article_id(article, "doi") or _find_elocation(article, "doi")
+    keyword_els = article.findall(".//KeywordList/Keyword")  # KeywordList may be absent
+    return {
+        "pmid": _itertext(article.find(".//MedlineCitation/PMID")),
+        "title": _itertext(article.find(".//Article/ArticleTitle")),
+        "abstract": _parse_abstract(article),
+        "authors": _parse_authors(article),
+        "journal": _itertext(article.find(".//Journal/Title"))
+        or _itertext(article.find(".//Journal/ISOAbbreviation")),
+        "publication_date": _parse_pubdate(article),
+        "doi": doi,
+        "pii": _find_elocation(article, "pii"),
+        "pmcid": _find_article_id(article, "pmc"),
+        "keywords": [kw for kw in (_itertext(k) for k in keyword_els) if kw],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# NCBI E-utilities requests
+# --------------------------------------------------------------------------- #
+async def _esearch(query: str, retmax: int) -> list[str]:
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        response = await client.get(
+            f"{BASE_URL}esearch.fcgi",
+            params=_params({"term": query, "retmax": retmax, "retmode": "json"}),
+        )
+        response.raise_for_status()
+        payload = response.json()
+    return payload.get("esearchresult", {}).get("idlist", []) or []
+
+
+async def _efetch(pmids: list[str]) -> list[dict]:
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        response = await client.get(
+            f"{BASE_URL}efetch.fcgi",
+            params=_params({"id": ",".join(pmids), "rettype": "abstract", "retmode": "xml"}),
+        )
+        response.raise_for_status()
+    root = ET.fromstring(response.text)
+    return [_normalize_article(el) for el in root.findall(".//PubmedArticle")]
+
+
+async def _search(query: str, max_results: int) -> dict:
+    try:
+        pmids = await _esearch(query, max_results)
+    except Exception as exc:  # noqa: BLE001 - report which step failed (see plan step 45)
+        return _err(query=query, message=f"ESearch failed: {exc}")
+    if not pmids:
+        return _ok(query=query, items=[])  # 0 hits is a valid empty result, not an error
+    try:
+        items = await _efetch(pmids)
+    except Exception as exc:  # noqa: BLE001
+        return _err(query=query, message=f"EFetch failed (ESearch returned {len(pmids)} PMIDs): {exc}")
+    return _ok(query=query, items=items)
+
+
 def register(server: FastMCP) -> None:
-    # Tools are added in steps 45~48:
-    #   - pubmed_paper_search_by_query        (ESearch + EFetch, XML)         [step 45]
-    #   - pubmed_paper_summary_lookup_by_pmids (ESummary)                     [step 46]
-    #   - pubmed_related_article_search_by_pmid (ELink neighbor)             [step 47]
-    #   - pubmed_pmc_linkage_lookup_by_pmid    (ELink PMC)                    [step 48]
-    pass
+    # Unconditional registration (mirrors CORE/Elsevier): NCBI works without a key,
+    # NCBI_API_KEY only raises the rate limit. Tools added in steps 45~48.
+
+    @server.tool()
+    async def pubmed_paper_search_by_query(query: str, max_results: int = 10) -> dict:
+        """Search PubMed by keyword via NCBI Entrez (ESearch to get PMIDs, then
+        EFetch to retrieve and parse the article XML). Returns normalized records
+        (title, abstract, authors, journal, doi, pmid, pmcid, keywords, date)."""
+        normalized_query = query.strip()
+        if not normalized_query:
+            return _err(query=query, message="query must not be empty")
+        # NCBI ESearch retmax ceiling is 9999 for a single call.
+        bounded = max(1, min(max_results, 9998))
+        try:
+            return await _search(query=normalized_query, max_results=bounded)
+        except Exception as exc:  # noqa: BLE001
+            return _err(query=normalized_query, message=str(exc))

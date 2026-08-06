@@ -1008,3 +1008,27 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 45：`git mv paperscraper.py`→已新建 pubmed.py，改为删除旧 `paperscraper.py`；实现 `_esearch`+`_efetch`+`_normalize_article`（XML 解析，处理结构化摘要/列表标签缺失），重写 `pubmed_paper_search_by_query`。
 
 ---
+
+### 步骤 45(v3.1.0)：重写 pubmed_paper_search_by_query（ESearch + EFetch，XML 解析）—— 完成于 2026-08-07 02:00
+
+**执行的任务**
+- `git rm src/uniarticles/sources/paperscraper.py`（旧第三方包封装删除；pubmed.py 已在步骤 44 新建，故按计划走"删旧留新"路径）。
+- `pubmed.py` 新增 `import xml.etree.ElementTree as ET`（**本项目首次 XML 解析，仅用标准库，不引入新依赖**）。
+- 实现 XML 解析辅助函数（全部依步骤 43 真实抓包结构，非文档臆测）：`_itertext`（`.itertext()` 拼接，避免斜体/上下标子标签截断）、`_parse_abstract`（遍历全部 `AbstractText` 分段，带 `Label` 时拼 `LABEL: text`，覆盖结构化摘要二态陷阱）、`_parse_authors`（`LastName ForeName`，`CollectiveName` 兜底，AuthorList 缺失判空）、`_parse_pubdate`（`ArticleDate` 优先、`JournalIssue/PubDate` 兜底、`MedlineDate` 自由文本兜底，月/日可选）、`_find_article_id`/`_find_elocation`（doi 双来源、pii、pmcid）、`_normalize_article`。
+- 实现 `_esearch`（`esearchresult.idlist`）、`_efetch`（`.//PubmedArticle` → `_normalize_article`）、`_search`（编排：ESearch 0 命中 → `ok:true, items:[]` 正常空结果；分别捕获 ESearch/EFetch 失败并在 `_err` 中标注是哪一步失败）。
+- `register()` 重写 `pubmed_paper_search_by_query`（工具名不变，`query.strip()` + `max_results` clamp `[1,9998]` 保留，空 query 报错）。
+
+**归一化字段清单**：`pmid`/`title`/`abstract`/`authors`（字符串数组）/`journal`/`publication_date`/`doi`/`pii`/`pmcid`/`keywords`。相对旧 paperscraper 输出**允许有增有减**（goal.md QA-R015 已授权）——新增 `pmcid`/`pii`/结构化 `keywords`，旧的 `methods`/`results`/`conclusions`/`copyrights` 分段字段合并进统一 `abstract`（带 Label 前缀保留结构）。
+
+**验证结果（真实 NCBI 调用，带 NCBI_API_KEY）**
+- `CRISPR` 检索：`ok:true`，`source:"pubmed"`，count=3，首条含真实 title/journal/date/doi、7 位作者、5 个关键词、真实摘要（非占位）。
+- 生僻词 `zzxqwphantomterm12345notarealtopic`：`ok:true, count:0, items:[]`（正常空结果分支，非错误）。
+- 结构化摘要样本 PMID 42559426：4 位作者全部解析、`abstract` 含 `RATIONALE:` 标签、长度 2318（4 段正确拼接）。
+
+**遇到的问题及解决方案**
+- 删除 paperscraper.py 后，`sources/__init__.py` 仍引用它 → 整包经 `__init__` import 暂时失败。这是计划书step 44/49 有意的中间态（`__init__.py` 重接线放在步骤 49，避免中途注册半成品）。**步骤 45~48 的隔离验证通过 scratchpad 测试加载器绕过包 `__init__` 直接加载 pubmed 模块完成**；`__init__` 将在步骤 49 修复，届时整包恢复可正常 import。
+
+**下一步计划**
+- ⏭️ 步骤 46：新增 `pubmed_paper_summary_lookup_by_pmids`（ESummary 批量，`list[str]` 入参 + 逗号字符串两方案兼容性均需验证）。
+
+---
