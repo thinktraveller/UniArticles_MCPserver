@@ -1162,3 +1162,45 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 52：buildlog 本轮小结 + 整体回归验证（启动 server、create_server() 列工具、核对 28/30、两种 NCBI key 配置下 4 工具、抽查其余数据源无回归、stdout 洁净性）。
 
 ---
+
+### 步骤 52(v3.1.0)：整体回归验证 + 本轮小结（v3.1.0 最终交付检查点）—— 完成于 2026-08-07 03:30
+
+**整体回归验证（全部通过）**
+- **stdout 洁净性（fd 级捕获，MCP stdio 协议硬性要求）**：对 `import uniarticles` + `create_server()` + `list_tools()` 全程做 OS fd-1 级捕获，**stdout = 0 字节（CLEAN）**。（requests/urllib3 版本警告走 stderr，不污染协议帧。）
+- **工具计数**：未配 `SEMANTIC_SCHOLAR_API_KEY` 时 **TOTAL=28 / pubmed=4**；配置（dummy）SS key 时 **TOTAL=30**——与 goal.md QA-R015 的 28/30 目标完全一致。4 个 pubmed 工具（search/summary/related/pmc_linkage）全部注册。
+- **无条件注册 + 无 key 可用（核心验收）**：① 注册不依赖 key（register() 无 key 守卫，每次运行均 pubmed=4）；② monkeypatch `ncbi_api_key=None` 后 `_params` **不注入** api_key，真实检索仍 `ok=True count=2`——证明无 key 也能用（与步骤 43 探测"不带 key ESearch 200"一致）；③ 配置 key（.env 真实 key）时 4 工具真实调用全部成功：search count=2、summary pmcid=PMC6286148、related 3 条、pmc_linkage 自身全文 PMC6286148+被引 7515。两种配置均可用。
+- **其余数据源无回归抽查**：openalex（count=2）、crossref（count=2）真实调用正常，未因 config 新增字段/`sources/__init__.py` 改动/依赖移除产生回归。
+- **全仓库检索复核**：`src/` 下 `paperscraper` 仅剩 pubmed.py 两处说明性注释/docstring，无任何实际代码引用（`import/from/register_paperscraper_source/"paperscraper"` 值均已清零）。
+
+**本轮范围收尾小结（与 goal.md QA-R014/QA-R015 完全对应）**
+- **1 个工具重写**：`pubmed_paper_search_by_query`（工具名不变）底层 paperscraper 第三方包 → 直连 NCBI `esearch.fcgi`+`efetch.fcgi`（自解析 XML，本项目首次 XML 解析）。
+- **3 个新增工具**：`pubmed_paper_summary_lookup_by_pmids`（ESummary）、`pubmed_related_article_search_by_pmid`（ELink neighbor）、`pubmed_pmc_linkage_lookup_by_pmid`（ELink PMC）。
+- **1 个可选环境变量**：`NCBI_API_KEY`，无条件注册模式（对齐 CORE/Elsevier，非 Semantic Scholar 条件注册）。
+- **2 个依赖移除**：`paperscraper`（连带传递依赖 pymed-paperscraper/scholarly/boto3/matplotlib/seaborn/matplotlib-venn 等）+ `pandas`（衍生决策，仅 paperscraper.py 用过）。
+- **破坏性变更（用户已接受，无过渡期）**：文件 `paperscraper.py`→`pubmed.py`、注册函数 `register_paperscraper_source`→`register_pubmed_source`、JSON 响应体 `"source"` 字段值 `"paperscraper"`→`"pubmed"`。**发布后需提示下游**：任何硬编码判断 `source == "paperscraper"` 的调用方/工作流将失效。
+- **工具总数** 25/27 → **28/30**；**版本号** 3.0.0 → **3.1.0**。
+
+**架构决策记录**
+- `register_all_sources()`：`register_pubmed_source` 保持在 v2.x 既有数据源分组内原位置（非顺序调整任务）。
+- `src/uniarticles/__init__.py` stdout 防御代码：**保留（方案二）**，注释改为通用措辞（不点名 paperscraper），作为面向未来的通用防线。
+- USER_AGENT：本项目无"随发布同步"约定（scopus.py 仍 0.1.0），仅 pubmed.py 作为 v3.1.0 新建模块设为 3.1.0，其余模块不动。
+
+**依赖移除的收尾状态（需用户执行环境操作）**
+- `pyproject.toml` 已移除 paperscraper/pandas 声明并提交。但 **`uv.lock` 重生成 + `.venv` 物理清理属环境操作，按安全规范未静默执行**，需用户运行：`uv lock` → `uv sync` → `uv pip show paperscraper`/`uv pip show pymed-paperscraper`（确认移除）。执行前 .venv 仍物理保留旧包（代码已不 import，不影响运行；回归验证中 requests/urllib3 的 stderr 警告即来自尚未清理的旧传递依赖，`uv sync` 后消失）。
+
+**执行分工边界说明**
+- 本轮在 `project-docs/` 下改动了 `buildlog.md`（本 agent 职责）与 `teach.md`。**teach.md 的改动是 goal.md 核心目标26 / 计划书 step 50.3 明确授权的"机械文件名引用同步"例外**（仅 3 处 token 替换，未改写讲解性文字），非越界。`goal.md`/`project-plan.md` 未改动。**提请注意**：teach.md 中描述 PubMed 旧实现的讲解性文字（依赖列表、`get_pubmed_papers` 调用链、行数等）已与 v3.1.0 代码不符，建议后续由 `project-explainer-cn` 复核刷新。
+- `CLAUDE.md` 已本地更新但因被用户取消 git 跟踪（`.gitignore:53`）不进提交。
+
+## [2026-08-07 03:30] 🎉 v3.1.0 构建完成
+
+### 完成情况
+- 步骤 43~52 全部执行完毕：NCBI 真实复测 → config/骨架 → 检索重写 → 3 新工具 → 接入改名+依赖移除 → 文档同步 → 版本号 → 回归验证。整体回归（stdout 洁净/28-30 工具计数/两种 key 配置/其余源无回归）全部通过。
+
+### 下一步计划
+- ⏭️ 用户执行 `uv lock` + `uv sync` 完成 uv.lock 重生成与 .venv 物理清理（命令见上），随后可 `uv build`（先清 dist/）+ `uv publish` 发布 v3.1.0。
+- ⏭️（可选）`project-explainer-cn` 复核刷新 teach.md 的 PubMed 讲解内容。
+- ⏭️（可选，历史遗留）`__init__.py __version__=1.0.0` 与 `scopus.py UA=0.1.0` 的历史不一致，由用户后续单独决策。
+- ✅ v3.1.0 构建侧无待执行步骤。
+
+---
