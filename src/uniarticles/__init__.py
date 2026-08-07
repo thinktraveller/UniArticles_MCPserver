@@ -17,6 +17,6 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 
 from .server import create_server  # noqa: E402  (须在上面的日志配置之后导入)
 
-__version__ = "1.0.0"
+__version__ = "3.1.0"
 
 __all__ = ["create_server"]

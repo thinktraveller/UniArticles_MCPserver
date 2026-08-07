@@ -1204,3 +1204,24 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ✅ v3.1.0 构建侧无待执行步骤。
 
 ---
+
+### v3.1.0 收尾：`__version__` 修正 + 依赖物理清理 + 端到端验收 —— 完成于 2026-08-07
+
+**背景**：上一条目遗留的两项"用户后续决策"事项，用户已明确要求处理：修正历史版本号不一致、清理旧依赖包、并对本轮构建做验收测试。
+
+**执行的任务**
+- `src/uniarticles/__init__.py`：`__version__ = "1.0.0"` → `__version__ = "3.1.0"`。判定依据：此字段是包的运行时可自省版本号（`import uniarticles; uniarticles.__version__`），理应与 `pyproject.toml` 的权威版本号一致，属于遗留 bug 而非设计选择——不同于上一条目已核实的"各模块 USER_AGENT 记录创建时版本、无同步约定"的既有设计。因此**只修正此处**，`scopus.py` 的 `User-Agent: 0.1.0` 及其余模块的 `3.0.0` 维持不动，遵循已记录的既有惯例，不重新引入争议。
+- 依赖物理清理：`uv lock` 重新解析（45 个包） → `uv sync`。`uv pip show` 确认 `paperscraper`、`pymed-paperscraper`、`pandas`、`scholarly`、`boto3`、`matplotlib`、`seaborn` 均已从环境中移除（`uv.lock` 从原有条目精简至 45 个包）。
+
+**验收测试（真实调用，非 mock）**
+- `create_server()` + `list_tools()`：stdout fd 级捕获 0 字节（CLEAN）；无 `SEMANTIC_SCHOLAR_API_KEY` 时工具总数 **28**，含全部 4 个 pubmed 工具；`uniarticles.__version__` 确认为 `3.1.0`。
+- 4 个 pubmed 工具端到端真实调用（真实 NCBI 请求，非离线数据）：
+  - `pubmed_paper_search_by_query`（query=CRISPR）→ `ok=true, source=pubmed, count=2`，返回两篇 2026-08-06/07 的真实最新论文。
+  - `pubmed_paper_summary_lookup_by_pmids`（用上一步拿到的 2 个 pmid）→ `ok=true, count=2`。
+  - `pubmed_related_article_search_by_pmid` → `ok=true, count=0`（该论文发表当天，NCBI 尚未计算出相关文献关联，属正常空结果而非失败，`error=null`）。
+  - `pubmed_pmc_linkage_lookup_by_pmid` → `ok=true, count=1`。
+- 抽查其余数据源无回归：`openalex_work_search_by_query`、`crossref_work_search_by_query` 真实调用均 `ok=true`。
+
+**结论**：本轮遗留的两项收尾事项（版本号历史不一致、旧依赖清理）均已处理完毕并通过真实端到端验收，v3.1.0 无待办事项。
+
+---
