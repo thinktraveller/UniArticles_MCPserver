@@ -18,7 +18,7 @@
   - **Scopus**: 搜索、摘要详情、按 ISSN 查询期刊信息、配额查询。
   - **ScienceDirect**: 全文文章检索、文章对象（配图/表格/补充材料）元信息获取。
   - **ArXiv**: 论文搜索、最新论文列表、按 ID 读取论文元数据。
-  - **Paperscraper API**: PubMed 检索。
+  - **PubMed（NCBI Entrez）**: 关键词检索、批量摘要查询、相关文献发现、PMC 全文/引用关联——直连 NCBI E-utilities（不再依赖第三方封装包）。
   - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、dblp、Semantic Scholar、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
   - **专项数据源（v3.0.0）**: bioRxiv/medRxiv 预印本按日期区间浏览、ChEMBL 药物化学生物活性数据按 DOI 查询。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
@@ -30,7 +30,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。自 v3.0.0 起，未配置 `SEMANTIC_SCHOLAR_API_KEY` 时本服务器共注册 **25 个工具**、覆盖 15 个数据源；配置后为 **27 个**；新增的非 Elsevier 数据源均不需要此 Key。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。自 v3.1.0 起，未配置 `SEMANTIC_SCHOLAR_API_KEY` 时本服务器共注册 **28 个工具**、覆盖 15 个数据源；配置后为 **30 个**；新增的非 Elsevier 数据源均不需要此 Key。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -116,6 +116,9 @@ python -m uniarticles
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
+# 可选。NCBI Entrez 无此 Key 也可用；配置后仅将 PubMed 限速从 3 请求/秒
+# 提升到 10 请求/秒（NCBI 免费申请）。
+NCBI_API_KEY=your_ncbi_api_key
 ```
 
 #### 项目结构
@@ -126,7 +129,7 @@ src/
     ├── server.py        # MCP Server 入口点
     └── sources/         # 数据源模块
         ├── arxiv.py
-        ├── paperscraper.py
+        ├── pubmed.py
         ├── scopus.py
         └── ...
 pyproject.toml           # 项目元数据与依赖
@@ -163,8 +166,12 @@ python -m uniarticles      # 使用 pip 安装时
 - `arxiv_latest_paper_list_by_category(category, max_results)`: 列出指定 arXiv 分类下最新提交的论文。`category` 为**必填**参数，须符合 arXiv 官方分类码格式（如 `cs.AI`）；多个分类用逗号分隔（如 `cs.AI,cs.LG`）。
 - `arxiv_paper_detail_by_id(paper_id)`: 获取论文元数据。
 
-### Paperscraper
-- `pubmed_paper_search_by_query(query, max_results)`: 在 PubMed 检索论文。
+### PubMed（NCBI Entrez）
+以下工具直连 NCBI E-utilities。无 Key 即可使用；配置可选的 `NCBI_API_KEY`（NCBI 免费申请）仅将限速从 3 请求/秒提升到 10 请求/秒。
+- `pubmed_paper_search_by_query(query, max_results)`: 按关键词检索 PubMed（ESearch + EFetch），返回归一化记录（标题、摘要、作者、期刊、doi、pmid、pmcid、关键词、日期）。
+- `pubmed_paper_summary_lookup_by_pmids(pmids)`: 对一批 PMID 做轻量元数据批量查询（ESummary），含检索工具没有的字段（pmcid、pubstatus、pmcrefcount、elocationid）。无效 PMID 会作为带 `error` 字段的条目返回。单次上限 200 个。
+- `pubmed_related_article_search_by_pmid(pmid, max_results)`: 查询与某 PMID 主题相关的 PubMed 文献（ELink“相似文献”），返回相关 PMID 列表（已剔除该 PMID 自身）。
+- `pubmed_pmc_linkage_lookup_by_pmid(pmid)`: 查询某 PMID 的 PubMed Central 关联——`own_pmc_fulltext`（其自身的开放获取 PMC 记录，若有）与 `cited_by_pmc_articles`（引用它的 PMC 文章），两组明确区分。
 
 ### OpenAlex
 - `openalex_work_search_by_query(query, max_results)`: 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。

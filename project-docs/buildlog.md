@@ -1118,3 +1118,27 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 50：README.md/README_ZH.md/CLAUDE.md/teach.md 文档同步（新增 3 工具行、计数 25/27→28/30、新增 NCBI_API_KEY 说明、paperscraper→pubmed 引用替换）。
 
 ---
+
+### 步骤 50(v3.1.0)：文档同步更新（README.md/README_ZH.md/CLAUDE.md/teach.md）—— 完成于 2026-08-07 03:05
+
+**执行的任务**
+- `README.md`/`README_ZH.md`（双语对称改动）：
+  - Features 数据源条目：`Paperscraper APIs: PubMed search` → `PubMed (NCBI Entrez)`（关键词检索/批量摘要/相关文献/PMC 关联，直连 E-utilities，不再依赖第三方封装）。
+  - 工具计数：`25 tools`/`27 tools` → **`28 tools`/`30 tools`**（v3.0.0→v3.1.0），数据源数仍 15（pubmed 仍是 1 源、只是工具增多）。此计数不在 Available Tools 表格内、散落在 API Key 说明段落（延续 v2.2.0/v2.3.0 已知易漏点，已专门核对）。
+  - 项目结构树：`paperscraper.py` → `pubmed.py`。
+  - Available Tools：`### Paperscraper` 段 → `### PubMed (NCBI Entrez)`，`pubmed_paper_search_by_query` 说明改为"直连 ESearch+EFetch"，新增 3 个工具行（summary/related/pmc_linkage），段首加 `NCBI_API_KEY` 可选说明（无 key 可用、仅提速 3→10 req/s）。
+  - `.env` 配置示例新增可选 `NCBI_API_KEY`（注释说明用途）。
+- `CLAUDE.md`（**本地更新**）：overview `PubMed (via paperscraper)` → `PubMed (via direct NCBI Entrez API calls)`、`25/27 tools` → `28/30 tools`、`.env` 段新增 `NCBI_API_KEY` 行、Source module pattern 段把"wrap arxiv/paperscraper"改为"parse direct API response (pubmed.py parses EFetch XML via stdlib ElementTree)"。**注**：CLAUDE.md 已被用户主动取消 git 跟踪并列入 `.gitignore:53`，故本次更新仅落地本地文件、不进入 git 提交（不强制 add，尊重用户取消跟踪的决定）。
+- `project-docs/teach.md`（**严格机械文件名/模块名引用替换**，不改写讲解性文字，按计划书 step 50.3 边界）：仅替换 3 处指代当前代码文件的字面 token——注册模块列表 `arxiv/scopus/paperscraper/sciencedirect` → `.../pubmed/...`、文件名 `paperscraper.py`（75 行）→ `pubmed.py`、实现速查表 `| PubMed | paperscraper.py |` → `| PubMed | pubmed.py |`。**未改写**描述旧第三方库实现的讲解性 prose（第 5/45/57/136 行的依赖列表、`asyncio.to_thread` 说明、`get_pubmed_papers` 调用链考证、核实方式补充等）——这些属讲解内容维护，留给 `project-explainer-cn`。
+
+**验证结果**
+- `README.md`/`README_ZH.md`/`CLAUDE.md` 全文检索 `paperscraper`：均无残留（README×2 已清零；CLAUDE.md 已清零）。
+- teach.md diff 确认仅 3 处 token 替换，讲解性文字未动。
+
+**遇到的问题及解决方案**
+- teach.md 机械替换后，`pubmed.py（75 行）：包装第三方库 paperscraper...` 等行的**讲解性描述仍停留在旧实现**（内部矛盾：文件名已是 pubmed.py 但描述仍是旧的 paperscraper 封装）。这是计划书 step 50.3 有意的边界——机械同步不含内容改写。**需提请用户注意**：teach.md 的 PubMed 讲解内容（依赖列表、实现描述、行数、`asyncio.to_thread` 适用范围等）已与 v3.1.0 实际代码不符，建议后续由 `project-explainer-cn` 复核刷新，本 agent 不越界代劳。
+
+**下一步计划**
+- ⏭️ 步骤 51：`pyproject.toml` 版本号 `3.0.0` → `3.1.0`；核实 USER_AGENT 版本号同步约定。
+
+---

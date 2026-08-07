@@ -18,7 +18,7 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
   - **Scopus**: Search, abstract details, journal/serial title lookup by ISSN, quota check.
   - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
   - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
-  - **Paperscraper APIs**: PubMed search.
+  - **PubMed (NCBI Entrez)**: Keyword search, batch summary lookup, related-article discovery, and PMC full-text/citation linkage — direct NCBI E-utilities calls (no third-party wrapper).
   - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, Zenodo, HAL, OpenAIRE, dblp, Semantic Scholar, and CORE keyword/DOI lookup across open scholarly catalogs.
   - **Specialized sources (v3.0.0)**: bioRxiv/medRxiv preprint browsing by date range, and ChEMBL medicinal-chemistry bioactivity lookup by DOI.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
@@ -30,7 +30,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. As of v3.0.0 the server registers **25 tools total** covering 15 data sources when `SEMANTIC_SCHOLAR_API_KEY` is not configured, or **27 tools** when it is; the newer non-Elsevier sources do not require this key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. As of v3.1.0 the server registers **28 tools total** covering 15 data sources when `SEMANTIC_SCHOLAR_API_KEY` is not configured, or **30 tools** when it is; the newer non-Elsevier sources do not require this key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -118,6 +118,9 @@ Create a `.env` file in the project root:
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
+# Optional. NCBI Entrez works without it; setting it only raises the PubMed
+# rate limit from 3 to 10 requests/sec (free from NCBI).
+NCBI_API_KEY=your_ncbi_api_key
 ```
 
 #### Project Structure
@@ -128,7 +131,7 @@ src/
     ├── server.py        # MCP Server entry point
     └── sources/         # Data source modules
         ├── arxiv.py
-        ├── paperscraper.py
+        ├── pubmed.py
         ├── scopus.py
         └── ...
 pyproject.toml           # Project metadata and dependencies
@@ -165,8 +168,12 @@ If the process starts without import or configuration errors, the installation i
 - `arxiv_latest_paper_list_by_category(category, max_results)`: List the most recently submitted papers in a given arXiv category. `category` is **required** and must be a valid arXiv category code (e.g. `cs.AI`); comma-separate multiple categories (e.g. `cs.AI,cs.LG`).
 - `arxiv_paper_detail_by_id(paper_id)`: Get paper metadata.
 
-### Paperscraper
-- `pubmed_paper_search_by_query(query, max_results)`: Search papers from PubMed.
+### PubMed (NCBI Entrez)
+These tools call the NCBI E-utilities directly. They work without a key; setting the optional `NCBI_API_KEY` (free from NCBI) only raises the rate limit from 3 to 10 requests/sec.
+- `pubmed_paper_search_by_query(query, max_results)`: Search PubMed by keyword (ESearch + EFetch), returning normalized records (title, abstract, authors, journal, doi, pmid, pmcid, keywords, date).
+- `pubmed_paper_summary_lookup_by_pmids(pmids)`: Batch lightweight metadata lookup (ESummary) for a list of PMIDs; carries fields the search tool lacks (pmcid, pubstatus, pmcrefcount, elocationid). Invalid PMIDs come back as items with a per-item `error`. Max 200 per call.
+- `pubmed_related_article_search_by_pmid(pmid, max_results)`: Find PubMed articles topically related to a PMID (ELink "Similar articles"). Returns related PMIDs (source PMID excluded).
+- `pubmed_pmc_linkage_lookup_by_pmid(pmid)`: Look up a PMID's PubMed Central linkages — `own_pmc_fulltext` (its own open-access PMC record, if any) and `cited_by_pmc_articles` (PMC articles citing it), kept as two distinct groups.
 
 ### OpenAlex
 - `openalex_work_search_by_query(query, max_results)`: Search works by keyword (abstract reconstructed to readable text). No key needed.
