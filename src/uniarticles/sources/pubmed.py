@@ -23,9 +23,11 @@ from ..config import settings
 
 
 BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
-# Version kept in sync with sibling v3.0.0 modules (core.py/dblp.py/...); the
-# project-wide version-string reconciliation is handled centrally in step 51.
-USER_AGENT = "UniArticlesMCP/3.0.0 (https://github.com/thinktraveller/UniArticles_MCPserver)"
+# USER_AGENT carries each module's creation-era version (there is NO project-wide
+# "bump on release" convention — e.g. scopus.py is still 0.1.0; the v3.0.0 batch is
+# 3.0.0 only because those modules were authored in v3.0.0). pubmed.py is authored
+# in v3.1.0, so it carries 3.1.0. Sibling modules are intentionally left as-is.
+USER_AGENT = "UniArticlesMCP/3.1.0 (https://github.com/thinktraveller/UniArticles_MCPserver)"
 # NCBI etiquette: identify the caller via tool/email (recommended, not required).
 CONTACT_EMAIL = "wangzh685@mail2.sysu.edu.cn"
 TOOL_NAME = "uniarticles-mcp"

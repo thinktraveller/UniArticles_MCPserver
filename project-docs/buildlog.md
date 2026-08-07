@@ -1142,3 +1142,23 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ⏭️ 步骤 51：`pyproject.toml` 版本号 `3.0.0` → `3.1.0`；核实 USER_AGENT 版本号同步约定。
 
 ---
+
+### 步骤 51(v3.1.0)：pyproject.toml 版本号提升至 3.1.0 —— 完成于 2026-08-07 03:15
+
+**执行的任务**
+- `pyproject.toml`：`version = "3.0.0"` → `version = "3.1.0"`（第 7 行；唯一权威版本号来源）。
+- **USER_AGENT 版本号同步约定核实结论**：**本项目不存在"随发布同步更新 USER_AGENT"的约定**——证据：`scopus.py` 的 `User-Agent` 至今仍是 `UniArticlesMCP/0.1.0`（历经 v1/v2/v3 多次发布从未同步）；v3.0.0 批次模块统一为 `3.0.0` 仅因它们在 v3.0.0 时新建（"模块创建即带当时版本"）。因此**不批量**把其余模块的 `3.0.0` 改为 `3.1.0`（无此约定，强行改反而制造新的维护负担）。
+- 但 `pubmed.py` 是**本轮 v3.1.0 新建模块**，按"模块创建即带当时版本"的事实惯例，将其 USER_AGENT 由骨架阶段占位的 `3.0.0` 改为 **`3.1.0`**（准确反映创建版本），并把注释从"待步骤 51 集中核对"改为记录该决策依据。
+
+**验证结果**
+- `pyproject.toml` 版本号确认为 `3.1.0`。
+- `pubmed.py` USER_AGENT 确认为 `UniArticlesMCP/3.1.0`。
+
+**遗留（如实记录，超本轮授权范围，不擅自处理）**
+- `src/uniarticles/__init__.py` 的 `__version__ = "1.0.0"` 与 `pyproject.toml` 早已不同步——这是**本项目已存在、非本轮引入**的历史不一致，计划书 step 51 已明确不在本轮处理，留待用户后续单独决策。
+- `scopus.py` 的 `User-Agent` 仍为 `0.1.0`（同上，历史遗留，非本轮范围）。
+
+**下一步计划**
+- ⏭️ 步骤 52：buildlog 本轮小结 + 整体回归验证（启动 server、create_server() 列工具、核对 28/30、两种 NCBI key 配置下 4 工具、抽查其余数据源无回归、stdout 洁净性）。
+
+---
