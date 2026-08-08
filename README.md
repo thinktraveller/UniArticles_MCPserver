@@ -55,12 +55,22 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
         "uniarticles-mcp"
       ],
       "env": {
-        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
+        "NCBI_API_KEY": "your_ncbi_api_key_here",
+        "CORE_API_KEY": "your_core_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
 }
 ```
+
+> **About the `env` fields**: Only `ELSEVIER_API_KEY` is required (for Scopus / ScienceDirect). All the others are **optional** — if you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line must not end with a comma). The optional fields are:
+> - `ELSEVIER_INSTTOKEN` — only if your institution issued an Elsevier Institutional Token, for broader Elsevier access.
+> - `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec.
+> - `CORE_API_KEY` — CORE works without it but is heavily rate-limited (~5 requests, then a ~10-minute lockout); a key is recommended.
+> - `SEMANTIC_SCHOLAR_API_KEY` — without it the Semantic Scholar tools are **not registered at all** (its keyword search is unusable without a key).
 
 If you do not want to force refresh the cache package every time you restart, then instead add the following content: (but this will cause you to need to manually update the package when the package is updated)
 
@@ -73,7 +83,11 @@ If you do not want to force refresh the cache package every time you restart, th
         "uniarticles-mcp"
       ],
       "env": {
-        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
+        "NCBI_API_KEY": "your_ncbi_api_key_here",
+        "CORE_API_KEY": "your_core_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
@@ -118,9 +132,18 @@ Create a `.env` file in the project root:
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
+# Optional. Only if your institution issued an Elsevier Institutional Token
+# (broader Elsevier access). Leave unset otherwise.
+ELSEVIER_INSTTOKEN=your_elsevier_insttoken
 # Optional. NCBI Entrez works without it; setting it only raises the PubMed
 # rate limit from 3 to 10 requests/sec (free from NCBI).
 NCBI_API_KEY=your_ncbi_api_key
+# Optional. CORE works without it but is heavily rate-limited (~5 requests, then
+# a ~10-minute lockout); setting it is recommended. Free from https://core.ac.uk/services/api
+CORE_API_KEY=your_core_api_key
+# Optional. Without it the Semantic Scholar tools are NOT registered at all
+# (its keyword search is unusable without a key).
+SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ```
 
 #### Project Structure

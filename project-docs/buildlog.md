@@ -1225,3 +1225,28 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 **结论**：本轮遗留的两项收尾事项（版本号历史不一致、旧依赖清理）均已处理完毕并通过真实端到端验收，v3.1.0 无待办事项。
 
 ---
+
+### 文档修正：JSON/`.env` 导入示例补全 NCBI/CORE 等可选 API Key 字段 —— 完成于 2026-08-08
+
+**背景**：用户提出疑问——"当前用 JSON 将本 MCP Server 导入到 Cherry Studio 等客户端时，是否会正常把 NCBI 和 CORE 的 API Key 传入？"这是一次用户临时提出的、独立于 project-plan.md 现有步骤的小型文档修正任务。
+
+**技术结论（已核实，代码逻辑无问题）**
+- `src/uniarticles/config.py`：`ncbi_api_key`、`core_api_key`、`semantic_scholar_api_key` 均通过 `field(default_factory=lambda: os.getenv("XXX_API_KEY"))` 直接读取**进程环境变量**；`elsevier_api_key` 经 `_resolve_elsevier_api_key()` 同样走 `os.getenv(...)`（并对旧名 `SCOPUS_API_KEY` 做弃用兼容）。文件顶部虽调用 `load_dotenv()`，但 python-dotenv 默认 `override=False`，不会覆盖已存在的系统环境变量。
+- Cherry Studio / Claude Desktop 等客户端启动 `uvx uniarticles-mcp` 子进程时，会把 JSON 配置里 `mcpServers.<name>.env` 的键值对设为子进程的系统环境变量，子进程内 `os.getenv(...)` 可直接读到。
+- 因此只要用户在 JSON 的 `env` 里正确填写 `NCBI_API_KEY` / `CORE_API_KEY` 就能生效——真正的问题是**文档层面遗漏**：仓库内所有"JSON 导入示例"此前只演示了 `ELSEVIER_API_KEY` 一个字段，跟着抄的用户不会意识到还能/需要加其他 Key。config.py 实际读取的完整变量集为：`ELSEVIER_API_KEY`（+ 弃用兼容 `SCOPUS_API_KEY`）、`ELSEVIER_INSTTOKEN`、`NCBI_API_KEY`、`CORE_API_KEY`、`SEMANTIC_SCHOLAR_API_KEY`。
+
+**执行的任务（仅文档/示例补全，未改动任何 .py 代码）**
+- `README.md`：两处 JSON 导入示例的 `env` 块补全全部可选字段，并在 JSON 块外新增正文说明"哪个必需、哪些可选、不需要就整行删除且末行不留逗号"；`.env` 示例补 `ELSEVIER_INSTTOKEN` / `CORE_API_KEY` / `SEMANTIC_SCHOLAR_API_KEY`。
+- `README_ZH.md`：与英文版对应一致的中文修正（两处 JSON + 正文说明 + `.env`）。
+- `tutorial/step_by_step_guide_en.md`、`tutorial/step_by_step_guide_zh.md`：主 JSON 示例的 `env` 块补全，并新增可选项说明；顺手修复了这两处 JSON 示例末尾多余的尾逗号（原 `"ELSEVIER_API_KEY": "...",` 后无其他键，属非法 JSON）。第二个"无任何 Key"的空 `env` 示例保持不变。
+- `.env.example`：补 `ELSEVIER_INSTTOKEN` 与遗漏的 `NCBI_API_KEY`（原文件已有 SEMANTIC_SCHOLAR/CORE 但缺 NCBI）。
+- `claude_desktop_config.example.json`：`env` 块补全全部可选字段。
+
+**验证**
+- `python -c json.load(...)` 校验 `claude_desktop_config.example.json` 合法。
+- 脚本提取并 `json.loads` 校验四个 md 文件内全部 8 个 ```json``` 代码块，全部合法（含 tutorial 两处原尾逗号已修复）。
+
+**范围外、仅记录不改动**
+- `project-docs/teach.md` 正文含 `ELSEVIER_API_KEY` 等描述性文字，但那是讲解性内容而非用户复制的导入示例，且该文件由 `project-explainer-cn` 工作流维护、亦在本 agent 的 `project-docs/` 写入边界之外，故不改动。
+
+---

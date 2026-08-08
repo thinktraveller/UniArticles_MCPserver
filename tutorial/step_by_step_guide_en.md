@@ -58,6 +58,10 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
+        "NCBI_API_KEY": "your_ncbi_api_key_here",
+        "CORE_API_KEY": "your_core_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
@@ -65,6 +69,12 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
 ```
 
 **Please pay attention to the indentation of this JSON code!! Any improper indentation may cause the server import to fail!!!**
+
+Only `ELSEVIER_API_KEY` is required; the other four fields are **optional**. If you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line inside `env` must not end with a comma):
+- `ELSEVIER_INSTTOKEN` — only if your institution issued an Elsevier Institutional Token.
+- `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec.
+- `CORE_API_KEY` — CORE works without it but is heavily rate-limited; a key is recommended.
+- `SEMANTIC_SCHOLAR_API_KEY` — without it the Semantic Scholar tools are not registered at all.
 
 **If you do not currently hold any API Key**, enter the following token instead:
 

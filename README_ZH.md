@@ -53,12 +53,22 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
+        "NCBI_API_KEY": "your_ncbi_api_key_here",
+        "CORE_API_KEY": "your_core_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
 }
 ```
+
+> **关于 `env` 字段**：只有 `ELSEVIER_API_KEY` 是必需的（用于 Scopus / ScienceDirect），其余全部为**可选项**——如果您没有某个 Key，请**整行删除**（JSON 不支持注释，且删除后剩下的最后一行末尾不能带逗号）。各可选字段说明：
+> - `ELSEVIER_INSTTOKEN` —— 仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写，用于访问更多 Elsevier 数据。
+> - `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。
+> - `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格（约 5 次请求后锁定约 10 分钟），建议配置。
+> - `SEMANTIC_SCHOLAR_API_KEY` —— 不配置时 Semantic Scholar 的工具**根本不会被注册**（无 Key 时其关键词检索不可用）。
 
 如果您不希望每次重启时强制刷新缓存包，则改为添加以下内容：（但这会导致包更新时您需要对包进行手动更新）
 
@@ -71,7 +81,11 @@
         "uniarticles-mcp"
       ],
       "env": {
-        "ELSEVIER_API_KEY": "your_elsevier_api_key_here"
+        "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
+        "NCBI_API_KEY": "your_ncbi_api_key_here",
+        "CORE_API_KEY": "your_core_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
@@ -116,9 +130,18 @@ python -m uniarticles
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
+# 可选。仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写，用于访问
+# 更多 Elsevier 数据；否则请留空/删除此行。
+ELSEVIER_INSTTOKEN=your_elsevier_insttoken
 # 可选。NCBI Entrez 无此 Key 也可用；配置后仅将 PubMed 限速从 3 请求/秒
 # 提升到 10 请求/秒（NCBI 免费申请）。
 NCBI_API_KEY=your_ncbi_api_key
+# 可选。CORE 无此 Key 也可用，但限流严格（约 5 次请求后锁定约 10 分钟），
+# 建议配置。免费申请：https://core.ac.uk/services/api
+CORE_API_KEY=your_core_api_key
+# 可选。不配置时 Semantic Scholar 的工具根本不会被注册（无 Key 时其
+# 关键词检索不可用）。
+SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ```
 
 #### 项目结构

@@ -56,6 +56,10 @@ https://dev.elsevier.com/
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
+        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
+        "NCBI_API_KEY": "your_ncbi_api_key_here",
+        "CORE_API_KEY": "your_core_api_key_here",
+        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
       }
     }
   }
@@ -63,6 +67,12 @@ https://dev.elsevier.com/
 ```
 
 **请注意这段json代码的缩进！！任何不恰当的缩进都可能导致服务器导入的失败！！！**
+
+其中只有 `ELSEVIER_API_KEY` 是必需的，其余四个字段均为**可选项**。如果您没有某个 Key，请**整行删除**（JSON 不支持注释，且删除后 `env` 内最后一行末尾不能带逗号）：
+- `ELSEVIER_INSTTOKEN` —— 仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写。
+- `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。
+- `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格，建议配置。
+- `SEMANTIC_SCHOLAR_API_KEY` —— 不配置时 Semantic Scholar 的工具根本不会被注册。
 
 
 **如果您暂时不持有任何API Key**，则改为输入以下token：
