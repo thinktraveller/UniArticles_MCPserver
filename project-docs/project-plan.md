@@ -2099,6 +2099,27 @@ def register_all_sources(server: FastMCP) -> None:
 
 ---
 
+### 步骤 53：移除 ChEMBL / HAL 两个数据源 + 版本号提升至 `3.2.0`（v3.2.0，QA-R016）
+
+#### 目标说明
+`goal.md` QA-R016 已明确并确认：用户直接指令移除 ChEMBL 与 HAL 两个数据源（理由：产品价值不足，"用处不大"，非技术不可行——两者在 v3.0.0/QA-R010 纳入时均已实测确认可用，本轮不否定该历史结论）。范围小而封闭，无需分阶段/探索性调研，一步完成代码删除、验证、文档同步与版本号提升。
+
+#### 具体操作
+1. 删除源文件 `src/uniarticles/sources/chembl.py`（工具 `chembl_bioactivity_lookup_by_doi`）与 `src/uniarticles/sources/hal.py`（工具 `hal_document_search_by_query`）。
+2. `src/uniarticles/sources/__init__.py`：删除对应的 2 行 import（`from .chembl import register as register_chembl_source`、`from .hal import register as register_hal_source`）与 2 行注册调用（`register_hal_source(server)`、`register_chembl_source(server)`），一并清理孤立的分组注释（原 `register_chembl_source(server)   # DOI 必填查询语义` 整行删除，不留残留注释）。
+3. `README.md`/`README_ZH.md` 同步更新：总览"通用学术检索"列表中删去 HAL、"专项数据源"列表中删去 ChEMBL；数据源总数摘要段落（16→14 总数、15→13 默认激活、28→26 默认工具、30→28 含 Semantic Scholar）；数据源对比表格中删去 HAL、ChEMBL 两行；删除独立的 `### HAL`/`### ChEMBL` 工具小节（含各自工具表格）；Elsevier Key 说明段落与工具列表小节开头的工具计数摘要同步下修。
+4. 版本号提升：`pyproject.toml` `version = "3.1.0"` → `"3.2.0"`；`src/uniarticles/__init__.py` `__version__ = "3.1.0"` → `"3.2.0"`（用户已在澄清中确认本轮 bump 版本号，遵循本项目"范围变更即 bump minor 版本号"的既有惯例）。
+5. 各 `sources/*.py` 模块内硬编码的 `USER_AGENT` 版本号字符串（如 `"UniArticlesMCP/3.0.0 (...)"）**不做同步修改**——沿用 v3.1.0 步骤 51/buildlog 已确认的既有惯例："USER_AGENT 版本号仅在该模块被创建/重写时设为当时版本号，不存在'随发布统一同步'的约定"（v3.1.0 时仅新建的 `pubmed.py` 设为 3.1.0，其余模块仍是 3.0.0）；本轮未新建/重写任何模块，故不涉及此项改动。
+
+#### 验证方法
+- 启动 `create_server()` 并枚举工具：未配置 `SEMANTIC_SCHOLAR_API_KEY` 时应为 **13 个数据源、26 个工具**；配置后应为 **28 个工具**；工具名单中确认无 `hal_*`/`chembl_*`。
+- `README.md`/`README_ZH.md` 中不再出现任何 HAL/ChEMBL 引用（含表格行、独立小节、总数摘要）。
+
+#### 风险提示
+- 这是一次对已发布工具的破坏性变更（无过渡期直接删除），发布后若有下游用户依赖 `hal_document_search_by_query`/`chembl_bioactivity_lookup_by_doi`，升级后会静默失效，应在对外发布说明中明确提示。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -2151,3 +2172,9 @@ def register_all_sources(server: FastMCP) -> None:
 - 步骤 49 中"一并移除 `pandas` 依赖"是本计划书基于代码巡查（全仓库检索确认 `pandas` 仅被 `paperscraper.py` 一处引用）发现的衍生决策，`goal.md` 未逐字提及，已在步骤中明确标注来源，比照 v2.1.0 步骤 8"清理 `ARXIV_DOWNLOAD_DIR` 死配置"的处理先例，避免被误认为超出授权范围或临场发挥。
 - 步骤 49.5 中 `src/uniarticles/__init__.py` 的 stdout 防御性代码是否随 `paperscraper` 依赖移除而简化，`goal.md` 已明确留给 `project-builder-cn` 按代码实际情况判断，本计划书给出两个可接受方案（保留作通用防御 / 简化移除）并倾向"保留"，但不代为拍板，要求最终选择与理由记入步骤 52 的 buildlog 记录。
 - 步骤 1～42（v2.0～v3.0.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
+---
+
+- （v3.2.0，2026-08-09）步骤 53 基于 `project-docs/goal.md` QA-R016 追加，源自用户直接、明确的范围收缩指令——移除 ChEMBL 与 HAL 两个数据源（理由：产品价值不足，"用处不大"，非技术不可行）。范围小而封闭，一步完成代码删除（`chembl.py`/`hal.py` 源文件 + `sources/__init__.py` 中对应 import/注册行）、验证（`create_server()` 工具数量核对）、README.md/README_ZH.md 同步更新、版本号提升。数据源规模由 15 个降为 13 个，工具规模由 28/30 降为 26/28。用户在本轮澄清中已明确确认将版本号一并 bump 至 `3.2.0`（当前 `3.1.0`），延续本项目"范围变更即 bump minor 版本号"的既有惯例。
+- 与此前几轮删除性质变更（v2.1.0 QA-R003、v2.2.0 QA-R004）不同：本轮排除的 ChEMBL/HAL **均已实测确认可用**（非技术不可行），排除依据是用户对已发布范围的主观产品价值判断，`goal.md` 已特别标注这一性质区分，步骤 53 与 buildlog 记录中均需如实反映，不得误写为"技术不可行"。
+- 步骤 1～52（v2.0～v3.1.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。

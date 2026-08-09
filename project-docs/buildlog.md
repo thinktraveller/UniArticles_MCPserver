@@ -1272,3 +1272,36 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - 未触碰 `project-docs/` 下除 `buildlog.md` 外的任何文件（goal.md / project-plan.md / teach.md）；未修改任何 `.py` 源码，仅读取用于核实。
 
 ---
+
+## v3.2.0 构建记录
+
+### 步骤 53：移除 ChEMBL / HAL 两个数据源 + 版本号提升至 `3.2.0` —— 完成于 2026-08-09
+
+**背景**：用户直接指令移除 ChEMBL 与 HAL 两个数据源（原话"用处不大"）。`project-creator-cn` 先在 `goal.md` 记录本轮范围收缩决策（QA-R016），随后由主对话直接完成代码删除、验证与文档同步，未额外经过独立的 `project-planner-cn`/`project-builder-cn` 分工流程（范围小而封闭，无需分阶段调研）。
+
+**执行的任务**
+- 删除源文件 `src/uniarticles/sources/chembl.py`（工具 `chembl_bioactivity_lookup_by_doi`）、`src/uniarticles/sources/hal.py`（工具 `hal_document_search_by_query`）。
+- `src/uniarticles/sources/__init__.py`：删除对应的 2 行 import 与 2 行 `register_xxx_source(server)` 调用，一并清理孤立的分组注释（原 `register_chembl_source(server)   # DOI 必填查询语义` 整行移除）。
+- `README.md`/`README_ZH.md` 同步更新：总览的"通用学术检索"/"专项数据源"列表、数据源总数摘要段落（16→14 总数、15→13 默认激活、28→26 默认工具、30→28 含 Semantic Scholar）、数据源对比表格中的 HAL/ChEMBL 两行、独立的 `### HAL`/`### ChEMBL` 工具小节（含表格），全部删除或改数。
+- 版本号提升：`pyproject.toml` `3.1.0`→`3.2.0`；`src/uniarticles/__init__.py` `__version__` `3.1.0`→`3.2.0`（用户已在澄清中明确确认 bump，沿用本项目"范围变更即 bump minor 版本号"惯例）。
+- 各模块 `USER_AGENT` 硬编码版本号**未同步修改**——沿用 v3.1.0 步骤 51/buildlog 已确认的既有惯例（仅新建/重写模块才设为当时版本号，无"随发布统一同步"约定），本轮未新建/重写任何模块。
+
+**验证（真实调用，非 mock）**
+- `create_server()` + `list_tools()`：未配置 `SEMANTIC_SCHOLAR_API_KEY` 时工具总数 **26**，名单中无 `hal_*`/`chembl_*`；配置 `SEMANTIC_SCHOLAR_API_KEY=dummy` 后为 **28**。
+- `README.md`/`README_ZH.md` 逐处核对确认无残留 HAL/ChEMBL 引用，两份文档计数一致对应。
+
+**性质说明（避免误读，`goal.md` QA-R016 已特别标注）**
+- ChEMBL、HAL 在 v3.0.0/QA-R010 纳入时均已实测确认可用（HTTP 200），本轮移除**不否定该历史结论**，排除依据是用户对已发布范围的产品价值判断（"用处不大"），与 v2.1.0/QA-R003（技术不可行/401/超时）、v3.0.0/QA-R012（PMC 与现有数据源重叠）等此前的删除性质不同。
+
+**结论**：v3.2.0 全部范围（代码删除 + 验证 + 文档同步 + 版本号提升）已完成，数据源规模由 15 降为 13、工具规模由 28/30 降为 26/28，与 `goal.md` QA-R016 记录的范围完全对应，无遗漏无多算。
+
+## [2026-08-09] 🎉 v3.2.0 构建完成
+
+### 完成情况
+- 步骤 53 一次性执行完毕：源文件删除 → 注册移除 → 工具数量验证（26/28）→ README/README_ZH 同步 → 版本号提升（3.1.0→3.2.0）。
+
+### 下一步计划
+- ⏭️（可选）`uv build`（先清 `dist/`）+ `uv publish` 发布 v3.2.0（需用户确认后执行，属发布操作，不在本轮自动完成）。
+- ✅ v3.2.0 构建侧无待执行步骤。
+
+---

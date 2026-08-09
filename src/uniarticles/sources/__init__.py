@@ -9,13 +9,11 @@ from .crossref import register as register_crossref_source
 from .europepmc import register as register_europepmc_source
 from .doaj import register as register_doaj_source
 from .zenodo import register as register_zenodo_source
-from .hal import register as register_hal_source
 from .openaire import register as register_openaire_source
 from .semantic_scholar import register as register_semantic_scholar_source
 from .core import register as register_core_source
 from .dblp import register as register_dblp_source
 from .biorxiv import register as register_biorxiv_source
-from .chembl import register as register_chembl_source
 
 
 def register_all_sources(server: FastMCP) -> None:
@@ -30,11 +28,9 @@ def register_all_sources(server: FastMCP) -> None:
     register_europepmc_source(server)
     register_doaj_source(server)
     register_zenodo_source(server)
-    register_hal_source(server)
     register_openaire_source(server)
     register_semantic_scholar_source(server)  # 无 SEMANTIC_SCHOLAR_API_KEY 时不注册任何工具
     register_core_source(server)
     register_dblp_source(server)
     # v3.0.0 新增：语义特殊型（非关键词检索）
     register_biorxiv_source(server)  # 浏览语义（server/start_date/end_date/cursor）
-    register_chembl_source(server)   # DOI 必填查询语义
