@@ -24,6 +24,29 @@
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
+## 当前支持的文献数据源
+
+亿文通将以下 **16 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构。其中 **15 个默认即启用**，共提供 **28 个工具**；Semantic Scholar 仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 后才额外注册其 2 个工具，总数达到 **30 个**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
+
+| 数据源 | 覆盖范围 | 接入方式 | API Key |
+|---|---|---|---|
+| **Scopus** | Elsevier 精选的摘要与引文数据库，覆盖自然科学、社会科学、艺术与人文。 | Elsevier REST API（`api.elsevier.com`），经 `httpx` 直连 | **必需** —— `ELSEVIER_API_KEY` |
+| **ScienceDirect** | Elsevier 的同行评审期刊与图书全文平台。 | Elsevier REST API（`api.elsevier.com`），经 `httpx` 直连 | **必需** —— `ELSEVIER_API_KEY` |
+| **arXiv** | 物理、数学、计算机科学、定量生物、经济学等领域的开放预印本。 | 官方 [`arxiv`](https://pypi.org/project/arxiv/) Python 包封装 | 无需 |
+| **PubMed** | 美国国立医学图书馆（NCBI）收录的生物医学与生命科学文献。 | NCBI Entrez E-utilities REST API（`eutils.ncbi.nlm.nih.gov`），经 `httpx` 直连 | 可选 —— `NCBI_API_KEY`（仅提升限速） |
+| **OpenAlex** | 开放、跨学科的学术成果/作者/期刊目录。 | OpenAlex REST API（`api.openalex.org`），经 `httpx` 直连 | 无需 |
+| **Crossref** | 覆盖所有学科的 DOI 注册元数据。 | Crossref REST API（`api.crossref.org`），经 `httpx` 直连 | 无需 |
+| **Europe PMC** | EBI 的生命科学文献聚合库（区别于 NCBI PubMed），含 PMC 全文。 | Europe PMC REST API（`ebi.ac.uk/europepmc`），经 `httpx` 直连 | 无需 |
+| **DOAJ** | 开放获取期刊目录（Directory of Open Access Journals）中的同行评审文章。 | DOAJ REST API（`doaj.org/api`），经 `httpx` 直连 | 无需 |
+| **Zenodo** | CERN 的通用开放研究仓储；本项目仅过滤出 publication 类型记录。 | Zenodo REST API（`zenodo.org/api`），经 `httpx` 直连 | 无需 |
+| **HAL** | 法国/欧洲的开放学术文献存档。 | HAL REST API（`api.archives-ouvertes.fr`），经 `httpx` 直连 | 无需 |
+| **OpenAIRE** | 欧洲开放科学研究成果聚合库。 | OpenAIRE REST API（`api.openaire.eu`），经 `httpx` 直连 | 无需 |
+| **Semantic Scholar** | AI 驱动的跨学科学术图谱。 | Semantic Scholar Graph API（`api.semanticscholar.org`），经 `httpx` 直连 | **必需** —— `SEMANTIC_SCHOLAR_API_KEY`（无 Key 时其工具完全不注册） |
+| **CORE** | 汇聚全球仓储与期刊的开放获取论文聚合库。 | CORE v3 REST API（`api.core.ac.uk`），经 `httpx` 直连 | 可选 —— `CORE_API_KEY`（建议配置，无 Key 限流严格） |
+| **dblp** | 计算机科学文献库。 | dblp REST API（`dblp.org`），经 `httpx` 直连 | 无需 |
+| **bioRxiv / medRxiv** | 生物学（bioRxiv）与健康科学（medRxiv）预印本；按日期区间浏览。 | bioRxiv REST API（`api.biorxiv.org`），经 `httpx` 直连 | 无需 |
+| **ChEMBL** | 人工审编的生物活性/药物化学数据库；仅支持按 DOI 查询。 | ChEMBL REST API（`ebi.ac.uk/chembl`），经 `httpx` 直连 | 无需 |
+
 ## ⚠️ API 密钥说明
 
 本服务器集成多个数据源，部分高级功能需要 API 密钥支持：
@@ -172,68 +195,121 @@ python -m uniarticles      # 使用 pip 安装时
 
 ## 可用工具列表
 
+以下工具按数据源分组，每个数据源一张表格。**默认注册 28 个工具**；配置 `SEMANTIC_SCHOLAR_API_KEY` 后会追加 Semantic Scholar 的 2 个工具，总数达到 **30 个**。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
+
 ### Scopus
-- `scopus_document_search_by_query(query, count, sort, view)`: 搜索文档。
-- `scopus_abstract_detail_by_eid(eid, view)`: 按 EID 获取归一化的摘要记录（标题、作者、机构、期刊、标识符）。摘要正文仅在更高级别、受订阅限制的视图下才会返回。
-- `scopus_serial_title_by_issn(issn, view)`: 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。
-- `scopus_api_usage_status()`: 检查 Elsevier API 用量/速率限制状态（通过 Scopus 端点）。
-- `scopus_serial_title_search_by_criteria(title, issn, pub, subj, content, date, oa, start, count, view)`: 按期刊名、出版商、学科、Open Access 状态等多个可选条件搜索期刊/连续出版物（无需 ISSN，结果含 SNIP/SJR 计量指标）。是 `scopus_serial_title_by_issn` 的姊妹工具。注意：`subj` 需传学科缩写（如 `COMP`）而非数字代码；`count` 上限为 200。
-- `scopus_subject_classification_lookup_by_source(source, description, detail, code, abbrev, field)`: 查询 Scopus/ScienceDirect 学科分类代码，用于构造更精确的检索查询。`source` 为必填（`scopus` 或 `scidir`）。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `scopus_document_search_by_query` | `query`、`count`=5、`sort`="coverDate"、`view`="STANDARD" | 按查询串搜索 Scopus 文档。 |
+| `scopus_abstract_detail_by_eid` | `eid`、`view`="META" | 按 EID 获取归一化的摘要记录（标题、作者、机构、期刊、标识符）。摘要正文仅在更高级别、受订阅限制的视图下才会返回。 |
+| `scopus_serial_title_by_issn` | `issn`、`view`="STANDARD" | 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。 |
+| `scopus_api_usage_status` | *（无）* | 检查 Elsevier API 用量/速率限制状态（通过 Scopus 端点）。 |
+| `scopus_serial_title_search_by_criteria` | `title`、`issn`、`pub`、`subj`、`content`、`date`、`oa`、`start`、`count`、`view`="STANDARD"（均可选） | 按期刊名、出版商、学科、Open Access 状态等多个可选条件搜索期刊/连续出版物（无需 ISSN），结果含 SNIP/SJR 计量指标。`subj` 需传学科缩写（如 `COMP`）而非数字代码；`count` 上限为 200。 |
+| `scopus_subject_classification_lookup_by_source` | `source`（必填：`scopus`/`scidir`）、`description`、`detail`、`code`、`abbrev`、`field` | 查询 Scopus/ScienceDirect 学科分类代码，用于构造更精确的检索查询。 |
 
 ### ScienceDirect
-- `sciencedirect_article_retrieve_by_identifier(identifier, identifier_type, view)`: 按标识符检索归一化的文章记录（标题、作者、期刊、标识符、主题）。
-- `sciencedirect_article_object_by_identifier(identifier, identifier_type, view)`: 获取某篇文章的配图/表格/补充材料的元信息（文件名、MIME 类型、对象类型、下载链接）。仅返回对象清单与链接，不下载二进制内容本身。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `sciencedirect_article_retrieve_by_identifier` | `identifier`、`identifier_type`="pii"、`view`="META" | 按标识符（pii/doi/pubmed_id/eid）检索归一化的文章记录（标题、作者、期刊、标识符、主题）。 |
+| `sciencedirect_article_object_by_identifier` | `identifier`、`identifier_type`="doi"、`view`="META" | 获取某篇文章的配图/表格/补充材料的元信息（文件名、MIME 类型、对象类型、下载链接）。仅返回对象清单与链接，不下载二进制内容本身。 |
 
 ### ArXiv
-- `arxiv_paper_search_by_query(query, max_results)`: 搜索论文。
-- `arxiv_latest_paper_list_by_category(category, max_results)`: 列出指定 arXiv 分类下最新提交的论文。`category` 为**必填**参数，须符合 arXiv 官方分类码格式（如 `cs.AI`）；多个分类用逗号分隔（如 `cs.AI,cs.LG`）。
-- `arxiv_paper_detail_by_id(paper_id)`: 获取论文元数据。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `arxiv_paper_search_by_query` | `query`、`max_results`=10 | 按查询串搜索 arXiv 论文。 |
+| `arxiv_latest_paper_list_by_category` | `category`（必填，如 `cs.AI`；多个用逗号分隔如 `cs.AI,cs.LG`）、`max_results`=10 | 列出指定 arXiv 分类下最新提交的论文。 |
+| `arxiv_paper_detail_by_id` | `paper_id` | 按 ID 获取指定 arXiv 论文的元数据。 |
 
 ### PubMed（NCBI Entrez）
+
 以下工具直连 NCBI E-utilities。无 Key 即可使用；配置可选的 `NCBI_API_KEY`（NCBI 免费申请）仅将限速从 3 请求/秒提升到 10 请求/秒。
-- `pubmed_paper_search_by_query(query, max_results)`: 按关键词检索 PubMed（ESearch + EFetch），返回归一化记录（标题、摘要、作者、期刊、doi、pmid、pmcid、关键词、日期）。
-- `pubmed_paper_summary_lookup_by_pmids(pmids)`: 对一批 PMID 做轻量元数据批量查询（ESummary），含检索工具没有的字段（pmcid、pubstatus、pmcrefcount、elocationid）。无效 PMID 会作为带 `error` 字段的条目返回。单次上限 200 个。
-- `pubmed_related_article_search_by_pmid(pmid, max_results)`: 查询与某 PMID 主题相关的 PubMed 文献（ELink“相似文献”），返回相关 PMID 列表（已剔除该 PMID 自身）。
-- `pubmed_pmc_linkage_lookup_by_pmid(pmid)`: 查询某 PMID 的 PubMed Central 关联——`own_pmc_fulltext`（其自身的开放获取 PMC 记录，若有）与 `cited_by_pmc_articles`（引用它的 PMC 文章），两组明确区分。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `pubmed_paper_search_by_query` | `query`、`max_results`=10 | 按关键词检索（ESearch + EFetch），返回归一化记录（标题、摘要、作者、期刊、doi、pmid、pmcid、关键词、日期）。 |
+| `pubmed_paper_summary_lookup_by_pmids` | `pmids`（列表） | 对一批 PMID 做轻量元数据批量查询（ESummary），含检索工具没有的字段（pmcid、pubstatus、pmcrefcount、elocationid）。无效 PMID 会作为带 `error` 字段的条目返回。单次上限 200 个。 |
+| `pubmed_related_article_search_by_pmid` | `pmid`、`max_results`=10 | 查询与某 PMID 主题相关的 PubMed 文献（ELink“相似文献”），返回相关 PMID 列表（已剔除该 PMID 自身）。 |
+| `pubmed_pmc_linkage_lookup_by_pmid` | `pmid` | 查询某 PMID 的 PubMed Central 关联——`own_pmc_fulltext`（其自身的开放获取 PMC 记录，若有）与 `cited_by_pmc_articles`（引用它的 PMC 文章），两组明确区分。 |
 
 ### OpenAlex
-- `openalex_work_search_by_query(query, max_results)`: 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。
-- `openalex_work_detail_by_doi(doi)`: 按 DOI 查询单篇文献。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `openalex_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。 |
+| `openalex_work_detail_by_doi` | `doi` | 按 DOI 查询单篇文献。无需 Key。 |
 
 ### Crossref
-- `crossref_work_search_by_query(query, max_results)`: 按关键词检索文献。无需 Key。
-- `crossref_work_detail_by_doi(doi)`: 按 DOI 查询单篇文献。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `crossref_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索文献。无需 Key。 |
+| `crossref_work_detail_by_doi` | `doi` | 按 DOI 查询单篇文献。无需 Key。 |
 
 ### Europe PMC
-- `europepmc_paper_search_by_query(query, max_results)`: 检索 Europe PMC（EBI 生命科学聚合库，区别于 NCBI PubMed），仅返回首页结果。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `europepmc_paper_search_by_query` | `query`、`max_results`=10 | 检索 Europe PMC（EBI 生命科学聚合库，区别于 NCBI PubMed），仅返回首页结果。无需 Key。 |
 
 ### DOAJ
-- `doaj_article_search_by_query(query, max_results)`: 检索开放获取期刊目录（DOAJ）。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `doaj_article_search_by_query` | `query`、`max_results`=10 | 检索开放获取期刊目录（DOAJ）。无需 Key。 |
 
 ### Zenodo
-- `zenodo_record_search_by_query(query, max_results)`: 检索 Zenodo 中 publication 类型的记录（排除数据集/软件），仅返回文件元信息/链接。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `zenodo_record_search_by_query` | `query`、`max_results`=10 | 检索 Zenodo 中 publication 类型的记录（排除数据集/软件），仅返回文件元信息/链接。无需 Key。 |
 
 ### HAL
-- `hal_document_search_by_query(query, max_results)`: 检索 HAL（法国/欧洲开放存档）。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `hal_document_search_by_query` | `query`、`max_results`=10 | 检索 HAL（法国/欧洲开放存档）。无需 Key。 |
 
 ### OpenAIRE
-- `openaire_research_product_search_by_query(query, max_results)`: 检索 OpenAIRE（欧洲开放科学聚合库）。无需 Key。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `openaire_research_product_search_by_query` | `query`、`max_results`=10 | 检索 OpenAIRE（欧洲开放科学聚合库）。无需 Key。 |
 
 ### Semantic Scholar
-- `semantic_scholar_paper_search_by_query(query, max_results)`: 按关键词检索 Semantic Scholar。**仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册**（无 Key 时关键词检索不可用）。
-- `semantic_scholar_paper_detail_by_doi(doi)`: 按 DOI 查询单篇文献。**仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册。**
+
+**以下两个工具仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时才会注册**——无 Key 时 Semantic Scholar 的关键词检索会确定性失败，因此该数据源的工具完全不会被暴露。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `semantic_scholar_paper_search_by_query` | `query`、`max_results`=10 | 按关键词检索 Semantic Scholar。 |
+| `semantic_scholar_paper_detail_by_doi` | `doi` | 按 DOI 查询单篇文献。 |
 
 ### CORE
-- `core_work_search_by_query(query, max_results)`: 按关键词检索 CORE（全球开放获取聚合库）。无 Key 亦可用但限流严格（约 5 次请求后锁定约 10 分钟），**建议配置 `CORE_API_KEY`** 以获得完整体验。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `core_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索 CORE（全球开放获取聚合库）。无 Key 亦可用但限流严格（约 5 次请求后锁定约 10 分钟），**建议配置 `CORE_API_KEY`** 以获得完整体验。 |
 
 ### dblp
-- `dblp_publication_search_by_query(query, max_results)`: 按关键词检索 dblp（计算机科学文献库）。无需 Key。注意：dblp.org 在部分网络环境下可能因网络路径波动间歇性失败。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `dblp_publication_search_by_query` | `query`、`max_results`=10 | 按关键词检索 dblp（计算机科学文献库）。无需 Key。注意：dblp.org 在部分网络环境下可能因网络路径波动间歇性失败。 |
 
 ### bioRxiv / medRxiv
-- `biorxiv_paper_list_by_date_range(server, start_date, end_date, cursor)`: 按日期区间浏览 bioRxiv/medRxiv 预印本（**按日期浏览，非关键词检索**）。`server` 取 `biorxiv` 或 `medrxiv`；日期为 `YYYY-MM-DD`；每页 30 条（用 `cursor` 翻页）。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `biorxiv_paper_list_by_date_range` | `server`（`biorxiv`/`medrxiv`）、`start_date`（YYYY-MM-DD）、`end_date`（YYYY-MM-DD）、`cursor`=0 | 按日期区间浏览 bioRxiv/medRxiv 预印本（**按日期浏览，非关键词检索**）。每页 30 条（用 `cursor` 翻页）。 |
 
 ### ChEMBL
-- `chembl_bioactivity_lookup_by_doi(doi)`: 查询某 DOI 论文是否被 ChEMBL 收录及其结构化 SAR/生物活性数据（**`doi` 必填，非关键词检索**）。多数论文未被收录，`collected=false` 属正常结果。
+
+| 工具名 | 参数 | 说明 |
+|---|---|---|
+| `chembl_bioactivity_lookup_by_doi` | `doi`（必填） | 查询某 DOI 论文是否被 ChEMBL 收录及其结构化 SAR/生物活性数据（**`doi` 必填，非关键词检索**）。多数论文未被收录，`collected=false` 属正常结果。 |
 
 ---
 

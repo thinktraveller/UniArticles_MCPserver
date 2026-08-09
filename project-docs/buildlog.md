@@ -1250,3 +1250,25 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - `project-docs/teach.md` 正文含 `ELSEVIER_API_KEY` 等描述性文字，但那是讲解性内容而非用户复制的导入示例，且该文件由 `project-explainer-cn` 工作流维护、亦在本 agent 的 `project-docs/` 写入边界之外，故不改动。
 
 ---
+
+### 文档重构：README 总览新增数据源介绍 + 工具列表拆分为分数据源表格 —— 完成于 2026-08-09
+
+**背景**：用户临时提出的独立文档改进任务（不对应 project-plan.md 的具体步骤）。原话要求："对两份 README.md 进行更新，在总览里加上目前支持的文献库、文献库介绍和接入方式（官方 API 源或者 python 包），然后可用工具列表里的工具以每个文献库一个单独表格形式展示"。需中英文（`README.md` / `README_ZH.md`）一一对应。
+
+**核实工作（逐个读取 `src/uniarticles/sources/*.py` 与 `sources/__init__.py`，未凭记忆）**
+- 共 16 个数据源模块，接入方式核实结论：**仅 `arxiv.py` 通过官方 `arxiv` PyPI 包封装（`import arxiv` + `arxiv.Client()`）**；其余 15 个模块（scopus / sciencedirect / pubmed / openalex / crossref / europepmc / doaj / zenodo / hal / openaire / semantic_scholar / core / dblp / biorxiv / chembl）全部经 `httpx` 直连各自服务商的官方 REST 端点（Elsevier `api.elsevier.com`、NCBI Entrez `eutils.ncbi.nlm.nih.gov`、OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、HAL、OpenAIRE、Semantic Scholar Graph、CORE v3、dblp、bioRxiv、ChEMBL）。
+- API Key 门槛核实：Elsevier 系（scopus/sciencedirect）**必需** `ELSEVIER_API_KEY`；`semantic_scholar.py` 在无 `SEMANTIC_SCHOLAR_API_KEY` 时 `register()` 提前 return，**完全不注册任何工具**（条件注册）；`pubmed.py`（NCBI_API_KEY）、`core.py`（CORE_API_KEY）为无条件注册、Key 可选（仅提升限速/放宽限流）；其余无需 Key。
+- 工具计数核实（数 `@server.tool()`）：scopus 6、sciencedirect 2、arxiv 3、pubmed 4、openalex 2、crossref 2、europepmc 1、doaj 1、zenodo 1、hal 1、openaire 1、core 1、dblp 1、biorxiv 1、chembl 1 = 默认 **28** 个；semantic_scholar 2 个（配置 Key 后）→ 满配 **30** 个。与文档既有 28/30 表述一致，无需调整数字。
+
+**执行的任务（仅改两份 README，未改动任何 .py）**
+- 两份 README 的"总览/功能特性"之后、"API 密钥说明"之前，各新增一节「Supported Data Sources / 当前支持的文献数据源」：一张 16 行表格，列为 `数据源 | 覆盖范围 | 接入方式 | API Key`，逐一给出每个库的简介、直连 REST vs `arxiv` 包封装、以及 Key 必需/可选/无需标注。
+- 两份 README 的「Available Tools / 可用工具列表」由原「分节 + 项目符号列表」改造为**每个数据源一张表格**（共 16 张），列为 `工具名 | 参数 | 说明`（英文 `Tool | Parameters | Description`），逐一覆盖全部 30 个工具（含默认不注册的 Semantic Scholar 2 个）。参数与默认值、说明均取自各模块 `@server.tool()` 函数签名与 docstring。
+- 保留 Semantic Scholar 表格前的「仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时注册」条件注册说明；PubMed 表格前保留「直连 E-utilities、Key 仅提升限速」说明。徽章、安装、配置、项目结构、贡献、致谢等其余章节未动。
+
+**验证**
+- 脚本 `scratchpad/check_tables.py` 校验两份 README：各识别出 17 张表格（1 张 16 行总览 + 16 张工具表），每张表内 `|` 列数一致且分隔行存在，全部标记 OK；工具表数据行合计 30（= 满配工具数，默认 28 + Semantic Scholar 2），与代码清点一致。两份文档表格结构、行数、表头位置逐张对应。
+
+**范围外、仅记录不改动**
+- 未触碰 `project-docs/` 下除 `buildlog.md` 外的任何文件（goal.md / project-plan.md / teach.md）；未修改任何 `.py` 源码，仅读取用于核实。
+
+---
