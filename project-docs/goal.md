@@ -16,6 +16,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 5.（v2.1.0，QA-R003）基于用户在真实 Cherry Studio 环境下对已发布 v2.0（2.0.1）全部 17 个工具的一轮完整实测（11 可用/6 不可用，见 `docs/调用错误分析报告.md`），删除 6 个确认不可用或超出产品定位的工具——`downloadPaper`、`searchAuthors`、`getAuthorProfile`、`searchSciencedirect`、`getArticleMetadata`、`searchScholarPapers`——将 MCP Server 收窄为 11 个稳定可用工具；同步修正 README.md / README_ZH.md 对 Elsevier Key 资质要求的描述，使其准确反映"非商业/无机构资质的基础 Elsevier Key 即可让删减后的全部剩余功能正常工作"这一实测结论，不做无实测依据的营销式表述。
 6.（v2.3.0，QA-R007/QA-R008）基于调研本地参考项目 `reference-projects/elsevier-mcp-main/` 发现的候选功能，用真实 Elsevier Key 实测确认可用后，**新增两个 MCP 工具**：`serial_title_search`（期刊多条件搜索，接入 `content/serial/title`，不要求预先知道 ISSN，是现有 `scopus_serial_title_by_issn`的姊妹工具）与 `subject_classifications`（学科分类代码查询，接入 `content/subject/{scopus|scidir}`，全新概念，帮助用户查代码构造更精确的 Scopus 查询）。**这是纯新增（Additive）版本，不删除、不重命名、不改动现有 10 个工具的任何行为**，与 v2.1.0（删除故障工具）、v2.2.0（破坏性重命名+功能改造）性质均不同。
 7.（v3.1.0，QA-R014/QA-R015）将 PubMed 检索能力从依赖第三方包 `paperscraper`（内部封装 `pymed_paperscraper`）的间接实现，改为直接用 `httpx` 调用 NCBI 官方 Entrez E-utilities（`esearch.fcgi`/`efetch.fcgi`），与 `openalex.py`/`crossref.py`/`europepmc.py` 等数据源模块统一为同一套直连风格；同批新增 ESummary 批量元数据、ELink 相关文献查询、ELink PMC 全文/引用关联查询 3 个独立新工具，并新增可选 `NCBI_API_KEY` 环境变量支持（无条件注册模式，对齐 Elsevier/CORE 先例）。源码文件由 `paperscraper.py` 重命名为 `pubmed.py`，JSON 响应体 `source` 字段值同步由 `"paperscraper"` 改为 `"pubmed"`（用户已明确接受这一面向调用方可见的行为变化），第三方依赖 `paperscraper`/`pymed-paperscraper` 从 `pyproject.toml`/`uv.lock` 中彻底移除。这是 QA-R009（2026-08-04，v2.4.0 调研，后因用户跳过 v2.4.0 直接进入 v3.0.0 而作废）遗留决策点的重启与最终定案。目标发布版本号为 **`3.1.0`**（当前 `pyproject.toml` 为 `3.0.0`）。
+8.（v3.2.0，QA-R016，已确认）**从已发布范围中移除 ChEMBL 与 HAL 两个数据源**：删除 `src/uniarticles/sources/chembl.py`（工具 `chembl_bioactivity_lookup_by_doi`）与 `src/uniarticles/sources/hal.py`（工具 `hal_document_search_by_query`）两个源文件及其在 `src/uniarticles/sources/__init__.py` 中的 import/注册代码，数据源规模由 15 个降为 13 个，工具规模由 28 个（默认）/30 个（配置 `SEMANTIC_SCHOLAR_API_KEY`）降为 26 个/28 个。这是一次**产品价值收窄**决策（用户原话"用处不大"），不是技术不可行——ChEMBL、HAL 均在 v3.0.0/QA-R010 纳入时经真实 API 探测确认可用（HTTP 200），本条不否定该历史结论，仅代表本轮判断其不再纳入当前产品范围；与技术不可行而排除的 PMC（QA-R012）、v2.1.0 六个 401/超时工具（QA-R003）在排除性质上不同，需分开记录避免后续误读。
 
 ## 目标用户
 使用 Claude Desktop / Cherry Studio 等 LLM 客户端、通过 UniArticles MCP Server 检索学术文献的科研人员/学生，且其机构订阅了基础级别的 Elsevier Scopus/ScienceDirect API 访问权限（非商业性质 Key，无 Insttoken）。
@@ -53,6 +54,7 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 25.（v3.1.0，QA-R014/QA-R015，已确认）新增 `NCBI_API_KEY` 可选环境变量，采用**无条件注册模式**（对齐 Elsevier/CORE 先例，非 Semantic Scholar 式条件注册）：无论是否配置该 key，全部 4 个 PubMed 工具（1 个重写的检索 + 3 个新增）均正常注册；配置了 key 时请求应实际带上该参数换取 NCBI 官方 10 请求/秒限速（未配置时仍可正常使用，为 3 请求/秒）。用户已确认 key 实际已配置在 `.env` 的 `NCBI_API_KEY` 变量中，具备真实调用验证条件。
 26.（v3.1.0，QA-R014/QA-R015，已确认）源码文件由 `src/uniarticles/sources/paperscraper.py` 重命名为 `pubmed.py`，同步修改 `src/uniarticles/sources/__init__.py` 的 import 路径与 `register_paperscraper_source`→`register_pubmed_source` 函数名、`CLAUDE.md`/`README.md`/`README_ZH.md`/`project-docs/teach.md` 中对该文件名的引用；`_ok`/`_err` 硬编码写入 JSON 响应体的 `"source"` 字段值从 `"paperscraper"` 改为 `"pubmed"`，用户已明确接受这是一次面向调用方可见的破坏性行为变化。
 27.（v3.1.0，QA-R014/QA-R015，已确认）第三方依赖 `paperscraper`（及其依赖 `pymed-paperscraper`）从 `pyproject.toml`/`uv.lock` 中彻底移除；`src/uniarticles/__init__.py` 中为压制 `paperscraper` 包 `logging.basicConfig(stream=sys.stdout, ...)` 而设的 stderr-handler-抢占防御性代码，其存在根因随依赖移除而消失——是否同步简化/更新该代码与注释、还是保留作为通用防御措施，留给 project-builder-cn 在实现阶段按代码实际情况判断，不在本文档中预先规定。`pyproject.toml` 版本号更新为 **`3.1.0`**，`project-docs/buildlog.md` 记录本轮变更。
+28.（v3.2.0，QA-R016，已确认）`src/uniarticles/sources/chembl.py`、`src/uniarticles/sources/hal.py` 两个源文件被完整删除，`src/uniarticles/sources/__init__.py` 中对应的 2 行 import（`from .chembl import register as register_chembl_source`、`from .hal import register as register_hal_source`）与 2 行注册调用（`register_chembl_source(server)`、`register_hal_source(server)`）一并移除，不遗留孤立的分组注释（如原 `register_chembl_source(server)   # DOI 必填查询语义` 整行删除）；启动 server 后调用 `create_server()` 枚举工具，实际注册数量应为 13 个数据源、26 个工具（未配置 `SEMANTIC_SCHOLAR_API_KEY`）或 28 个工具（已配置），与代码中 `register_all_sources()` 实际调用的数据源集合一一对应。README.md 中所有提及 HAL/ChEMBL 的位置（数据源分类列表、总数摘要段落、数据源对比表格行、各自独立小节及工具表格、目录/锚点若存在）同步删除或更新计数，不再出现"文档写了但代码没有"的不一致，此项落地工作由 project-planner-cn/project-builder-cn 承接，不在本文档中代为执行。
 
 ## 范围界定
 ### 包含
@@ -123,6 +125,8 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 | BASE（v3.0.0，QA-R010） | OAI-PMH 接口需机构 IP 注册才能返回实际结果，个人/非机构用户几乎不可用；用户在 QA-R010 认可排除 |
 | Google Scholar（v3.0.0，QA-R010，重申） | 本项目 v2.1.0 已因网络访问受限删除过同类工具（`searchScholarPapers`），参考项目同样标注 bot-detection 问题，无新证据支持重新评估；用户在 QA-R010 认可排除 |
 | PMC（v3.0.0，QA-R012） | 用户设定排除/纳入的判断条件为"若 PMC 实现比现有 `paperscraper.py` 依赖的第三方 API 更稳定，则考虑做"。技术核实：`paperscraper.py` 的 `_search_pubmed()` 底层调用 `paperscraper.pubmed.pubmed.get_pubmed_papers`，实质是对 NCBI Entrez 官方 API（`esearch`/`efetch`）的封装，并非真正的网页爬虫；候选 PMC 走的同样是 NCBI Entrez API（`esearch`/`esummary?db=pmc`），与现有 pubmed 工具是同一套后端基础设施，仅 `db` 参数从 `pubmed` 换成 `pmc`。因此 PMC 相较现有实现**没有稳定性提升**，唯一区别是内容范围收窄（PMC 仅覆盖全文开放获取子集，现有 pubmed 工具覆盖范围更广，含非开放获取文献摘要）。用户自设条件未成立，故排除，不纳入 v3.0.0 落地范围 |
+| ChEMBL（v3.2.0，QA-R016，退出） | 用户明确表态"用处不大"，判断为**产品价值不足**，非技术不可行——该数据源在 v3.0.0/QA-R010 纳入时已实测确认可用（HTTP 200），`chembl_bioactivity_lookup_by_doi` 工具的 DOI 查询语义、代码实现均无问题。本条排除记录的是"退出已发布范围"，与本文档其余"从未纳入"的排除项性质不同，删除 `src/uniarticles/sources/chembl.py` 源文件及其注册代码 |
+| HAL（v3.2.0，QA-R016，退出） | 用户明确表态"用处不大"，判断为**产品价值不足**，非技术不可行——该数据源在 v3.0.0/QA-R010 纳入时已实测确认可用（HTTP 200），`hal_document_search_by_query` 工具的关键词检索语义、代码实现均无问题。本条排除记录的是"退出已发布范围"，与本文档其余"从未纳入"的排除项性质不同，删除 `src/uniarticles/sources/hal.py` 源文件及其注册代码 |
 
 ## 约束条件
 - 当前 `SCOPUS_API_KEY` 为**基础级别、非商业性质**的 Elsevier 开发者 Key，未配置 `X-ELS-Insttoken`（机构令牌）。
@@ -168,6 +172,9 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **（v3.0.0，QA-R012，待定状态，已被下方 QA-R013 条目取代为最终定案）dblp 的最终去留曾悬而未决，等待用户提供新网络环境下的探测结果**：探测环境对 `dblp.org` 的 SSL 握手失败（requests+curl 双栈一致，HTTP 状态码 000），已排除是 API key 问题（dblp.org 公开 API 本身不要求 key），推测是探测环境的主机级网络拦截（防火墙/DNS 污染/TLS 中间人拦截），具体性质需换网络环境实测才能确认。已向用户提供分层诊断脚本（DNS 解析→TCP 连接→TLS 握手→HTTP 请求四层探测），用户尚未回报结果。（历史记录保留；dblp 已于 QA-R013 正式定案纳入，见下一条，本条不再是最终状态。）
 - **（v3.0.0，QA-R013，已确认，dblp 最终定案）dblp 正式转入"确认落地"，纳入 v3.0.0 通用检索型新数据源范围**：用户在不同网络环境下用 `_verify/dblp_connectivity_test.py` 分层诊断脚本（commit `9948687`/`abd3e3f`）反复实测 dblp.org，三次结果依次为——① project-builder-cn 原始探测环境 TLS 握手失败（HTTP 000）；② 用户第一次实测环境 DNS/TCP/TLS 全部成功但 HTTP 500；③ 用户第二次实测环境 DNS/TCP/TLS/HTTP 全部成功，返回真实 JSON 数据，字段结构与 dblp 官方 search API 文档一致。三次结果从未出现 401/403，证实与鉴权无关；dblp 公开检索 API 本身也无 key 机制。综合判断：dblp 服务端本身可用、能正常返回真实数据，此前的失败是探测环境/网络路径波动所致，不是服务下线，不需要设计"待定/条件排除"这类特殊处理。**已知风险提示（用户明确要求标注）**：dblp 在实际使用中可能因网络环境波动出现间歇性连接失败（历史观测含 TLS 握手失败、HTTP 500，也有完全成功的情况），这不代表服务下线或代码错误；project-planner-cn/project-builder-cn 在设计该数据源的工具实现和/或文档时应向用户说明这一特性（例如是否在错误信息里加特别提示文案，具体处理方式由后续实现阶段决定，本文档不代为规定）。**在此定案后，dblp 不再是待定项，project-planner-cn 可将其与其余已确认落地的数据源同等纳入 project-plan.md 步骤 34+ 的实现规划。**
 - **（v3.0.0，QA-R013，已确认，通用流程约束，适用于 v3.0.0 剩余全部实现工作及以后，非本次临时安排）今后任何构建/测试环节中，agent 在自身探测/验证环境中遇到失败结果时，验证脚本必须输出到仓库 `_verify/` 目录下交由用户独立验证**：不得仅凭 agent 自己探测环境的单次失败结果下结论（尤其是网络类失败，如连接超时、TLS 握手失败、DNS 解析失败等），必须把对应的验证/诊断脚本产出到 `_verify/` 目录，交由用户在其独立网络环境下亲自运行验证，作为最终判断依据之一，而不是仅依赖 agent 自身探测环境的单次结果。这是本次 dblp 三轮反复实测（project-builder-cn 探测环境失败、用户两次实测环境结果又互不相同）得出的经验教训——用户明确要求这一做法成为**今后的标准流程**，project-builder-cn 等 agent 在 v3.0.0 剩余数据源的构建/测试步骤中，凡遇到本地探测失败（尤其是网络类失败）的情况，均应比照 `_verify/dblp_connectivity_test.py` 的先例，将验证脚本留在 `_verify/` 下而非仅在临时 scratchpad 中一次性使用即弃。
+- **（v3.2.0，QA-R016，已确认）ChEMBL/HAL 的移除不适用上一条"技术不可行才能直接排除"的默认处理原则（QA-R011 第 162-165 行）**：该原则约束的是"新候选数据源纳入前"的判断，ChEMBL/HAL 是已发布、已验证可用的既有数据源，本次移除的判断依据是用户对已上线功能的主观产品价值判断（"用处不大"），属于用户对已交付范围的直接改动指令，不需要也不构成对"技术可行 vs 不可行"排除规则的例外或修改，两者是不同维度的决策，不应混为一谈。
+- **（v3.2.0，QA-R016，版本号，未经用户逐字确认，仅为本 agent 建议）本 agent 依据本项目既有惯例——历次范围变更（含纯删除性质的 v2.1.0）均 bump 一次 minor 版本号——建议本轮目标发布版本号为 `3.2.0`（当前 `pyproject.toml` 为 `3.1.0`）**：这与 QA-R005 中版本号曾被用户否决改判（本 agent 建议 3.0.0，用户拍板 2.2.0）性质相同，是本 agent 依据惯例给出的推荐值，非用户逐字拍板的最终结论，project-planner-cn 在制定构建计划书时应与用户核实此版本号，如用户有不同意见可直接调整，不视为对本文档的偏离。
+- **（v3.2.0，QA-R016，执行分工，同 v2.1.0/QA-R003 先例）本 agent（project-creator-cn）仅负责将本轮移除决策写入本文档**：实际的代码删除（`chembl.py`/`hal.py`/`sources/__init__.py`）、启动验证（`create_server()` 工具数量核对）、README.md 文案与表格修改，均需移交给 `project-planner-cn` 制定构建计划书，再由 `project-builder-cn` 落地执行并更新 `project-docs/buildlog.md`；本 agent 不在本次任务中直接修改任何源代码或 README.md。
 
 ## 附录：Elsevier API 现状盘点（前置调研结论）
 
@@ -628,6 +635,28 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - 核心目标 / 范围界定（包含/排除） / 成功标准 / 约束条件 / 备注
 <!-- GOAL-QA-R015-END -->
 
+### QA-R016：移除 ChEMBL 与 HAL 两个数据源——范围收缩决策确认
+<!-- GOAL-QA-R016-START -->
+- **提问时间**：2026-08-09 13:25
+- **提问目的**：用户明确提出要移除 ChEMBL（v3.0.0 QA-R010 纳入的 DOI 查询型工具）与 HAL（v3.0.0 QA-R010 纳入的关键词检索型工具）两个数据源，理由是"用处不大"。这是对已定案范围（v3.0.0/v3.1.0 累计 15 数据源/28 工具规模）的一次收缩性调整，需要在 goal.md 中正式记录决策依据、影响范围及后续实现移交要点，确保后续 project-planner-cn/project-builder-cn 有据可依，避免出现"代码删了但文档没跟上删除理由"的空白，也避免让人误以为这是对 QA-R010 历史"实测可用"结论的否定。
+- **问题列表**
+  1. 确认移除范围：是否仅移除 ChEMBL（`chembl.py`，`chembl_bioactivity_lookup_by_doi`）与 HAL（`hal.py`，`hal_document_search_by_query`）两个数据源对应的全部工具、源文件及 `sources/__init__.py` 中的注册代码，不涉及其余 13 个数据源？
+  2. 移除理由：是"技术不可行/实测不可用"（比照 PMC 排除先例），还是"技术可行但产品价值不足"（与技术不可行性质不同，需分开记录）？
+  3. 文档层面：是否需要同步更新 README.md 的工具清单/表格/计数，以及本文档中此前记录的 v3.0.0 范围条目？
+- **用户回答**
+  1. 确认——仅移除 ChEMBL 与 HAL 两个数据源相关的全部工具、源文件（`src/uniarticles/sources/chembl.py`、`src/uniarticles/sources/hal.py`）及 `sources/__init__.py` 中对应的 import 与注册调用，不涉及其余 13 个数据源（Scopus、ScienceDirect、ArXiv、PubMed、OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、OpenAIRE、Semantic Scholar、CORE、dblp、bioRxiv/medRxiv）。
+  2. 明确为"产品价值不足"（用户原话"用处不大"），不是技术不可行——ChEMBL 和 HAL 在 v3.0.0/QA-R010 落地时均已实测确认可正常调用（HTTP 200），本次移除是产品定位收窄，与此前 PMC（技术核实无稳定性优势）、v2.1.0 六个工具（实测 401/超时不可用）性质均不同。
+  3. 确认需要——README.md 全部含 HAL/ChEMBL 的位置（数据源分类介绍、总数摘要段落、数据源对比表格行、各自独立小节及工具表格）需同步删除或更新计数；`project-docs/goal.md` 本身也需要在保留历史 QA 记录（QA-R010 等）不被篡改的前提下，在"核心目标""成功标准""范围界定/排除""约束条件"新增本次移除的相应条目，且需明确说明这不是对 HAL/ChEMBL 历史真实可用性结论的否定，只是本轮判断其不再纳入当前产品范围。
+- **提炼结论**
+  - 移除范围明确且封闭：仅 ChEMBL + HAL 两个数据源，各自 1 个工具（`chembl_bioactivity_lookup_by_doi`、`hal_document_search_by_query`），共移除 2 个工具、2 个源文件、`sources/__init__.py` 中对应的 2 行 import + 2 行注册调用（含孤立的分组注释一并清理，不遗留指向已删除源的注释）。
+  - 移除性质是"产品价值收窄"，不是"事后发现技术不可行"——不应把本次移除误写成对 QA-R010 历史判断的否定，HAL/ChEMBL 在纳入时的真实可用性验证结论依然成立，只是不再纳入当前产品范围。
+  - 数据源规模由 15 个降为 13 个；工具规模由 28 个（默认，未配置 `SEMANTIC_SCHOLAR_API_KEY`）/30 个（配置后）降为 26 个/28 个。
+  - README.md 属实现层文档，其更新由 project-builder-cn 在落地阶段完成；goal.md 由本 agent 当场更新核心目标、成功标准、范围界定/排除、约束条件、备注五处，本 agent 不直接改动任何源代码或 README.md。
+  - 目标发布版本号本 agent 建议为 `3.2.0`（依据本项目"每次范围变更 bump 一次 minor 版本号"的既有惯例），但未获用户逐字确认，标记为待 project-planner-cn 与用户核实的建议值，非最终定案（详见约束条件对应条目）。
+- **影响的目标文档章节**
+  - 核心目标 / 成功标准 / 范围界定（排除） / 约束条件 / 备注
+<!-- GOAL-QA-R016-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
@@ -659,3 +688,9 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   3. **字段归一化不预先规定，按真实探测结果如实确定**：重写后的检索工具返回字段不要求与现有 `paperscraper` 输出一一对齐，允许有增有减；3 个新工具的字段结构、命名（遵循方案 A"数据源_对象_动作(_by_限定词)"风格）均需 project-builder-cn 探测后由 project-planner-cn 在构建计划书中拟定。
   4. **这是一次用户已知情并接受的破坏性变更**：文件重命名、注册函数名变更、JSON 响应体 `source` 字段值变更，均无需过渡期或兼容层，比照 v2.2.0（QA-R004）先例处理。
   5. 目标发布版本号为 **`3.1.0`**（当前 `pyproject.toml` 为 `3.0.0`），构建计划书应涵盖 `pyproject.toml` 版本号更新、`pyproject.toml`/`uv.lock` 中 `paperscraper` 依赖的移除、`project-docs/buildlog.md` 变更记录；工具总数由当前 25 个（或配置 `SEMANTIC_SCHOLAR_API_KEY` 时 27 个）增至 28 个（或 30 个），README.md/README_ZH.md 的工具清单/计数与文件名引用需同步更新，再交由 `project-builder-cn` 落地执行。
+- （v3.2.0，QA-R016，2026-08-09）v3.1.0 已发布（PubMed 直连 NCBI 重构完成）。本轮目标澄清源自用户直接、明确的范围收缩指令——移除 ChEMBL 与 HAL 两个数据源（理由：产品价值不足，"用处不大"，非技术不可行），QA-R016 一轮问答已获用户明确回答，无待定事项。**下一步建议调用 `project-planner-cn` 基于本文档最终版制定 v3.2.0 构建计划书**，交接要点：
+  1. **改动范围小而封闭，无需分阶段/探索性调研**：删除 `src/uniarticles/sources/chembl.py`、`src/uniarticles/sources/hal.py` 两个源文件；删除 `src/uniarticles/sources/__init__.py` 中对应的 2 行 import 与 2 行 `register_xxx_source(server)` 调用（含孤立分组注释一并清理）；不涉及其余 13 个已落地数据源的任何代码。
+  2. **验证方式沿用本项目手动回归惯例**（无自动化测试套件，见 `CLAUDE.md`）：启动 server，调用 `create_server()` 后枚举工具，确认实际注册数量为 13 个数据源、26 个工具（未配置 `SEMANTIC_SCHOLAR_API_KEY`）/28 个工具（已配置），与 `sources/__init__.py` 实际调用的数据源集合一一对应。
+  3. **README.md 需同步更新的位置**：数据源分类介绍中的通用检索/语义特殊型列表、工具/数据源总数摘要段落、数据源对比表格中 HAL 与 ChEMBL 各自一行、`### HAL`/`### ChEMBL` 两个独立小节（含各自工具表格）、以及若存在的目录/锚点引用，均需删除或更新计数，不得遗留"文档写了但代码没有"的不一致。
+  4. **明确区分排除性质，避免误写成技术不可行**：ChEMBL、HAL 在 v3.0.0/QA-R010 纳入时均已实测确认可用（HTTP 200），本轮移除不否定该历史结论，仅是用户对已发布范围的产品价值判断调整，构建计划书与 buildlog.md 记录本轮变更时应如实反映这一性质区分（同"约束条件"对应条目）。
+  5. **目标发布版本号**：本 agent 依据既有惯例建议为 `3.2.0`（当前 `pyproject.toml` 为 `3.1.0`），但未获用户逐字确认，project-planner-cn 制定构建计划书前应与用户核实此版本号是否合适。构建计划书应涵盖 `pyproject.toml` 版本号更新与 `project-docs/buildlog.md` 变更记录，再交由 `project-builder-cn` 落地执行。
