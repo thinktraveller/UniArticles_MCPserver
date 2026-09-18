@@ -1482,3 +1482,26 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - 步骤 57：版本号提升至 `3.3.0`（用户已确认）。
 
 ---
+
+### 步骤 57 完成：版本号提升至 `3.3.0`（2026-09-18 17:23）
+
+**执行的任务**
+- `pyproject.toml:7`：`version = "3.2.0"` → **`"3.3.0"`**。
+- `src/uniarticles/__init__.py:20`：`__version__ = "3.2.0"` → **`"3.3.0"`**。
+- 两处**同批修改**（v3.1.0 步骤 51 曾处理过这两个字段不一致的问题，不得只改其一）。已核实 `pyproject.toml` 中项目版本号仅第 7 行一处。
+- 各源模块内硬编码的 `USER_AGENT` 版本号串**未同步**——沿用 v3.1.0 步骤 51 / v3.2.0 已确认的既有惯例（仅新建/重写模块时设为当时版本号，不存在随发布统一同步的约定），本轮未新建/重写任何源模块。
+
+**关键变更**
+- 版本号门禁解除：计划书步骤 57 标注的"待用户确认"已由用户在构建阶段明确答复（"1、OK"），本轮据此执行。
+
+**验证**
+- `python -c "import uniarticles; print(uniarticles.__version__)"` → `3.3.0`；`tomllib` 读取 `pyproject.toml` 的 `project.version` → `3.3.0`。两者一致。
+- `rg "3\.2\.0" pyproject.toml src/uniarticles/__init__.py` 零命中，无残留旧版本号。
+
+**遇到的问题及解决方案**
+- 无。
+
+**下一步计划**
+- 步骤 58：`buildlog.md` 记录本轮变更 + 整体回归验证（v3.3.0 交付检查点）。
+
+---
