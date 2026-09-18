@@ -2196,3 +2196,31 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 ### 下一步计划
 - ⏭️ 步骤 2/3：删除 `tutorial/` 目录（17 张图片 + 2 份攻略文档）。
 - ⏭️ 步骤 3/3：`README_ZH.md` → `README.md`、`README.md` → `README_EN.md` 更名互换，并修正头部语言切换链接、`pyproject.toml` 注释与 `AGENTS.md` 中的文件名引用。
+
+## [2026-09-18 23:52] 步骤 2/3：删除 `tutorial/` 目录
+
+### 本轮背景
+用户指令："并移除 tutorial 文件夹，我已经使用飞书云文档云部署了该攻略"。即两份《傻瓜式配置攻略》（中/英）及其配图已迁移至飞书云文档（中文侧 README 的链接已在用户自己的工作区改动中改为 `https://my.feishu.cn/docx/MXUzdA0yMoTI2yxydM4c3g4onmh`），本仓库内的副本不再需要维护。
+
+### 改动清单
+| 文件 | 改动 |
+|---|---|
+| `tutorial/step_by_step_guide_en.md`、`tutorial/step_by_step_guide_zh.md` | 删除 |
+| `tutorial/images/*.png`（17 张） | 删除（均为上述两份攻略的配图，无其他引用方） |
+
+共 19 个受版本控制的文件，`git rm -r tutorial` 一次性删除。
+
+### 删除前的引用面核查（确保不留断链）
+- `git grep "tutorial/"`（排除 `project-docs/`、`reference-projects/`）：**唯一**用户可见引用是 `README.md:111` 的 `📖 Troubleshooting? See: [Step-by-Step Configuration Guide](tutorial/step_by_step_guide_en.md)`，已在**步骤 1** 随"移除傻瓜式攻略部分"一并删除；删除后全仓库用户可见文档对 `tutorial/` 的引用归零。
+- 剩余命中全部位于 `project-docs/` 的历史记录（`buildlog.md`、`project-plan.md`、`goal.md`、`teach.md`）——按"不改写历史"惯例原样保留，不视为断链。
+- `pyproject.toml` 的 sdist 排除清单**未包含** `tutorial/`，即该目录此前会随源码包分发；删除后此问题自然消失，无需改配置。
+
+### 验证
+- `git status --short` 显示 19 个 `D ` 条目（已暂存删除）+ `README_ZH.md` 的 ` M`（用户未提交改动，本步未触碰、未暂存）。
+- 删除后 `Test-Path tutorial` 应为 `False`；`git grep "tutorial/" -- . ':!project-docs' ':!reference-projects'` 零命中（已验证）。
+
+### 可恢复性说明
+被删内容完整保留在 git 历史中，最后包含它们的提交是本步的直接父提交 `99046ba`。如需找回：`git restore --source=99046ba tutorial`。
+
+### 下一步计划
+- ⏭️ 步骤 3/3：`README_ZH.md` → `README.md`、`README.md` → `README_EN.md` 更名互换，并修正头部语言切换链接、`pyproject.toml` 注释与 `AGENTS.md` 中的文件名引用。
