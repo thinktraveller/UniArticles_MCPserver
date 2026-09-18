@@ -14,14 +14,8 @@ UniArticles (亿文通) is a unified academic literature retrieval server implem
 ## Features
 
 - **Unified Interface**: Single search structure for all sources.
-- **Multi-Source Support**:
-  - **Scopus**: Search, abstract details, journal/serial title lookup by ISSN, quota check.
-  - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
-  - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
-  - **PubMed (NCBI Entrez)**: Keyword search, batch summary lookup, related-article discovery, and PMC full-text/citation linkage — direct NCBI E-utilities calls (no third-party wrapper).
-  - **General academic search (v3.0.0)**: Crossref, Europe PMC, DOAJ, OpenAIRE, and CORE keyword/DOI lookup across open scholarly catalogs.
+- **Multi-Source Support**: 9 data sources covering different fields, including both open-access and non-open-access literature.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
-- **Secure Configuration**: API keys managed via environment variables.
 
 ## Supported Data Sources
 
@@ -41,7 +35,7 @@ UniArticles unifies the following **9 data sources** behind one consistent MCP i
 
 ## ⚠️ API Key Requirements
 
-**Every data source and every tool in this server is reachable either with a personal API key you can obtain yourself, or with no API key at all — nothing here requires an institutional subscription.** Of the 9 data sources, 5 need no key whatsoever, and all 3 keys that do exist are free for an individual to obtain.
+**Every data source and every tool in this server is reachable either with a personal API key you can obtain yourself, or with no API key at all — nothing here requires an institutional subscription.** Of the 9 data sources, 5 need no key whatsoever, and the 4 that do are free for an individual to obtain.
 
 | Key | Used by | How to get it |
 | --- | --- | --- |
@@ -50,8 +44,6 @@ UniArticles unifies the following **9 data sources** behind one consistent MCP i
 | `NCBI_API_KEY` | PubMed (4 tools) | Log in to an NCBI account at [ncbi.nlm.nih.gov](https://www.ncbi.nlm.nih.gov/), then create a key on the [NCBI account settings](https://account.ncbi.nlm.nih.gov/settings/) page. **Optional** — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec. |
 
 **No API key is needed at all for**: arXiv, Crossref, Europe PMC, DOAJ and OpenAIRE.
-
-The legacy variable name `SCOPUS_API_KEY` is still accepted in place of `ELSEVIER_API_KEY` for backward compatibility, but it is deprecated and will be removed in a future major version.
 
 **Note**: with no API key configured at all, the server still registers and exposes the full set of 21 tools — only calls to key-gated sources fail, and they fail with a clear error message instead of silently disappearing from the tool list.
 
@@ -84,7 +76,8 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
 }
 ```
 
-> **About the `env` fields**: Only `ELSEVIER_API_KEY` is required (for Scopus / ScienceDirect). All the others are **optional** — if you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line must not end with a comma). The optional fields are:
+> **About the `env` fields**: Only `ELSEVIER_API_KEY` is required (for Scopus / ScienceDirect). All the others are **optional** — if you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line must not end with a comma). Field notes:
+> - `ELSEVIER_API_KEY` — the Elsevier-backed services (Scopus / ScienceDirect) cannot be used without it ([apply here](https://dev.elsevier.com/)).
 > - `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec ([get one here](https://account.ncbi.nlm.nih.gov/settings/)).
 > - `CORE_API_KEY` — CORE works without it but is heavily rate-limited (~5 requests, then a ~10-minute lockout); a key is recommended ([apply here](https://core.ac.uk/services/api#form)).
 
@@ -107,8 +100,6 @@ If you do not want to force refresh the cache package every time you restart, th
   }
 }
 ```
-
-📖 Troubleshooting? See: [Step-by-Step Configuration Guide](tutorial/step_by_step_guide_en.md)
 
 If you encounter `MCP error -32000: Connection closed` when starting the service, please find the solution in the related Cherry Studio issue: https://github.com/CherryHQ/cherry-studio/issues/3264
 
@@ -146,10 +137,11 @@ Create a `.env` file in the project root:
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
+# Required. Apply at https://dev.elsevier.com/
+NCBI_API_KEY=your_ncbi_api_key
 # Optional. NCBI Entrez works without it; setting it only raises the PubMed
 # rate limit from 3 to 10 requests/sec. Free: log in at https://www.ncbi.nlm.nih.gov/
 # then create a key at https://account.ncbi.nlm.nih.gov/settings/
-NCBI_API_KEY=your_ncbi_api_key
 # Optional. CORE works without it but is heavily rate-limited (~5 requests, then
 # a ~10-minute lockout); setting it is recommended.
 # Free: https://core.ac.uk/services/api#form
@@ -256,11 +248,7 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 |---|---|---|
 | `core_work_search_by_query` | `query`, `max_results`=10 | Search CORE (global open-access aggregator) by keyword. Works without a key but is heavily rate-limited (~5 requests then a ~10-minute lockout); configuring `CORE_API_KEY` is strongly recommended. |
 
-## 📝 Recommended Prompt: Literature Search
-
-The prompt below turns a vague request into a reproducible multi-source search. Paste it into any MCP client with UniArticles connected, then replace the last line with your own request. Its query-shape rules were verified against the live APIs — the probe results are in `project-docs/buildlog.md`.
-
-On 2026-09-18 a sweep invoked every registered tool once against the live APIs. OpenAlex (the one source that kept failing that day — its search endpoint returned HTTP 429 under the upstream's anonymous-traffic rate limiting) has since been removed in v3.4.0, and the sweep was then repeated against the remaining source set: **21 tools, 21/21 succeeded**.
+## Reference Prompt for Agents
 
 ```text
 You are my literature-search assistant. UniArticles MCP tools are connected.
@@ -334,15 +322,6 @@ returned 0 results.
 
 My request: <describe what you want here>
 ```
-
-### Query shapes that are verified to work
-
-| Goal | Use | Not this (returns related-but-different papers) |
-|---|---|---|
-| Find one known paper in Scopus | `TITLE("Attention Is All You Need")` | bare `Attention Is All You Need` |
-| Find one known paper in arXiv | `ti:"Attention Is All You Need"` | bare title, even with relevance sorting |
-| Find one known paper in PubMed | `Exact title[Title]` — unquoted | bare title (a stopword can zero the query), or `"title"[Title]` (returns 0) |
-| Topic search in PubMed | `term AND term`, keep it short | a full natural-language sentence |
 
 ---
 

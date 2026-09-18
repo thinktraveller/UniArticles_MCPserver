@@ -2165,3 +2165,34 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 ### 验证
 - 全仓库（排除 `.venv`/`dist`/`reference-projects`/`docs`）检索 `arxiv[-_ ]?mcp`：README×2 中已零命中；仅剩 `project-docs/teach.md` 两处（见上）。
 - 两份 README 的代码围栏数仍为偶数，Markdown 结构未破坏。
+
+## [2026-09-18 23:48] 步骤 1/3：英文 README 同步中文侧未提交改动、移除傻瓜式攻略指引
+
+### 本轮背景
+用户指令逐字："基于 README_ZH.md 中的更新内容同步更新 README.md ；特别地，移除 README.md 中有关傻瓜式攻略的部分，并移除 tutorial 文件夹，我已经使用飞书云文档云部署了该攻略；最后，将 README_ZH.md 更名为 README.md，将 README.md 更名为README_EN.md"
+
+用户的改动**尚在 `README_ZH.md` 工作区中、未提交**（`git diff` 实测 9 增 26 删）。本步以该 diff 为唯一同步依据，逐条镜像到英文版 `README.md`；`tutorial/` 删除与两份 README 更名互换见步骤 2/3。
+
+### 改动清单（`README.md`，+8/−29）
+| 位置 | 改动 |
+|---|---|
+| `## Features` | 5 条子项的多源列表（Scopus/ScienceDirect/ArXiv/PubMed/通用检索）压缩为一条 "**Multi-Source Support**: 9 data sources covering different fields, including both open-access and non-open-access literature."；删除 "- **Secure Configuration**" 条目（与中文侧逐条对应） |
+| `## ⚠️ API Key Requirements` 首段 | 计数口径对齐中文侧：`5 need no key whatsoever, and all 3 keys that do exist...` → `...and the 4 that do are free for an individual to obtain.`（由"数 Key 个数"改为"数需要 Key 的数据源个数"，使 5+4=9 自洽） |
+| 同章节 | 删除 `SCOPUS_API_KEY` 向后兼容变量名的整段说明（中文侧已删） |
+| `env` 字段说明 | 新增 `ELSEVIER_API_KEY` 条目并附申请链接；引导语 `The optional fields are:` → `Field notes:`——中文侧新增的该条目位于"可选字段说明"之下、但字段本身必需，英文侧改用中性引导语以免自相矛盾（详见"遗留提示"） |
+| 方法一尾部 | **删除** `📖 Troubleshooting? See: [Step-by-Step Configuration Guide](tutorial/step_by_step_guide_en.md)` 整行（用户明确要求移除英文侧的傻瓜式攻略部分；中文侧该处改为飞书链接，英文侧不做替换） |
+| `.env` 示例块 | 新增 `# Required. Apply at https://dev.elsevier.com/`；`NCBI_API_KEY` 行上移至该注释之后、其说明注释之前（与中文侧的移动一致） |
+| `## 📝 Recommended Prompt: Literature Search` | 标题更名为 `## Reference Prompt for Agents`（中文侧改为"可参考agent提示词"，去掉 emoji）；删除标题下两段引导正文（含"21 tools, 21/21 succeeded"实测结论段与指向 `project-docs/buildlog.md` 的说明）；提示词 ```text``` 正文本体**保持不动** |
+| `### Query shapes that are verified to work` | 整节连表删除（中文侧已删） |
+
+### 有意未做的改动
+- **头部语言切换链接暂未改**：本步曾一度把英文版第 6 行的 `[中文版本 (Chinese)](README_ZH.md)` 改为指向 `README.md`，随即回退——在步骤 3 完成"两份文件更名互换"之前，`README.md` 仍是英文版，该链接会自我指向。此改动并入步骤 3。
+
+### 验证
+- `git diff --numstat README.md` = **+8/−29**，改动范围与中文侧 diff（+9/−26）逐条对应，无行尾格式 churn（`README.md` 工作区为 220 CRLF / 153 LF 混合行尾，仓库启用 `autocrlf`，入库归一化为 LF，故未产生整文件假 diff）。
+- `README.md` 代码围栏计数 = **16（偶数）**，提示词与 JSON 代码块结构未被破坏。
+- `git grep "tutorial/" -- README.md` **零命中**（英文版已是全仓库最后一个指向 `tutorial/` 的位置，其余命中仅在 `project-docs/` 历史记录中）。
+
+### 下一步计划
+- ⏭️ 步骤 2/3：删除 `tutorial/` 目录（17 张图片 + 2 份攻略文档）。
+- ⏭️ 步骤 3/3：`README_ZH.md` → `README.md`、`README.md` → `README_EN.md` 更名互换，并修正头部语言切换链接、`pyproject.toml` 注释与 `AGENTS.md` 中的文件名引用。
