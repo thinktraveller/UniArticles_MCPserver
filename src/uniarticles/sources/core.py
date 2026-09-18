@@ -319,6 +319,54 @@ async def _search(query: str, max_results: int, offset: int = 0) -> dict:
     return _ok(query=query, items=items)
 
 
+async def _aggregate(query: str, fields: list[str], top_n: int) -> dict:
+    """Distribution (facet) query. Request body verified in buildlog step 69 (F5/F6):
+
+    `{"q": <keyword>, "aggregations": [<dimension>, ...]}` — `aggregations` is
+    OPTIONAL (F5 returned 200 with only `q`), and the dimension names are camelCase
+    when supplied explicitly (`yearPublished` / `authors` / `publisher`). Note that
+    CORE's *default* dimension set comes back in snake_case instead
+    (`year_published` / `field_of_study`), so dimension names are passed through
+    verbatim and never renamed.
+
+    Each dimension returns a `{bucket_value: count}` mapping that upstream truncates
+    to 100 buckets, and the dimension order is not guaranteed to match the request.
+    """
+    body: dict = {"q": query}
+    if fields:
+        body["aggregations"] = fields
+    result = await _request("POST", "/search/works/aggregate", query=query, json_body=body)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    aggregations = payload.get("aggregations") if isinstance(payload, dict) else None
+    if not isinstance(aggregations, dict):
+        return _err(query=query, message="CORE 聚合返回了非预期的结构（未找到 aggregations 字段）。")
+    items = []
+    for field, buckets in aggregations.items():
+        if not isinstance(buckets, dict):
+            continue
+        # Bucket values are strings (years, publisher names) and the counts are ints,
+        # but treat a non-numeric count defensively so one odd bucket cannot break the
+        # whole response.
+        ranked = sorted(
+            buckets.items(),
+            key=lambda kv: kv[1] if isinstance(kv[1], (int, float)) else 0,
+            reverse=True,
+        )
+        items.append(
+            {
+                "field": field,
+                "total_buckets": len(buckets),
+                "top": [
+                    {"value": str(value), "count": count if isinstance(count, (int, float)) else 0}
+                    for value, count in ranked[:top_n]
+                ],
+            }
+        )
+    return _ok(query=query, items=items)
+
+
 def register(server: FastMCP) -> None:
     # CORE registers unconditionally: it works without a key, just with a strict rate
     # limit, mirroring the existing Elsevier "register always, surface limits at
@@ -422,3 +470,36 @@ def register(server: FastMCP) -> None:
         if not isinstance(payload, dict):
             return _err(query=candidate, message="CORE 返回了非预期的时间戳结构。")
         return _ok_one(query=candidate, item=_normalize_work_stats(payload))
+
+    @server.tool()
+    async def core_work_aggregate_by_query(
+        query: str,
+        fields: list[str] | None = None,
+        top_n: int = 10,
+    ) -> dict:
+        """Summarise the distribution of CORE works matching a keyword query.
+
+        This is a facet/distribution view, NOT a result list: each item is one
+        dimension (`field` / `total_buckets` / `top[{value, count}]`), with `top`
+        sorted by count descending and truncated to `top_n` (default 10, capped at
+        50). `count` in the response is therefore the number of *dimensions*
+        returned, not the number of papers.
+
+        `query` uses the same syntax as `core_work_search_by_query`. `fields` is
+        optional: leave it unset to let CORE pick its default dimensions, or pass
+        explicit camelCase dimension names (e.g. `["yearPublished", "authors",
+        "publisher"]`). Dimension names are passed through verbatim — CORE's
+        default set is snake_case (`year_published`, `field_of_study`) while an
+        explicit request is camelCase, and both are returned as-is. Each dimension
+        is capped by upstream at 100 buckets, so `total_buckets` is also capped at
+        100 and does not reveal the untruncated cardinality.
+
+        Aggregation queries cost more tokens than a plain search upstream; call it
+        when you actually need a distribution, not after every search.
+        """
+        normalized_query = query.strip()
+        if not normalized_query:
+            return _err(query=query, message="query must not be empty")
+        bounded_top = max(1, min(top_n, 50))
+        normalized_fields = [f.strip() for f in (fields or []) if isinstance(f, str) and f.strip()]
+        return await _aggregate(query=normalized_query, fields=normalized_fields, top_n=bounded_top)

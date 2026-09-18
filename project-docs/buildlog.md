@@ -2487,3 +2487,41 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 73：新增 `core_work_aggregate_by_query`（facet 分布）。**请求体已由步骤 69 的 F5/F6 确证**为 `{"q", "aggregations": [<camelCase 维度名>]}`，聚合端点在本机可用，**不触发回退分支**。
+
+## [2026-09-19 00:35] 步骤 73 完成：新增 `core_work_aggregate_by_query`（v3.5.0，QA-R021 第 5 项）
+
+### 执行的任务
+- 在 `core.py` 新增 `_aggregate()` 与工具 `core_work_aggregate_by_query`，实现本项目工具集**首个 facet / 分布维度**：回答"某主题的文献分布在哪些年 / 出版社 / 学科"，与检索类工具互补。
+- **请求体按步骤 69 的 F5/F6 真实确证形态编码**，未使用任何猜测：`{"q": <关键词>}`，显式指定维度时追加 `"aggregations": [<维度名>, …]`。因 F5/F6 均 200，**不触发计划书的回退分支**，本版本维持 8 项新增能力。
+- 响应形状刻意与全局 `items` 列表约定对齐：把 `{"aggregations": {维度: {桶值: 计数}}}` 的字典嵌套**摊平成"一个维度一项"的列表**，避免为单个工具破坏跨源统一形状。
+
+### 关键设计决策（均有步骤 69 实测依据）
+| 决策 | 依据 |
+|---|---|
+| 维度名**原样透传**，不做 camelCase ↔ snake_case 映射 | F5 不传 `aggregations` 时默认维度为 `year_published` / `field_of_study` / `publisher`（snake_case），F6 显式传入时返回 `yearPublished` / `authors` / `publisher`（camelCase）——**同一端点的两套命名**，统一映射只会制造失真 |
+| `total_buckets` = `len(buckets)`，不声称"未截断的总基数" | F5/F6 实测每个维度均被上游截断到 **100 个桶**（`authors` 这类高基数维度也只有 100），无法从响应得出真实基数；docstring 已如实写明该上限 |
+| `top_n` 默认 10、上限 50，按计数降序截断 | 控制返回体；F5 默认响应即 7.5 KB，不截断会随维度数放大 |
+| `count` = 返回的**维度个数**（非文献数），并在 docstring 明说 | 聚合响应顶层只有 `aggregations` 一个键（无 `totalHits`），文献总量**无法**从该端点取得，故不新增 `total_hits` 扩展键——没有依据的字段不如不写 |
+| 无 `aggregations` 扩展键以外的顶层扩展 | 计划书要求"扩展键只能新增、不得改动既有 6 键"；本实现选择**不新增任何扩展键**，响应键集合与其他 24 个工具完全一致 |
+
+### 实测数据（本机，2026-09-19 00:35）
+
+| 调用 | 结果 |
+|---|---|
+| `core_work_aggregate_by_query("machine learning")` | `ok=True`，`count=3`（3 个维度）；维度为 `year_published`（top: 2024=582100 / 2023=558892 / 2022=480988）、`publisher`（top: CCSD=146699 / IEEE=106523 / MDPI=87403）、`field_of_study`（top: `info:eu-repo/semantics/article`=664601） |
+| `…, fields=["yearPublished","publisher"], top_n=5` | `ok=True`，`count=2`；维度名保持 camelCase 原样；每个维度 `top` 长度恰为 **5** |
+| `…, fields=["yearPublished"], top_n=999` | `top` 长度 = **50**（上限收紧生效） |
+| `core_work_aggregate_by_query("   ")` | `ok=False`，`error="query must not be empty"` |
+| 响应键集合 | `ok` / `source` / `query` / `count` / `items` / `error`（六项，与全项目一致） |
+
+### 遇到的问题及解决方案
+- 无异常。首轮即全部通过；未出现步骤 69 观察到的瞬时读超时。
+- 计划书提到"未知维度名的行为以 F6 为准"，但 F6 只覆盖了三个**有效**维度名，未覆盖未知维度。本步骤**不编造**该行为，也不额外发请求探测（属超范围探索）：实现把上游错误体原样透出，调用方从 400 文案即可判断维度名是否有误。
+
+### 验证
+- `create_server()` → `list_tools()` = **25 个工具**（24 + 1）；`core_` 前缀工具 5 个：`core_work_aggregate_by_query` / `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_search_by_query` / `core_work_stats_by_id`。
+- `fields` 参数的 JSON Schema 为 `anyOf: [array<string>, null]` 且 `default: null`——本项目**首次**使用 `list[str] | None` 形参，已在录入前用独立用例确认 FastMCP（MCP SDK）能正确生成 schema 并按 `None` / `list` / 省略三种传法调用，**不存在"参数不显示"或"列表被当字符串"的兼容性风险**。
+- 每个维度的 `top` 内 `count` 严格降序（实测序列 582100 > 558892 > 480988 等）；桶值统一 `str()`，避免年份这类字符串化的整数与其他值混排时抛 `TypeError`。
+
+### 下一步计划
+- ⏭️ 步骤 74：新增机构库与 output 详情 3 个工具（`core_data_provider_search_by_query` / `core_data_provider_detail_by_id` / `core_output_detail_by_id`，工具总数 25 → 28）。
