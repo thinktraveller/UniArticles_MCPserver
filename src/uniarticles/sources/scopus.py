@@ -361,8 +361,17 @@ async def _get_quota() -> dict:
 
 def register(server: FastMCP) -> None:
     @server.tool()
-    async def scopus_document_search_by_query(query: str, count: int = 5, sort: str = "coverDate", view: str = "STANDARD") -> dict:
-        """Search for documents in Scopus using a query string."""
+    async def scopus_document_search_by_query(query: str, count: int = 5, sort: str = "relevancy", view: str = "STANDARD") -> dict:
+        """Search for documents in Scopus using a query string.
+
+        ``sort`` defaults to ``relevancy`` so that a title query surfaces the
+        matching paper itself. The previous default ``coverDate`` ordered hits
+        newest-first, which pushed a known paper out of the first page whenever
+        the query matched a broad set of documents (v3.3.0 step 59/60, verified
+        against a known title: 0 hits in the top 10 with ``coverDate``, rank 1
+        with ``relevancy``). Pass ``sort="coverDate"`` explicitly to restore the
+        old date-ordered behavior.
+        """
         normalized_query = query.strip()
         bounded = max(1, min(count, 25))
         if not normalized_query:

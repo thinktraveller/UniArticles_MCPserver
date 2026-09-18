@@ -195,7 +195,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 | 工具名 | 参数 | 说明 |
 |---|---|---|
-| `scopus_document_search_by_query` | `query`、`count`=5、`sort`="coverDate"、`view`="STANDARD" | 按查询串搜索 Scopus 文档。 |
+| `scopus_document_search_by_query` | `query`、`count`=5、`sort`="relevancy"、`view`="STANDARD" | 按查询串搜索 Scopus 文档。默认按相关度排序，因此用标题检索能直接返回目标文献本身，而不是最新的松散匹配；如需按日期排序请显式传 `sort="coverDate"`。 |
 | `scopus_abstract_detail_by_eid` | `eid`、`view`="META" | 按 EID 获取归一化的摘要记录（标题、作者、机构、期刊、标识符）。摘要正文仅在更高级别、受订阅限制的视图下才会返回。 |
 | `scopus_serial_title_by_issn` | `issn`、`view`="STANDARD" | 按 ISSN 查询期刊/连续出版物元数据（出版商、Open Access 状态、收录年份、学科领域、期刊主页）。 |
 | `scopus_api_usage_status` | *（无）* | 检查 Elsevier API 用量/速率限制状态（通过 Scopus 端点）。 |

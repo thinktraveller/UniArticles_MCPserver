@@ -197,7 +197,7 @@ The tools are grouped below by data source, one table per source. **23 tools are
 
 | Tool | Parameters | Description |
 |---|---|---|
-| `scopus_document_search_by_query` | `query`, `count`=5, `sort`="coverDate", `view`="STANDARD" | Search Scopus documents by query string. |
+| `scopus_document_search_by_query` | `query`, `count`=5, `sort`="relevancy", `view`="STANDARD" | Search Scopus documents by query string. Defaults to relevance ranking, so a title query returns the paper itself rather than the newest loose matches; pass `sort="coverDate"` for date ordering. |
 | `scopus_abstract_detail_by_eid` | `eid`, `view`="META" | Get a normalized abstract record (title, authors, affiliations, journal, identifiers) by EID. The abstract body is only populated under richer, subscription-gated views. |
 | `scopus_serial_title_by_issn` | `issn`, `view`="STANDARD" | Look up journal/serial metadata (publisher, Open Access status, coverage years, subject areas, homepage) by ISSN. |
 | `scopus_api_usage_status` | *(none)* | Check Elsevier API usage/rate-limit status (via the Scopus endpoint). |

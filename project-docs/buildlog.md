@@ -1444,3 +1444,41 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - 步骤 60：实施三处排序修复 + 文档同步（Scopus `sort` 默认值、arXiv 排序、PubMed ESearch 补 `sort`）。
 
 ---
+
+### 步骤 60 完成：三处默认排序修复 + 文档同步（2026-09-18 17:22）
+
+**执行的任务（源码，共 3 个文件）**
+- `src/uniarticles/sources/scopus.py:364`：`scopus_document_search_by_query` 的 `sort` 默认值 `"coverDate"` → **`"relevancy"`**；docstring 补写改动理由（含步骤 59 的实测数字：`coverDate` 下前 10 条 0 命中、`relevancy` 下第 1 位）与"显式传 `sort="coverDate"` 可恢复旧行为"的回退说明。参数本身保留，未删除能力。
+- `src/uniarticles/sources/arxiv.py`：`_run_arxiv_search()` 新增 `sort_by` 形参（原为函数内硬编码 `arxiv.SortCriterion.SubmittedDate`）；`arxiv_paper_search_by_query` 传 **`Relevance`**，`arxiv_latest_paper_list_by_category` 传 **`SubmittedDate`**。分开处理是必须的——两个工具共用同一个私有函数，若整体改成 Relevance 会让"列出某分类最新论文"的工具丧失 latest 语义。
+- `src/uniarticles/sources/pubmed.py:177`：`_esearch()` 的请求参数补上 **`"sort": "relevance"`**（原实现完全未传 `sort`）。该函数只被 `_search()` 一处调用，改动面封闭。
+
+**执行的任务（文档，共 3 个文件）**
+- `README.md:200` / `README_ZH.md:198`：Scopus 工具表格的 `sort` 默认值 `"coverDate"` → `"relevancy"`，并补一句默认排序语义与回退方式。
+- `AGENTS.md` 数据源表的 Scopus 行：Caps 栏补记 `sort` 默认值自 v3.3.0 起为 `relevancy`（原为 `coverDate`）。
+- `AGENTS.md` 的 arXiv 行：`results sorted by submitted date` → 改为"关键词检索按**相关度**、按分类浏览按**提交日期**"，并补上步骤 59 的关键结论——**已知文献检索必须用字段前缀**：裸标题是对全字段的松散匹配，即便换成相关度排序也未能把已知论文排进前 10，只有 `ti:"..."` 能排到第 1 位。
+- `AGENTS.md` 的 PubMed 行：Caps 栏补记搜索自 v3.3.0 起用 `sort=relevance`（并说明 ESearch 原始默认是日期序、非网页端 Best Match），另补一条已知陷阱——**带引号**的 `"标题"[Title]` 在原始 API 上返回 0 条，属 NCBI 自身行为，需用无引号形式。
+
+**验证（真实工具调用，非 mock；临时脚本 `_verify/step60_verify_sort.py` 验证通过后已删除）**
+通过 `create_server()` → `call_tool()` 走完整工具链路，四项结果：
+
+| # | 调用 | 结果 | 修复前（步骤 59 实测） |
+| --- | --- | --- | --- |
+| 1 | `scopus_document_search_by_query` + 标题（默认 `sort`） | 目标论文**第 1 位**（共 10 条） | 前 10 条内**未命中** |
+| 2 | `pubmed_paper_search_by_query` + `...[Title]` | 目标 PMID `34265844` **第 1 位** | 不在前 10 条内 |
+| 3 | `arxiv_paper_search_by_query` + `ti:"..."` | 目标论文**第 1 位** | 未命中 |
+| 4 | `arxiv_latest_paper_list_by_category` + `cs.AI` | `published` 时间**单调不增**（2026-09-17T17:59:58 / :53 / :40） | latest 语义保持，未被本次改动破坏 |
+
+另：`create_server()` → `list_tools()` 仍为 **23** 个工具，注册数未因本轮改动变化；`rg "_run_arxiv_search"` 确认两处调用点均已带上新的 `sort_by` 实参。
+
+**性质提示（破坏性变更，面向已发布工具）**
+- 三处都是**默认行为变更**：依赖"按日期排序"既有行为的调用方（Scopus 搜索、arXiv 关键词检索、PubMed 检索）升级后会感知到顺序差异。已在两份 README 与 `AGENTS.md` 中写明新默认值与回退方式，`scopus_document_search_by_query` 保留 `sort` 参数可显式回退。
+- arXiv / PubMed 未新增工具参数，工具数量与签名结构不变。
+
+**遇到的问题及解决方案**
+- 验证脚本首版误判了 `FastMCP.call_tool()` 的返回结构（实际返回 `list[TextContent]`，正文是 JSON 字符串），修正后通过；该脚本按规范验证后即删除，未入库。
+- 步骤 59 的 arXiv 实测结论与计划书假设不一致（排序非决定性、`ti:` 才是），未擅自扩大改动范围去"自动加 `ti:`"，而是照计划书授权范围实施排序修复，并把该结论与后续可选方向写入 `AGENTS.md` 与本日志。
+
+**下一步计划**
+- 步骤 57：版本号提升至 `3.3.0`（用户已确认）。
+
+---

@@ -63,12 +63,18 @@ def _serialize_paper(paper) -> dict:
     }
 
 
-def _run_arxiv_search(query: str, max_results: int) -> dict:
+def _run_arxiv_search(query: str, max_results: int, sort_by: arxiv.SortCriterion) -> dict:
+    """Run an arXiv query with an explicit sort criterion.
+
+    The criterion is a parameter because the two callers need different
+    semantics: keyword search must rank by relevance, while "latest papers in
+    category" must stay newest-first (v3.3.0 step 59/60).
+    """
     client = arxiv.Client()
     search = arxiv.Search(
         query=query,
         max_results=max_results,
-        sort_by=arxiv.SortCriterion.SubmittedDate,
+        sort_by=sort_by,
     )
     papers = []
     for paper in client.results(search):
@@ -95,7 +101,11 @@ def register(server: FastMCP) -> None:
         if not normalized_query:
             return _err(query=query, message="query must not be empty")
         try:
-            return await asyncio.to_thread(_run_arxiv_search, normalized_query, bounded)
+            # Relevance (not SubmittedDate): date ordering returned only the
+            # newest papers that merely mention the query terms. See step 59.
+            return await asyncio.to_thread(
+                _run_arxiv_search, normalized_query, bounded, arxiv.SortCriterion.Relevance
+            )
         except Exception as exc:
             return _err(query=normalized_query, message=str(exc))
 
@@ -110,7 +120,11 @@ def register(server: FastMCP) -> None:
         except ValueError as exc:
             return _err(query=category, message=str(exc))
         try:
-            return await asyncio.to_thread(_run_arxiv_search, category_query, bounded)
+            # This tool's whole purpose is "most recently submitted", so it
+            # deliberately keeps date ordering.
+            return await asyncio.to_thread(
+                _run_arxiv_search, category_query, bounded, arxiv.SortCriterion.SubmittedDate
+            )
         except Exception as exc:
             return _err(query=category, message=str(exc))
 

@@ -175,10 +175,15 @@ def _normalize_article(article: ET.Element) -> dict:
 # NCBI E-utilities requests
 # --------------------------------------------------------------------------- #
 async def _esearch(query: str, retmax: int) -> list[str]:
+    # ``sort=relevance`` is required: NCBI ESearch's default order is by date,
+    # not the Best Match used on the PubMed website, so a title query returned
+    # "recent papers that match something" instead of the paper itself.
+    # Verified in v3.3.0 step 59: a known title's PMID was absent from the top
+    # 10 without ``sort`` and ranked 1st with ``sort=relevance``.
     async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
         response = await client.get(
             f"{BASE_URL}esearch.fcgi",
-            params=_params({"term": query, "retmax": retmax, "retmode": "json"}),
+            params=_params({"term": query, "retmax": retmax, "retmode": "json", "sort": "relevance"}),
         )
         response.raise_for_status()
         payload = response.json()
