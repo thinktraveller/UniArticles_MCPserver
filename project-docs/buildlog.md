@@ -1650,4 +1650,50 @@ v3.3.0 交付后复核发现：三处排序修复改了行为，但**决定性�
 
 以上更正仅涉及文档表述与提示词措辞，未改动任何源码、工具数量或响应结构。
 
+## [2026-09-18] v3.4.0：移除 Semantic Scholar 数据源
+
+### 本轮背景
+用户直接下达范围指令（无澄清问答）："移除源码、项目说明和README.md中关于 `SEMANTIC_SCHOLAR_API_KEY` 的部分，因为该机构的API key申请存在权限问题。"决策记录见 `project-docs/goal.md` QA-R018。
+
+### 落地前的实测核实（先验证，再动手）
+- 匿名关键词检索 `api.semanticscholar.org/graph/v1/paper/search` 连续 4 次全部 **HTTP 429**（响应体自述 "Too Many Requests. Please wait and try again or apply for a key"）。
+- 同一时刻按 DOI 的详情端点返回 **HTTP 200**。
+- 因此**不能**采用"去掉 Key 要求、保留工具"的做法：去掉 Key 后关键词检索依旧 429，等于对外暴露一个永远失败的工具，违反 QA-R012 已确立的"不注册永远不可能成功的工具"原则。采用**整个数据源移除**。
+
+### 排除性质（不得与其他轮次混写）
+属**外部授权/准入受限**——机构无法取得 Key。与 QA-R003（权限受限但可换 Key）、QA-R012（技术不可行）、QA-R016（产品价值收窄）、QA-R017（有效性/可连接性）性质均不同。
+
+### 改动清单
+| 层面 | 文件 | 改动 |
+|---|---|---|
+| 源码 | `src/uniarticles/sources/semantic_scholar.py` | 删除（95 行） |
+| 源码 | `src/uniarticles/sources/__init__.py` | 删除 import 与注册调用 |
+| 源码 | `src/uniarticles/config.py` | 删除 `semantic_scholar_api_key` 字段及相关注释 |
+| 源码 | `src/uniarticles/sources/core.py` | 注释中"unlike Semantic Scholar"的对照说明改写 |
+| 版本 | `pyproject.toml`、`src/uniarticles/__init__.py` | `3.3.0` → `3.4.0` |
+| 用户文档 | `README.md`、`README_ZH.md` | 特性列表、数据源表、工具清单前言、两处 JSON 示例、`.env` 示例、API Key 说明段、推荐提示词中的 Key 前置条件 |
+| 用户文档 | `tutorial/step_by_step_guide_en.md`、`tutorial/step_by_step_guide_zh.md` | JSON 示例与可选字段说明（"其余四个字段"→"其余三个字段"） |
+| 用户文档 | `.env.example` | 删除该变量示例块 |
+| 项目说明 | `AGENTS.md` | 项目概述、配置示例、"条件注册 vs 无条件注册"整段改写为"全部无条件注册"并保留历史反例 |
+| 验证脚本 | `_verify/tool_availability_check.py` | 删除 2 条已不存在的工具调用 |
+| 未改动 | `project-docs/teach.md` | 用户明确"没必要更新"，保持原样（仍滞后三轮） |
+
+### 重要澄清：用户可见的工具数不变
+无 Key 时 Semantic Scholar 本就注册 **0 个工具**，所以移除后 `list_tools()` 仍是 **23 个工具**（我的首个推测"应为 21"经实测证伪——23 里从来不包含它）。真正消失的是"配置 `SEMANTIC_SCHOLAR_API_KEY` 后追加 2 个工具、总数 25"这一承诺。数据源数 11 → 10。
+
+### 附带收益
+移除后**全项目不再存在条件注册架构**：10 个源的 `register()` 都不再读取 `settings`，工具列表在任何配置下恒定，消除了"文档承诺的工具数随环境变化"这一长期不一致来源。
+
+### 验证（真实调用）
+- `list_tools()` = **23**，工具名单中无 `semantic_scholar_*`；`__version__` = `3.4.0`。
+- 运行 `_verify/tool_availability_check.py`：23 个工具中 **21 ok / 2 fail**，两个失败均已定位，**均非本轮改动引起**：
+  - `openalex_work_search_by_query` —— 上游持续 HTTP 429（搜索集群降级，非本项目缺陷）。该端点在 2026-09-18 当天已持续 1 小时以上不可用，重试 3 次（间隔 30 秒）仍为 429。
+  - `openalex_work_detail_by_doi` —— 报 "doi must not be empty"，属**验证脚本的连锁失败**：其 DOI 取自上一阶段 OpenAlex 搜索结果，而该结果因 429 为空。单独用真实 DOI 直调该工具返回 **ok**，工具本身正常。
+- 全仓库检索 `SEMANTIC_SCHOLAR_API_KEY`：源码 / README ×2 / AGENTS.md / tutorial ×2 / env 示例中**零引用**（剩余匹配仅为 "semantics" 等词，以及前文有意保留的历史说明）。
+
+### 下一步计划
+- ⏭️（可选）OpenAlex 免费 API Key 属即时申请、无机构审批门槛；若该端点持续 429，可考虑申请或加退避重试。
+- ⏭️（可选）`uv build`（先清 `dist/`）+ `uv publish` 发布 v3.4.0，属发布操作，需用户确认。
+- ⚠️ 版本号 `3.4.0` 未经用户逐字确认（比照 v2.1.0/v3.2.0/v3.3.0 删源惯例拟定）；如否决只需替换两处字面值。
+
 ---

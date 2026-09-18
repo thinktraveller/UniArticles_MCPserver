@@ -19,13 +19,13 @@
   - **ScienceDirect**: 全文文章检索、文章对象（配图/表格/补充材料）元信息获取。
   - **ArXiv**: 论文搜索、最新论文列表、按 ID 读取论文元数据。
   - **PubMed（NCBI Entrez）**: 关键词检索、批量摘要查询、相关文献发现、PMC 全文/引用关联——直连 NCBI E-utilities（不再依赖第三方封装包）。
-  - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、Semantic Scholar、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
+  - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
 ## 当前支持的文献数据源
 
-亿文通将以下 **11 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构。其中 **10 个默认即启用**，共提供 **23 个工具**；Semantic Scholar 仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 后才额外注册其 2 个工具，总数达到 **25 个**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
+亿文通将以下 **10 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构，且全部默认启用，共提供 **23 个工具**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
 
 | 数据源 | 覆盖范围 | 接入方式 | API Key |
 |---|---|---|---|
@@ -38,7 +38,6 @@
 | **Europe PMC** | EBI 的生命科学文献聚合库（区别于 NCBI PubMed），含 PMC 全文。 | Europe PMC REST API（`ebi.ac.uk/europepmc`），经 `httpx` 直连 | 无需 |
 | **DOAJ** | 开放获取期刊目录（Directory of Open Access Journals）中的同行评审文章。 | DOAJ REST API（`doaj.org/api`），经 `httpx` 直连 | 无需 |
 | **OpenAIRE** | 欧洲开放科学研究成果聚合库。 | OpenAIRE REST API（`api.openaire.eu`），经 `httpx` 直连 | 无需 |
-| **Semantic Scholar** | AI 驱动的跨学科学术图谱。 | Semantic Scholar Graph API（`api.semanticscholar.org`），经 `httpx` 直连 | **必需** —— `SEMANTIC_SCHOLAR_API_KEY`（无 Key 时其工具完全不注册） |
 | **CORE** | 汇聚全球仓储与期刊的开放获取论文聚合库。 | CORE v3 REST API（`api.core.ac.uk`），经 `httpx` 直连 | 可选 —— `CORE_API_KEY`（建议配置，无 Key 限流严格） |
 
 ## ⚠️ API 密钥说明
@@ -47,7 +46,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前未配置 `SEMANTIC_SCHOLAR_API_KEY` 时共注册 **23 个工具**、覆盖 10 个数据源；配置后为 **25 个**；新增的非 Elsevier 数据源均不需要此 Key。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前共注册 **23 个工具**、覆盖 10 个数据源；非 Elsevier 数据源均不需要此 Key。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -73,8 +72,7 @@
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
         "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
-        "CORE_API_KEY": "your_core_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "CORE_API_KEY": "your_core_api_key_here"
       }
     }
   }
@@ -85,7 +83,6 @@
 > - `ELSEVIER_INSTTOKEN` —— 仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写，用于访问更多 Elsevier 数据。
 > - `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。
 > - `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格（约 5 次请求后锁定约 10 分钟），建议配置。
-> - `SEMANTIC_SCHOLAR_API_KEY` —— 不配置时 Semantic Scholar 的工具**根本不会被注册**（无 Key 时其关键词检索不可用）。
 
 如果您不希望每次重启时强制刷新缓存包，则改为添加以下内容：（但这会导致包更新时您需要对包进行手动更新）
 
@@ -101,8 +98,7 @@
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
         "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
-        "CORE_API_KEY": "your_core_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "CORE_API_KEY": "your_core_api_key_here"
       }
     }
   }
@@ -156,9 +152,6 @@ NCBI_API_KEY=your_ncbi_api_key
 # 可选。CORE 无此 Key 也可用，但限流严格（约 5 次请求后锁定约 10 分钟），
 # 建议配置。免费申请：https://core.ac.uk/services/api
 CORE_API_KEY=your_core_api_key
-# 可选。不配置时 Semantic Scholar 的工具根本不会被注册（无 Key 时其
-# 关键词检索不可用）。
-SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ```
 
 #### 项目结构
@@ -189,7 +182,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 ## 可用工具列表
 
-以下工具按数据源分组，每个数据源一张表格。**默认注册 23 个工具**；配置 `SEMANTIC_SCHOLAR_API_KEY` 后会追加 Semantic Scholar 的 2 个工具，总数达到 **25 个**。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
+以下工具按数据源分组，每个数据源一张表格。**共注册 23 个工具**，只要对应数据源的 Key（如有要求）已配置即可全部使用。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
 
 ### Scopus
 
@@ -260,15 +253,6 @@ python -m uniarticles      # 使用 pip 安装时
 |---|---|---|
 | `openaire_research_product_search_by_query` | `query`、`max_results`=10 | 检索 OpenAIRE（欧洲开放科学聚合库）。无需 Key。 |
 
-### Semantic Scholar
-
-**以下两个工具仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 时才会注册**——无 Key 时 Semantic Scholar 的关键词检索会确定性失败，因此该数据源的工具完全不会被暴露。
-
-| 工具名 | 参数 | 说明 |
-|---|---|---|
-| `semantic_scholar_paper_search_by_query` | `query`、`max_results`=10 | 按关键词检索 Semantic Scholar。 |
-| `semantic_scholar_paper_detail_by_doi` | `doi` | 按 DOI 查询单篇文献。 |
-
 ### CORE
 
 | 工具名 | 参数 | 说明 |
@@ -279,7 +263,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 下面这段提示词把一句模糊的需求变成可复现的多源检索。把它粘贴到任意已接入 UniArticles 的 MCP 客户端，然后替换最后一行的需求描述即可。其中关于「查询写法」的规则均经过真实接口验证，探测结果见 `project-docs/buildlog.md`。
 
-同一日（2026-09-18）对当前注册的全部 **23 个工具**做了逐一真实调用验证，**23/23 成功**（该次运行未配置 `SEMANTIC_SCHOLAR_API_KEY`，其 2 个工具按设计未注册）；当时唯一的可用性风险点是 OpenAlex 检索端点的 429，已写入下方第 3 步与上方数据源小节。
+同一日（2026-09-18）对当前注册的全部 **23 个工具**做了逐一真实调用验证，**23/23 成功**；当时唯一的可用性风险点是 OpenAlex 检索端点的 429，已写入下方第 3 步与上方数据源小节。
 
 ```text
 你是一名文献检索助手，已接入 UniArticles 的 MCP 工具。
@@ -306,8 +290,8 @@ python -m uniarticles      # 使用 pip 安装时
   Europe PMC 返回中文期刊的英译题录（标题带方括号），Scopus 命中不稳定（同一查询
   0~1 条），PubMed 与 arXiv 为 0 条。请如实说明覆盖率远低于中文数据库，不要声称
   可以替代 CNKI/万方。
-- Scopus、ScienceDirect、Semantic Scholar —— 仅在对应 API Key 已配置时可用。
-  若调用返回授权/配额错误，把该源标记为「不可用」后继续，不要悄悄放弃这部分需求。
+- Scopus、ScienceDirect —— 仅在 `ELSEVIER_API_KEY` 已配置时可用。若调用返回授权/
+  配额错误，把该源标记为「不可用」后继续，不要悄悄放弃这部分需求。
 无论如何至少保留两个数据源。
 
 第三步 —— 在剩下的数据源中按以下顺序检索，并遵循对应的查询写法。

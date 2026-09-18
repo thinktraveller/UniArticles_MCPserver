@@ -19,13 +19,13 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
   - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
   - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
   - **PubMed (NCBI Entrez)**: Keyword search, batch summary lookup, related-article discovery, and PMC full-text/citation linkage — direct NCBI E-utilities calls (no third-party wrapper).
-  - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, OpenAIRE, Semantic Scholar, and CORE keyword/DOI lookup across open scholarly catalogs.
+  - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, OpenAIRE, and CORE keyword/DOI lookup across open scholarly catalogs.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
 ## Supported Data Sources
 
-UniArticles unifies the following **11 data sources** behind one consistent MCP interface, all returning the same normalized JSON shape. **10 are active by default**, providing **23 tools**; Semantic Scholar registers its 2 additional tools only when `SEMANTIC_SCHOLAR_API_KEY` is set, for a total of **25 tools**. Every source except arXiv is a direct call to the provider's official REST API (via `httpx`); arXiv is wrapped through the official `arxiv` Python package.
+UniArticles unifies the following **10 data sources** behind one consistent MCP interface, all returning the same normalized JSON shape and all active by default, providing **23 tools**. Every source except arXiv is a direct call to the provider's official REST API (via `httpx`); arXiv is wrapped through the official `arxiv` Python package.
 
 | Data Source | Coverage | Access Method | API Key |
 |---|---|---|---|
@@ -38,7 +38,6 @@ UniArticles unifies the following **11 data sources** behind one consistent MCP 
 | **Europe PMC** | EBI's life-sciences literature aggregator (distinct from NCBI PubMed), including PMC full text. | Europe PMC REST API (`ebi.ac.uk/europepmc`) via `httpx` | Not needed |
 | **DOAJ** | Directory of Open Access Journals — peer-reviewed open-access articles. | DOAJ REST API (`doaj.org/api`) via `httpx` | Not needed |
 | **OpenAIRE** | European open-science aggregator of research products. | OpenAIRE REST API (`api.openaire.eu`) via `httpx` | Not needed |
-| **Semantic Scholar** | AI-powered academic graph covering all fields. | Semantic Scholar Graph API (`api.semanticscholar.org`) via `httpx` | **Required** — `SEMANTIC_SCHOLAR_API_KEY` (its tools are not registered at all without it) |
 | **CORE** | Global aggregator of open-access research papers from repositories and journals worldwide. | CORE v3 REST API (`api.core.ac.uk`) via `httpx` | Optional — `CORE_API_KEY` (recommended; heavy rate limit without it) |
 
 ## ⚠️ API Key Requirements
@@ -47,7 +46,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **23 tools total** covering 10 data sources when `SEMANTIC_SCHOLAR_API_KEY` is not configured, or **25 tools** when it is; the newer non-Elsevier sources do not require this key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **23 tools total** covering 10 data sources; the newer non-Elsevier sources do not require this key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -75,8 +74,7 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
         "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
-        "CORE_API_KEY": "your_core_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "CORE_API_KEY": "your_core_api_key_here"
       }
     }
   }
@@ -87,7 +85,6 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
 > - `ELSEVIER_INSTTOKEN` — only if your institution issued an Elsevier Institutional Token, for broader Elsevier access.
 > - `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec.
 > - `CORE_API_KEY` — CORE works without it but is heavily rate-limited (~5 requests, then a ~10-minute lockout); a key is recommended.
-> - `SEMANTIC_SCHOLAR_API_KEY` — without it the Semantic Scholar tools are **not registered at all** (its keyword search is unusable without a key).
 
 If you do not want to force refresh the cache package every time you restart, then instead add the following content: (but this will cause you to need to manually update the package when the package is updated)
 
@@ -103,8 +100,7 @@ If you do not want to force refresh the cache package every time you restart, th
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
         "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
-        "CORE_API_KEY": "your_core_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "CORE_API_KEY": "your_core_api_key_here"
       }
     }
   }
@@ -158,9 +154,6 @@ NCBI_API_KEY=your_ncbi_api_key
 # Optional. CORE works without it but is heavily rate-limited (~5 requests, then
 # a ~10-minute lockout); setting it is recommended. Free from https://core.ac.uk/services/api
 CORE_API_KEY=your_core_api_key
-# Optional. Without it the Semantic Scholar tools are NOT registered at all
-# (its keyword search is unusable without a key).
-SEMANTIC_SCHOLAR_API_KEY=your_semantic_scholar_api_key
 ```
 
 #### Project Structure
@@ -191,7 +184,7 @@ If the process starts without import or configuration errors, the installation i
 
 ## Available Tools
 
-The tools are grouped below by data source, one table per source. **23 tools are registered by default**; configuring `SEMANTIC_SCHOLAR_API_KEY` adds the 2 Semantic Scholar tools for a total of **25**. Every tool returns the same normalized JSON shape (`ok`, `source`, `query`, `count`, `items`, `error`).
+The tools are grouped below by data source, one table per source. **23 tools are registered in total**, and every one of them is available as long as its source's key (when required) is configured. Every tool returns the same normalized JSON shape (`ok`, `source`, `query`, `count`, `items`, `error`).
 
 ### Scopus
 
@@ -262,15 +255,6 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 |---|---|---|
 | `openaire_research_product_search_by_query` | `query`, `max_results`=10 | Search OpenAIRE (European open science aggregator) by keyword. No key needed. |
 
-### Semantic Scholar
-
-**These two tools are registered only when `SEMANTIC_SCHOLAR_API_KEY` is configured** — without a key, Semantic Scholar's keyword search fails deterministically, so no tool from this source is exposed at all.
-
-| Tool | Parameters | Description |
-|---|---|---|
-| `semantic_scholar_paper_search_by_query` | `query`, `max_results`=10 | Search Semantic Scholar by keyword. |
-| `semantic_scholar_paper_detail_by_doi` | `doi` | Look up a paper by DOI. |
-
 ### CORE
 
 | Tool | Parameters | Description |
@@ -281,7 +265,7 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 
 The prompt below turns a vague request into a reproducible multi-source search. Paste it into any MCP client with UniArticles connected, then replace the last line with your own request. Its query-shape rules were verified against the live APIs — the probe results are in `project-docs/buildlog.md`.
 
-The same day (2026-09-18) every one of the currently registered **23 tools** was invoked once against the live APIs: **23/23 succeeded** (`SEMANTIC_SCHOLAR_API_KEY` was unset for that run, so its 2 tools were not registered by design). The only availability risk observed was the OpenAlex search endpoint returning 429, documented in step 3 below and in the data-source section above.
+The same day (2026-09-18) every one of the currently registered **23 tools** was invoked once against the live APIs: **23/23 succeeded**. The only availability risk observed was the OpenAlex search endpoint returning 429, documented in step 3 below and in the data-source section above.
 
 ```text
 You are my literature-search assistant. UniArticles MCP tools are connected.
@@ -313,9 +297,9 @@ Apply these rules and skip those sources without calling them:
   is inconsistent (0~1 hits for the same query), and PubMed and arXiv return 0.
   State that coverage is far below a Chinese database; never claim it replaces
   CNKI or Wanfang.
-- Scopus, ScienceDirect, Semantic Scholar -> only usable if their API key is
-  configured. If a call returns an auth/quota error, mark that source
-  unavailable and continue; do not silently drop the requirement.
+- Scopus and ScienceDirect -> only usable if ELSEVIER_API_KEY is configured. If a
+  call returns an auth/quota error, mark that source unavailable and continue; do
+  not silently drop the requirement.
 Always keep at least two sources.
 
 STEP 3 — Search the remaining sources in this order, using these query shapes.

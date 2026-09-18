@@ -707,6 +707,33 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
   - 核心目标 / 范围界定（包含与排除） / 约束条件 / 成功标准 / 备注；另需在"约束条件"中新增一条：工具默认排序必须支持相关性（否则定向检索有效性不达标）
 <!-- GOAL-QA-R017-END -->
 
+### QA-R018：移除 Semantic Scholar 数据源（`SEMANTIC_SCHOLAR_API_KEY` 全面下线）
+<!-- GOAL-QA-R018-START -->
+- **提问时间**：2026-09-18
+- **提问目的**：用户直接下达范围指令，无澄清问答："没必要更新 teach.md，移除源码、项目说明和README.md中关于 `SEMANTIC_SCHOLAR_API_KEY` 的部分，因为该机构的API key申请存在权限问题。"
+- **用户回答**：无需提问，指令明确（"该机构的 API key 申请存在权限问题"即移除原因）。
+- **落地前的实测核实（2026-09-18，本机环境）**
+  - 匿名关键词检索 `api.semanticscholar.org/graph/v1/paper/search` 连续 4 次全部返回 **HTTP 429**（响应体自述 "Too Many Requests. Please wait and try again or **apply for a key**"）。
+  - 同一时刻按 DOI 的详情端点 `paper/DOI:{doi}` 返回 **HTTP 200**。
+  - 结论：无 Key 时该源的**主力工具（关键词检索）确定性不可用**；"申请 Key"这条唯一出路对本机构关闭。这与 QA-R012/buildlog 步骤 33 当年的探测结论一致，不是新出现的临时故障。
+- **决策与判据**
+  - 采用**整个数据源移除**，而非"去掉 Key 要求后保留工具"：因为去掉 Key 后关键词检索仍是 429，等于对外暴露一个永远失败的工具，违反 QA-R012 已确立的"不注册永远不可能成功的工具"原则。
+  - 排除性质：**属于外部授权/准入受限（机构无法取得 Key）**，与 QA-R003（权限受限但可换 Key）、QA-R012（技术不可行）、QA-R016（产品价值收窄）、QA-R017（有效性/可连接性）均不同，需单独记录。
+  - 附带收益：移除后**全项目的条件注册架构不再存在**——所有 10 个源的 `register()` 都不再读取 `settings`，工具列表在任何配置下恒定。这消除了"文档承诺的工具数随环境变化"这一长期不一致来源。
+- **影响范围（用户指定：源码、项目说明、README）**
+  - 源码：删除 `src/uniarticles/sources/semantic_scholar.py`（95 行）；清理 `sources/__init__.py` 的 import/注册；`config.py` 移除 `semantic_scholar_api_key` 字段；`core.py` 注释中"unlike Semantic Scholar"的对照说明改写。
+  - 用户文档：`README.md`、`README_ZH.md`（特性列表、数据源表、工具清单、两处 JSON 示例、`.env` 示例、API Key 说明段、"可用工具"前言、推荐提示词中的 Key 前置条件）、`tutorial/step_by_step_guide_en.md`、`tutorial/step_by_step_guide_zh.md`、`claude_desktop_config.example.json`（用户已先行删除该行）、`.env.example`。
+  - 项目说明：`AGENTS.md`（项目概述、配置示例、"条件注册 vs 无条件注册"整段改写为"全部无条件注册"并保留历史反例、数据源范围表）。
+  - 未改动：`project-docs/teach.md`（用户明确说"没必要更新"）；`project-docs/buildlog.md`、`project-plan.md` 中的历史条目按"不改写历史"惯例保持原样，另以追加方式记录本轮变更。
+- **目标状态**
+  - 数据源 **11 → 10**；工具数 **23 不变**（无 Key 时 Semantic Scholar 本就注册 0 个工具，因此用户可见的工具列表不变，消失的是"配置 Key 后追加 2 个工具、总数 25"这一承诺）。
+  - `SEMANTIC_SCHOLAR_API_KEY` 在源码、用户文档、项目说明、env 示例中**零引用**。
+  - 版本号 `3.3.0` → **`3.4.0`**（比照 v2.1.0/v3.2.0/v3.3.0 删源惯例；**未经用户逐字确认**，如否决只需改 `pyproject.toml` 与 `src/uniarticles/__init__.py` 两处字面值）。
+- **遗留观察（不属本轮范围）**：`openalex_work_search_by_query` 在 2026-09-18 本轮验证中持续返回 HTTP 429（同一时刻其 DOI 详情端点正常），已记入 `README.md`/`README_ZH.md` 的 OpenAlex 小节。OpenAlex 的免费 API Key 属即时申请、无机构审批门槛，若该端点持续降级可考虑申请或加退避重试。
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定（包含与排除） / 约束条件 / 成功标准 / 备注
+<!-- GOAL-QA-R018-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注
