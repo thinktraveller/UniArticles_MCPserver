@@ -2,8 +2,8 @@
 
 **请使用电脑端完成所有操作**
 
-完成本配置后，服务将在同一个 MCP 端点下同时支持 Scopus、ScienceDirect、ArXiv、PubMed 与 Google Scholar 工具。
-Google Scholar 相关链路可能不稳定或暂时不可用，因此该部分能力属于测试性内容。
+完成本配置后，服务会在同一个 MCP 端点下提供 Scopus、ScienceDirect、arXiv、PubMed、Crossref、Europe PMC、DOAJ、OpenAIRE 与 CORE 共 **9 个数据源、21 个工具**。
+Google Scholar 已不在本项目范围内（于 v2.1.0 移除）。
 
 ## 1、申请 Elsevier API Key（用于 Scopus、ScienceDirect 等服务）
 

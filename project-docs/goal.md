@@ -762,6 +762,25 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **补正（2026-09-18 20:08，晚于本条上方记录）**：上条"同一时刻按 DOI 的详情端点返回 HTTP 200，即 search 端点单独降级"**仅在该记录时点成立，不得作为该源的长期特性描述**。后续两次复核实测（本机直连 `api.openalex.org`）结果一致：`/works?search=...` → **429**、`/works/https://doi.org/{doi}` → **429**、`/works/{entity_id}`（本项目未暴露该形态的工具）→ **200**。即上游限流实际覆盖**检索**与 **DOI 解析**两条路径——恰好是被移除的两个工具各自调用的路径，因此"至少 DOI 查询还能用"这一印象不成立。移除性质不变（上游可用性不稳定，非代码缺陷、非权限受限）。完整证据见 `project-docs/buildlog.md` 的 2026-09-18 19:42 补正条目。
 <!-- GOAL-QA-R019-END -->
 
+### QA-R020：许可证定为双许可并发布 v3.4.0
+<!-- GOAL-QA-R020-START -->
+- **提问时间**：2026-09-18
+- **提问目的**：发布前的许可证门禁。此前 `pyproject.toml` 的许可证声明互相矛盾，而 PyPI 上**同一版本号的元数据发布后不可覆盖**（只能 yank，且 yank 不等于删除），带着矛盾发出去就会永久留在 PyPI 上。因此发布前必须先定案。
+- **用户回答**（逐字）："许可证使用双许可，然后可以发布3.4.0"
+- **矛盾证据（实测，非推测）**：`pyproject.toml` 为 `license = { text = "MIT" }` + `License :: OSI Approved :: MIT License`；`LICENSE` 文件是 **AGPL-3.0 全文**（633 行）；README 徽章与正文为 AGPL-3.0 + Commercial-Restricted。解包当时构建出的 wheel，METADATA 同时含 `License: MIT` 与 `License-File: LICENSE`，即**同一个发布物既声明 MIT 元数据、又携带 AGPL-3.0 正文**。
+- **用户的真实意图与一处必须纠正的旧表述**：用户选择双许可，即开源侧 AGPL、无法满足 AGPL 的场景另行取得商业授权。据此，此前 README / `AGENTS.md` 中"**AGPL 限制商业使用**"的说法是**错误的**——AGPL 并不限制商业使用，它限制的是闭源再分发与闭源网络服务运营。该错误表述已在两份 README 与 `AGENTS.md` 中更正。
+- **落地口径（已核对发布产物）**
+  - `pyproject.toml`：`license = "AGPL-3.0-or-later"`（SPDX 表达式）+ classifier `License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)`；MIT classifier 删除。
+  - 单条 SPDX 表达式无法表达"商业受限"，故**双许可条款写在 README 正文**（§License），而非塞进元数据。
+  - wheel METADATA 三处终于自洽：`License-Expression: AGPL-3.0-or-later` / `License-File: LICENSE` / AGPLv3+ classifier。
+- **发布结果（2026-09-18）**：`uniarticles-mcp` **3.4.0 已发布至 PyPI**（wheel + sdist，sha256 与本地构建物一致）。PyPI 侧元数据核验结果：`license_expression = AGPL-3.0-or-later`、AGPLv3+ classifier、描述含双许可说明、旧的 "Commercial Use Restriction" 字样已消失。
+- **两点既成事实（记录在案，不另作处理）**
+  - **3.3.0 被跳过**：发布前 PyPI 最新为 3.2.0，3.3.0 从未发布，实际版本路径为 3.2.0 → 3.4.0；3.3.0 的全部改动均已包含在 3.4.0 中。
+  - **历史版本的错误元数据无法修正**：PyPI 上 1.0.0～3.2.0 的 license 元数据仍为 `MIT`，已发布版本不可覆盖；3.4.0 是第一次把元数据改正，此修正仅对新版本生效。
+- **影响的目标文档章节**
+  - 核心目标 / 范围界定 / 约束条件 / 成功标准 / 备注（许可证口径与发布状态）
+<!-- GOAL-QA-R020-END -->
+
 <!-- GOAL-QA-LOG-END -->
 
 ## 备注

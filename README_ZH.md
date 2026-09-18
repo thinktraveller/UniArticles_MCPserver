@@ -9,7 +9,7 @@
 
 ## 总览
 
-亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。它将多个学术数据库（**Scopus**, **ArXiv**）和文献 API（**PubMed**）集成到一个标准化的 API 中，供 LLM 智能体（如 Claude）调用。
+亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。截至 v3.4.0，它把 **9 个数据源、21 个工具**——Scopus、ScienceDirect、arXiv、PubMed、Crossref、Europe PMC、DOAJ、OpenAIRE、CORE——统一到同一套标准化接口下，供 LLM 客户端（Codex Desktop、Cherry Studio、Claude Desktop 等）调用。
 
 ## 功能特性
 

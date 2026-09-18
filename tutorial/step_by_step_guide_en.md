@@ -4,8 +4,8 @@
 
 I'm sorry that some of the pictures are in Chinese. If you have any questions, please feel free to ask.
 
-After this configuration, the server supports Scopus, ScienceDirect, ArXiv, PubMed, and Google Scholar tools in a unified MCP endpoint.
-Google Scholar access can be unstable or temporarily unavailable, so related capability is experimental/test-only.
+After this configuration, the server exposes Scopus, ScienceDirect, arXiv, PubMed, Crossref, Europe PMC, DOAJ, OpenAIRE and CORE (**9 data sources / 21 tools**) through one unified MCP endpoint.
+Google Scholar is no longer part of this project — it was removed in v2.1.0.
 
 ## 1. Apply for Elsevier API Key (for Scopus, ScienceDirect, and more)
 
