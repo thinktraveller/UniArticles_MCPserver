@@ -2254,7 +2254,7 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 | `AGENTS.md` | 第 9 行双许可段落中的 `README.md` / `README_ZH.md` → `README.md` / `README_EN.md`（本 agent 对 `AGENTS.md` 的改动**仅此一处文件名引用**，未触及任何指导性内容） |
 
 ### 验证
-- `git status` 更名识别正常：`README_EN.md` 为新增、`README_ZH.md` 为删除，与旧 `README.md` 的 blob 一致（git 在 diff 时按内容配对为 rename）。
+- Git 侧的记录形态（已核实，与最初预期不同）：本步提交在 git 中记录为 **`README.md` 修改（英文内容 → 中文内容）、`README_EN.md` 新增、`README_ZH.md` 删除**，而非两次 rename。原因是 `README.md` 这一路径在改动前后**都存在但内容不同**，git 无法把它表达为 rename；这是"两份文件内容整体换位"相比单纯重命名的必然差异，不影响结果的正确性。
 - 文件身份核对：`README.md` 第 10 行为 `## 总览`、正文为中文；`README_EN.md` 第 10 行为 `## Overview`、正文为英文——两者未混淆。
 - `git grep "README_ZH\|tutorial/"`（排除 `project-docs/`、`reference-projects/`）**零命中**，全仓库用户可见文档中旧的 `README_ZH.md` 与 `tutorial/` 引用已彻底清零。
 - 正文内容未在更名过程中被改写：`README_EN.md` 的英文正文与步骤 1 提交的 `README.md` 逐行一致（仅第 6 行链接按上文修改）。
@@ -2276,7 +2276,7 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 1. 本 agent 执行 `git mv` 后，更名处于**已暂存、未提交**状态；
 2. 该代理执行 `git add project-docs/goal.md` + `git commit`，因 `git commit` 提交整个索引，**把本 agent 暂存中的更名一并卷入**其提交 `92d0e3d`；
 3. 该代理随后执行 `git reset --mixed HEAD~1` 撤销该提交（reflog：`92d0e3d → 9f040b1`），索引回退到更名之前的状态，**工作区未被触碰**，本 agent 的更名文件与全部文本改动均完好保留；
-4. 该代理改为只提交 goal.md，产生新提交 `fd5da87`（现为 HEAD）。
+4. 该代理改为只提交 goal.md，产生新提交 `fd5da87`（写入本行时为 HEAD；本步提交 `11de7f5` 即建立在其之上）。
 
 **影响与处置**：本 agent 的步骤 1/2 提交（`99046ba`、`9f040b1`）全程未受影响；更名在索引中的暂存记录丢失，已在工作区核对无误后重新暂存并提交，最终结果与既有步骤 3 计划完全一致。
 
