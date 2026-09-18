@@ -277,6 +277,87 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 |---|---|---|
 | `core_work_search_by_query` | `query`, `max_results`=10 | Search CORE (global open-access aggregator) by keyword. Works without a key but is heavily rate-limited (~5 requests then a ~10-minute lockout); configuring `CORE_API_KEY` is strongly recommended. |
 
+## 📝 Recommended Prompt: Literature Search
+
+The prompt below turns a vague request into a reproducible multi-source search. Paste it into any MCP client with UniArticles connected, then replace the last line with your own request. Its query-shape rules were verified against the live APIs — the probe results are in `project-docs/buildlog.md`.
+
+```text
+You are my literature-search assistant. UniArticles MCP tools are connected.
+Follow these four steps exactly, in order.
+
+STEP 1 — Split my request BEFORE searching.
+Restate what I need as: (a) topic or research question in one sentence;
+(b) search type — breadth scan, one specific known paper, or author/venue lookup;
+(c) research domain; (d) time window; (e) language; (f) how many papers is enough.
+
+STEP 2 — Rule out the sources that certainly cannot match, and say so out loud.
+Apply these rules and skip those sources without calling them:
+- Topic is biomedical/life-sciences ONLY -> drop arXiv, DOAJ, CORE, OpenAIRE.
+- Topic is physics, mathematics, computer science, statistics, quantitative
+  biology or economics -> arXiv is usable; ANY other domain -> drop arXiv
+  (it is preprint-only and has no journal coverage).
+- I want peer-reviewed / mainstream / non-open-access journals -> drop DOAJ,
+  CORE and OpenAIRE (open-access only, so they bias the result set).
+- I want the full text or a PDF -> no UniArticles tool returns full text or
+  binaries. Say this up front and keep sources only for metadata plus links.
+- I want non-English (e.g. Chinese) literature -> none of these sources index
+  CNKI or Wanfang. Only Crossref returns occasional Chinese-language records.
+  State the gap instead of implying coverage.
+- Scopus, ScienceDirect, Semantic Scholar -> only usable if their API key is
+  configured. If a call returns an auth/quota error, mark that source
+  unavailable and continue; do not silently drop the requirement.
+Always keep at least two sources.
+
+STEP 3 — Search the remaining sources in this order, using these query shapes.
+1. Scopus — for a known paper use TITLE("exact title"); for a topic use
+   TITLE-ABS-KEY(term AND term); count 5-10.
+2. OpenAlex — plain keyword search (no field syntax available). If it returns
+   HTTP 429, wait ~30 seconds and retry once; the search cluster rate-limits
+   anonymous traffic under load while its DOI lookup keeps working.
+3. Crossref — plain keyword search; also use it to confirm each DOI.
+4. PubMed (biomedical only) — for a known paper use  Exact paper title[Title]
+   and do NOT wrap it in quotes: the quoted form returns 0 results. Never pass
+   a long natural-language sentence; stopwords such as "in" can zero the whole
+   query. Put explicit AND between term groups.
+5. Europe PMC — same field syntax as PubMed, e.g. TITLE:"exact title".
+6. arXiv (preprint domains only) — ti:"exact title" for a known paper,
+   all:term for a topic.
+7. DOAJ, CORE, OpenAIRE — open-access only. DOAJ's relevance ranking is weak
+   and returns off-topic hits for title-like queries, so verify every title
+   before reporting it.
+8. ScienceDirect — identifier lookup only (DOI/PII). It has NO search tool, so
+   never try to search it.
+Use 5-10 results per source. Running the same topic against several sources is
+the expected pattern, not a fallback chain. Skip any source that errors and
+record it.
+
+STEP 4 — Merge and report.
+Deduplicate by DOI, then by normalized title. Output ONE Markdown table,
+newest first, with exactly these columns:
+
+| Title | Published | Journal / Venue | DOI Link | Source | Summary |
+
+- DOI Link: [10.xxxx/yyy](https://doi.org/10.xxxx/yyy); if there is no DOI,
+  use the source's own URL.
+- Summary: 1-2 sentences, derived ONLY from an abstract actually returned by a
+  tool. If no abstract is available, write "no abstract available". Never
+  invent or infer content.
+- Source: the tool's `source` value; list every source that returned the paper.
+After the table, list which sources you skipped and why, plus any query that
+returned 0 results.
+
+My request: <describe what you want here>
+```
+
+### Query shapes that are verified to work
+
+| Goal | Use | Not this (returns related-but-different papers) |
+|---|---|---|
+| Find one known paper in Scopus | `TITLE("Attention Is All You Need")` | bare `Attention Is All You Need` |
+| Find one known paper in arXiv | `ti:"Attention Is All You Need"` | bare title, even with relevance sorting |
+| Find one known paper in PubMed | `Exact title[Title]` — unquoted | bare title (a stopword can zero the query), or `"title"[Title]` (returns 0) |
+| Topic search in PubMed | `term AND term`, keep it short | a full natural-language sentence |
+
 ---
 
 ## 🤝 Call for Contributions

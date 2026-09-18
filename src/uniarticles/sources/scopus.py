@@ -87,7 +87,13 @@ async def _search_scopus(query: str, count: int, sort: str, view: str) -> dict:
         response = await client.get(f"{BASE_URL}content/search/scopus", params=params)
         response.raise_for_status()
         payload = response.json()
-    entries = payload.get("search-results", {}).get("entry", [])
+    # Scopus reports "no documents matched" as a single pseudo-entry
+    # {"@_fa": "true", "error": "Result set was empty"} rather than an empty
+    # list. It carries no document fields, so normalizing it yields one row of
+    # all-null values — i.e. an empty result set masquerading as one real hit.
+    # Drop any entry that carries an explicit ``error`` before normalizing.
+    entries = payload.get("search-results", {}).get("entry", []) or []
+    entries = [entry for entry in entries if isinstance(entry, dict) and "error" not in entry]
     normalized = []
     for entry in entries:
         normalized.append(

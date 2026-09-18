@@ -1592,3 +1592,52 @@ v3.3.0 交付后复核发现：三处排序修复改了行为，但**决定性�
 - `list_tools()` 确认三个工具的描述分别含 `TITLE(` / `ti:` / `[Title]`，且工具总数仍为 23（配置 Key 时 25）。
 
 ---
+
+## [2026-09-18 19:06] 全工具可用性实测 + 推荐提示词交付
+
+### 背景
+用户要求：检查当前所有工具的可用性；编写「文献查找」推荐提示词（中英各一份，含拆分需求 → 排除不匹配源 → 依次检索 → 汇总 Markdown 表格四步）；更新 README；并提交包括用户既有改动在内的全部改动。
+
+### 全工具可用性实测（真实网络调用，非模拟）
+新增 `_verify/tool_availability_check.py`，在进程内构建 `create_server()` 并逐个真实调用。**当前 `.env` 未配置 `SEMANTIC_SCHOLAR_API_KEY`，故实际注册 23 个工具，全部调用成功（23/23）**：
+
+- 关键词检索 9 个（scopus / arxiv / pubmed / openalex / crossref / europepmc / doaj / openaire / core）：全部 ok，单次耗时 0.8–10.2s（CORE 最慢，受其限流影响波动明显）。
+- 标识符/浏览型 14 个（Scopus 5 个元数据类 + ScienceDirect 2 + arXiv 2 + PubMed 3 + OpenAlex/Crossref 各 1）：全部 ok。
+- Semantic Scholar 的 2 个工具**未注册**（符合设计：无 Key 时 `register()` 提前返回）。
+
+首轮实测中 ScienceDirect ×2、OpenAlex/Crossref 详情 ×2 报 404，经排查是**测试用 DOI 选错**：`10.48550/arXiv.1706.03762` 是 arXiv 分配的 **DataCite** DOI，Crossref 与 Elsevier 平台本就不应收录。改为从各源自身检索结果中回填真实 DOI 后，4 项全部通过。该结论已如实记录，未据此判定任何源异常。
+
+### 可用性问题（实测发现，按严重度排序）
+1. **`scopus_document_search_by_query` 空结果集被当成 1 条记录返回（已修复）**：Scopus 在无命中时返回单个伪条目 `{"@_fa": "true", "error": "Result set was empty"}`，原归一化逻辑不做过滤，于是产出 1 条字段全为 `null` 的「幽灵文献」。中文查询 `深度学习在医学图像分割中的应用` 可稳定复现（count=1，各字段全 null，而上游 `totalResults` 为 0）。修复方式是在 `_search_scopus` 归一化前剔除带 `error` 的条目。修复后同一查询返回 `count=0`、空列表，正常查询（count=3、3 条有标题）不受影响。此项风险较高：调用方 LLM 会把幽灵条目当作真实命中写进结果表。
+2. **OpenAlex 关键词检索受上游限流（未修复，属上游状态）**：`api.openalex.org/works?search=...` 返回 **429**，响应体为 `Anonymous search is temporarily rate-limited while the search cluster is under elevated load`，`retry-after: 30`。同一时刻 `openalex_work_detail_by_doi` 仍返回 **200**，说明是 search 端点单独降级。已在提示词中写明"遇 429 等 30 秒重试一次"，并在 README 中提示该源当前为可用性风险点。
+3. **PubMed 查询形态陷阱（上游行为，非缺陷）**：`CRISPR base editor off-target effects in human embryos` 裸查询返回 **0 条**，加 `[tiab]` 后返回 2 条；进一步定位到根因是停用词 `in` 被 Automatic Term Mapping 解析后与其余词求交为 0（`in human embryos` 单独查询同样为 0）。另测得已知文献 `A new coronavirus associated with human respiratory disease in China` 裸标题为 0 条，`...[Title]`（不加引号）为 3 条且目标排第 1，而 `"..."[Title]`（加引号）为 0 条。三者均为 NCBI 原始 API 行为，已直接用 eutils 复核，不属本项目缺陷。
+4. **DOAJ 相关度排序偏弱**：以 `Attention Is All You Need` 查询返回的首条为 `A Content Analysis of the word "pdm'dg" in Manichaean Parthian`（完全离题），`CRISPR` 的单关键词查询同样返回非主题结果。该源可用但结果需逐条核对。
+5. **领域覆盖实测边界**：以人类学/生物医学/中文三组查询做矩阵探测，确认——PubMed 对人类学类查询返回 0 条；arXiv 对生物医学查询返回非主题噪声；中文语种查询在 scopus/arxiv/pubmed/doaj 均为 0 条，仅 Crossref 返回了真实中文期刊记录（如 `深度学习在图像预处理中的应用`），Europe PMC 亦返回过中文期刊条目。**结论：CNKI/万方完全无覆盖，中文文献仅 Crossref 有零星收录**。
+
+### 交付物
+1. **`_verify/tool_availability_check.py`**（新增）：全工具真实可用性检查，`--matrix` 参数额外跑领域覆盖矩阵。
+2. **`_verify/query_syntax_probe.py`**（新增）：逐源记录「裸查询 vs 字段限定查询」的对照结果，即提示词第 2 条规则的证据来源。
+3. **`README.md` / `README_ZH.md`**：新增「📝 Recommended Prompt: Literature Search / 推荐提示词：文献查找」章节，含可直接粘贴的四步提示词全文、以及「已实测验证的查询写法」对照表。中文版表格额外含「标题翻译」列（用户指定的中文版独有列）。
+4. **`src/uniarticles/sources/scopus.py`**：修复上述幽灵记录缺陷（4 行，含注释）。
+
+### 提示词设计要点（与实测一一对应）
+- 四步结构严格按用户要求：拆分需求 → 排除「一定不匹配」的源 → 按序检索 → 汇总表格。
+- 表格列：中文版 `文献标题 / 标题翻译 / 发表时间 / 期刊·会议 / DOI 链接 / 文献源 / 内容介绍`；英文版去掉「标题翻译」列，其余一致。
+- 「内容介绍」被约束为**只能依据真实返回的摘要**，无摘要须写「无摘要」，从提示词层面阻断编造。
+- 明确写入「UniArticles 不返回全文/二进制」与「至少保留两个源」，避免调用方因单源失败而放弃检索。
+
+### 遇到的问题及解决方案
+- 首版脚本 `_summarize` 对空字符串 `error` 调用 `.splitlines()[0]` 触发 IndexError，已修正为仅在非空时取首行。
+- 首版脚本误在两个连续 docstring 之间引入重复块，导致 `from __future__` 前出现非 docstring 语句，已合并为单个 docstring。
+- 排查 ScienceDirect/OpenAlex/Crossref 的 404 时，先确认是测试数据问题而非代码问题，避免把上游正确行为误判为缺陷。
+
+### 验证
+- 修复后复测：Scopus 中文查询 `count=0` 且无全 null 条目；`retrieval augmented generation` 仍返回 3 条有效记录。
+- 全量可用性脚本重跑通过：23/23 调用成功。
+
+### 下一步计划
+- ⏭️（可选）`openalex_work_search_by_query` 的 429 属上游集群降级，若持续存在，可考虑在模块内加入一次自动重试或提示用户申请 OpenAlex 免费 API Key。
+- ⏭️（可选）`uv build`（先清 `dist/`）+ `uv publish` 发布，属发布操作，需用户确认。
+- ✅ 本轮构建侧无待执行步骤。
+
+---
