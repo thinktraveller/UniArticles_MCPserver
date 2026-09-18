@@ -4,7 +4,6 @@ from .scopus import register as register_scopus_source
 from .sciencedirect import register as register_sciencedirect_source
 from .arxiv import register as register_arxiv_source
 from .pubmed import register as register_pubmed_source
-from .openalex import register as register_openalex_source
 from .crossref import register as register_crossref_source
 from .europepmc import register as register_europepmc_source
 from .doaj import register as register_doaj_source
@@ -19,7 +18,6 @@ def register_all_sources(server: FastMCP) -> None:
     register_arxiv_source(server)
     register_pubmed_source(server)  # v3.1.0: 直连 NCBI Entrez（原 paperscraper 第三方包）
     # v3.0.0 新增：通用检索型（标准 query 关键词检索模式）
-    register_openalex_source(server)
     register_crossref_source(server)
     register_europepmc_source(server)
     register_doaj_source(server)

@@ -1697,3 +1697,42 @@ v3.3.0 交付后复核发现：三处排序修复改了行为，但**决定性�
 - ⚠️ 版本号 `3.4.0` 未经用户逐字确认（比照 v2.1.0/v3.2.0/v3.3.0 删源惯例拟定）；如否决只需替换两处字面值。
 
 ---
+
+## [2026-09-18 19:33] v3.4.0（续）：移除 OpenAlex 数据源 —— 步骤 61：源码删除与注册清理
+
+### 本轮依据（步骤来源说明）
+- 用户直接下达范围指令："既然 openalex 经常出问题，那就把它也移除了，然后更新版本到 3.4.0。"决策与影响范围记录于 `project-docs/goal.md` QA-R019（commit `1725bcb`），影响范围已逐文件列出。
+- ⚠️ **`project-docs/project-plan.md` 中尚无 v3.4.0 对应步骤**（计划书最后追加的仍是 v3.3.0 步骤 54～58，候选步骤 59/60 为默认不执行的排序修复）。`project-builder-cn` 不得改写计划书，本轮经用户授权以 QA-R019 的影响范围作为步骤依据执行；建议后续由 `project-planner-cn` 将本轮追加为正式步骤（编号顺延，`project-plan.md` 候选 59/60 已被占用，故本轮编号为 61 起）。
+
+### 排除性质（不得与前几轮混写）
+- 属**上游可用性/限流不稳定**：不持凭证时的主力检索端点被上游持续性限流（HTTP 429，响应自述匿名检索在搜索集群高负载时限流，含 `retry-after: 30`）。
+- 与 QA-R013（dblp：间歇性连接失败，判定服务端本身可用故保留）、QA-R018（Semantic Scholar：外部授权准入受限）性质均不同。
+- 代码路径本身正确——同一时刻按 DOI 的详情端点始终返回 200，移除纯属对不稳定外部依赖的范围收缩，**不得据此认为 OpenAlex 的接口实现有缺陷**。
+
+### 执行的任务
+- 删除 `src/uniarticles/sources/openalex.py`（含倒排索引摘要重建逻辑）。
+- 清理 `src/uniarticles/sources/__init__.py`：删除第 7 行 `from .openalex import register as register_openalex_source` 与第 22 行 `register_openalex_source(server)`。
+- 核对分组注释：`# v3.0.0 新增：通用检索型` 下删去 1 行后仍剩 5 个源（Crossref / Europe PMC / DOAJ / OpenAIRE / CORE），分组标题保留，未产生孤立空注释块。
+
+### 关键变更
+| 文件 | 改动 |
+|---|---|
+| `src/uniarticles/sources/openalex.py` | 删除（整文件） |
+| `src/uniarticles/sources/__init__.py` | 删除 1 行 import + 1 行注册调用 |
+
+### 验证（真实调用）
+- `.venv\Scripts\python.exe` 下 `create_server()` → `list_tools()` 实测 **21 个工具**（上一轮 23 → 21，与 QA-R019 目标一致）。
+- 工具名单中 `openalex` 相关项为空列表；剩余 9 源注册数：scopus 6、sciencedirect 2、arxiv 3、pubmed 4、crossref 2、europepmc 1、doaj 1、openaire 1、core 1。
+- `__version__` 仍为 `3.4.0`（版本号无需变动，本轮并入同一未发布版本）。
+
+### 遇到的问题及解决方案
+- 系统级 `python`（Anaconda，`C:\ProgramData\anaconda3\python.exe`）导入的是 site-packages 中的旧版 `uniarticles 1.0.0` 并触发 `paperscraper` 无关告警，**不能**用于本项目验证；已改用项目内 `.venv\Scripts\python.exe`（指向 `src/uniarticles/__init__.py`，版本 `3.4.0`）。记录于此，避免后续步骤误用解释器。
+- 其余无。
+
+### 下一步计划
+- 步骤 62：`README.md` / `README_ZH.md` 同步（特性列表、源对比表、`### OpenAlex` 小节、计数段 10→9 源 / 23→21 工具、"23/23 成功"结论段、推荐提示词中的 OpenAlex 与 429 处置）。
+- 步骤 63：`AGENTS.md` 同步（项目概述源清单与计数、数据源范围表 OpenAlex 行）。
+- 步骤 64：`_verify/tool_availability_check.py` 更新并做全工具真实调用回归。
+- 步骤 65：整体终验 + 完成标记。
+
+---
