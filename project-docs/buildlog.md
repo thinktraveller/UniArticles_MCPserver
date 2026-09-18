@@ -1767,3 +1767,27 @@ v3.3.0 交付后复核发现：三处排序修复改了行为，但**决定性�
 - 步骤 64：整体终验（工具枚举 + 端到端抽查 + stdout 洁净性）与完成标记。
 
 ---
+
+## [2026-09-18 19:39] v3.4.0（续）：移除 OpenAlex 数据源 —— 步骤 63：`AGENTS.md` 同步
+
+### 执行的任务
+- 项目概述段：源清单删去 OpenAlex，计数 `10 data sources / 23 tools` → **`9 data sources / 21 tools`**。
+- 范围收缩沿革：`Three rounds` → **`Four rounds`**，并把 v3.4.0 改写为"同一未发布版本内分两轮各删一个源"——Semantic Scholar（QA-R018，外部授权准入受限）与 OpenAlex（QA-R019，上游检索集群持续性限流）；同时保留关键区分"DOI 详情端点始终健康，故不属代码或权限问题"。
+- 数据源范围表：删除 `**OpenAlex** (`openalex.py`)` 一行。
+
+### 关键变更
+| 文件 | 改动 |
+|---|---|
+| `AGENTS.md` | 概述段计数与源清单、范围收缩沿革段、数据源范围表删 1 行 |
+
+### 验证
+- 数据源范围表行数实测 **9 行**，与 9 个源一致；逐源工具数合计 = 6+2+3+4+2+1+1+1+1 = **21**，与 `list_tools()` 实测一致。
+- `rg -i "openalex|\b23\b|10 data source|three rounds" AGENTS.md` 仅剩 1 处命中，即概述段中**有意保留的历史说明**（"the still-unreleased v3.4.0 dropped two sources … and OpenAlex, because …"）。
+
+### 遇到的问题及解决方案
+- 无。
+
+### 下一步计划
+- 步骤 64：整体终验（端到端 golden path 真实调用 + 工具枚举 + stdout 洁净性 + 文档边界审计）与完成标记。
+
+---
