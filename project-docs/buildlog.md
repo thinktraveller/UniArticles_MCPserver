@@ -1366,3 +1366,30 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - 步骤 56（用户修订版）：`AGENTS.md` 同步至 v3.3.0 基线；`CLAUDE.md` 按用户指令**直接删除**（原计划为同步刷新，用户已确认该文件不再使用）。
 
 ---
+
+### 步骤 56 完成（用户修订版）：`AGENTS.md` 同步 + 删除 `CLAUDE.md`（2026-09-18 16:52）
+
+**执行的任务**
+- `AGENTS.md` Project overview 段刷新到 v3.3.0 基线：`**14 data sources / 26 tools**`→`**11 data sources / 23 tools**`、`**28 tools**`→`**25 tools**`；数据源枚举串删去 `Zenodo`、`dblp`、`bioRxiv/medRxiv`；补写本轮范围收缩的性质说明，按 QA-R017 分别写明三个源的三类理由（bioRxiv/medRxiv 上游无关键词检索、dblp 可达性不可靠、Zenodo 检索形态与其他源重复），并明确两轮收缩均非权限受限或代码层面失败，指向 `goal.md` 第 8 条与 QA-R017。
+- `## Data sources and searchable scope` 一节：删除 `Zenodo`、`dblp`、`bioRxiv / medRxiv` 三行表格行，表格由 14 行降为 11 行。
+- Architecture 段的"语义特殊型"并列句改写：`bioRxiv`/`zenodo` 已删除，仅保留 `sciencedirect.py` 一句（由复数 `A few intentionally deviate` 改为单数 `One source intentionally deviates`）。
+- Cross-cutting notes 两处引用清理：`Nothing in this server returns file contents...` 一条删去 "Zenodo a `file_links` list"；`query` 字段说明删去 "a human-readable `server/start/end` description for `biorxiv.py`"。
+- **`CLAUDE.md` 按用户指令直接删除**（用户原话"删除掉 CLAUDE.md，用不到了"）。原计划步骤 56 的方案是"在旧 v3.1.0 基线上一次性刷新到当前基线"，用户改为直接删除，故不再执行同步。该文件被 `.gitignore` 第 53 行忽略、从未入库（`git ls-files --error-unmatch CLAUDE.md` 报 pathspec 不匹配），删除不影响任何已提交内容。
+
+**关键变更**
+- `AGENTS.md` 现为 v3.3.0 基线，与 `sources/__init__.py` 实际注册的 11 个源、README 的计数三方一致。
+- `CLAUDE.md` 从工作区移除（约 9 KB），消除了"两份 agent 指导文件手工双写、其中一份落后两轮"的漂移源。
+
+**验证**
+- `rg "11 data sources|23 tools|25 tools"` 命中 project overview 段，`rg` 检索表格三行（Zenodo/dblp/bioRxiv 行）零命中。
+- 保留的两处 `dblp` 引用经逐条核对为**计划书明确要求保留**：`_verify/` 常设流程规则段（该规则本身与本轮无关，其举例的两个诊断脚本按步骤 54 决定保留）与 "Project docs (Chinese)" 中描述 `goal.md` 内容的括注（QA-R013 的 dblp 实测历史仍在 `goal.md` 中）。计划书明确告诘"不要触碰这两条"。
+- `Test-Path CLAUDE.md` → `False`，文件已删除；`git check-ignore -v CLAUDE.md` 仍显示 `.gitignore:53` 规则（规则本身未改动）。
+- `git status --short`：`AGENTS.md` 仍为 `?? AGENTS.md`（未跟踪），未被暂存；`CLAUDE.md` 未出现在状态中（已被忽略）。
+
+**遇到的问题及解决方案**
+- 首次尝试用 `Remove-Item -LiteralPath ...` 删除 `CLAUDE.md` 时被沙箱策略拦截（命令内嵌了 `$(Test-Path ...)` 子表达式），改用 `apply_patch` 的 Delete File 完成删除，未影响结果。
+
+**下一步计划**
+- 步骤 59：三处默认排序行为真实探测（编码前置步骤，写入 `_verify/` 诊断脚本）。
+
+---
