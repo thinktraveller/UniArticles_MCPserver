@@ -41,14 +41,19 @@
 
 ## ⚠️ API 密钥说明
 
-本服务器集成多个数据源，部分高级功能需要 API 密钥支持：
+**本服务器提供的每一个工具、每一个数据源，都可以用您以个人身份申请的 API Key 访问，或者根本不需要 Key——没有任何一项需要机构订阅。** 9 个数据源中有 5 个完全不需要 Key，需要 Key 的 3 个也都支持个人免费申请。
 
-1. **Elsevier API（Scopus 数据库，必需）**:
-   - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前共注册 **21 个工具**、覆盖 9 个数据源；非 Elsevier 数据源均不需要此 Key。）
-   - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
+| 密钥 | 用于 | 申请方式 |
+| --- | --- | --- |
+| `ELSEVIER_API_KEY` | Scopus + ScienceDirect（8 个工具） | 在 [Elsevier Developer Portal](https://dev.elsevier.com/) 注册免费个人账号后创建 API Key。**基础级、非商业性质的 Key 即可满足本服务器全部 Elsevier 相关工具，不需要机构订阅，也不需要 Insttoken**（已用真实的非商业 Key 逐一实测验证）。Scopus 是 Elsevier 旗下数据库，因此在密钥作用域允许的前提下，同一把 Key 也可用于其他 Elsevier API 服务。 |
+| `CORE_API_KEY` | CORE（1 个工具） | 前往 [core.ac.uk/services/api#form](https://core.ac.uk/services/api#form) 申请。**可选**——不配置也能用，但限流严格（约 5 次请求后锁定约 10 分钟）。 |
+| `NCBI_API_KEY` | PubMed（4 个工具） | 先在 [ncbi.nlm.nih.gov](https://www.ncbi.nlm.nih.gov/) 登录 NCBI 账号，再到 [NCBI 账号设置页](https://account.ncbi.nlm.nih.gov/settings/) 申请。**可选**——不配置也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。 |
 
-**注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
+**完全不需要 API Key 的数据源**：arXiv、Crossref、Europe PMC、DOAJ、OpenAIRE。
+
+旧变量名 `SCOPUS_API_KEY` 仍可作为 `ELSEVIER_API_KEY` 的向后兼容写法使用，但已弃用，将在未来主版本中移除。
+
+**注意**：即使一个 Key 都不配置，服务器仍会注册并暴露全部 21 个工具——只有对需要 Key 的数据源的调用会失败，而且是以清晰的错误信息失败，不会从工具列表中悄悄消失。
 
 ## 安装与使用
 
@@ -69,7 +74,6 @@
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
         "CORE_API_KEY": "your_core_api_key_here"
       }
@@ -79,9 +83,8 @@
 ```
 
 > **关于 `env` 字段**：只有 `ELSEVIER_API_KEY` 是必需的（用于 Scopus / ScienceDirect），其余全部为**可选项**——如果您没有某个 Key，请**整行删除**（JSON 不支持注释，且删除后剩下的最后一行末尾不能带逗号）。各可选字段说明：
-> - `ELSEVIER_INSTTOKEN` —— 仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写，用于访问更多 Elsevier 数据。
-> - `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。
-> - `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格（约 5 次请求后锁定约 10 分钟），建议配置。
+> - `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒（[在此申请](https://account.ncbi.nlm.nih.gov/settings/)）。
+> - `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格（约 5 次请求后锁定约 10 分钟），建议配置（[在此申请](https://core.ac.uk/services/api#form)）。
 
 如果您不希望每次重启时强制刷新缓存包，则改为添加以下内容：（但这会导致包更新时您需要对包进行手动更新）
 
@@ -95,7 +98,6 @@
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
         "CORE_API_KEY": "your_core_api_key_here"
       }
@@ -142,14 +144,12 @@ python -m uniarticles
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
-# 可选。仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写，用于访问
-# 更多 Elsevier 数据；否则请留空/删除此行。
-ELSEVIER_INSTTOKEN=your_elsevier_insttoken
 # 可选。NCBI Entrez 无此 Key 也可用；配置后仅将 PubMed 限速从 3 请求/秒
-# 提升到 10 请求/秒（NCBI 免费申请）。
+# 提升到 10 请求/秒。免费申请：先登录 https://www.ncbi.nlm.nih.gov/
+# 再前往 https://account.ncbi.nlm.nih.gov/settings/
 NCBI_API_KEY=your_ncbi_api_key
 # 可选。CORE 无此 Key 也可用，但限流严格（约 5 次请求后锁定约 10 分钟），
-# 建议配置。免费申请：https://core.ac.uk/services/api
+# 建议配置。免费申请：https://core.ac.uk/services/api#form
 CORE_API_KEY=your_core_api_key
 ```
 

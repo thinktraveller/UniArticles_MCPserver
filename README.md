@@ -41,14 +41,19 @@ UniArticles unifies the following **9 data sources** behind one consistent MCP i
 
 ## ⚠️ API Key Requirements
 
-This server integrates multiple data sources, and some advanced features require API keys:
+**Every data source and every tool in this server is reachable either with a personal API key you can obtain yourself, or with no API key at all — nothing here requires an institutional subscription.** Of the 9 data sources, 5 need no key whatsoever, and all 3 keys that do exist are free for an individual to obtain.
 
-1. **Elsevier API (Scopus database, Required)**:
-   - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **21 tools total** covering 9 data sources; the newer non-Elsevier sources do not require this key.)
-   - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
+| Key | Used by | How to get it |
+| --- | --- | --- |
+| `ELSEVIER_API_KEY` | Scopus + ScienceDirect (8 tools) | Register a free personal account at the [Elsevier Developer Portal](https://dev.elsevier.com/) and create an API key. **A basic, non-commercial key is sufficient — no institutional subscription or Insttoken is required** (verified against a real non-commercial key across every Elsevier-related tool in this server). Scopus is an Elsevier database, so the same Elsevier API key may also serve other Elsevier API services your key scope allows. |
+| `CORE_API_KEY` | CORE (1 tool) | Apply at [core.ac.uk/services/api#form](https://core.ac.uk/services/api#form). **Optional** — CORE works without it, but is heavily rate-limited (~5 requests, then a ~10-minute lockout). |
+| `NCBI_API_KEY` | PubMed (4 tools) | Log in to an NCBI account at [ncbi.nlm.nih.gov](https://www.ncbi.nlm.nih.gov/), then create a key on the [NCBI account settings](https://account.ncbi.nlm.nih.gov/settings/) page. **Optional** — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec. |
 
-**Note**: Even without the above API key, you can still use other functions normally.
+**No API key is needed at all for**: arXiv, Crossref, Europe PMC, DOAJ and OpenAIRE.
+
+The legacy variable name `SCOPUS_API_KEY` is still accepted in place of `ELSEVIER_API_KEY` for backward compatibility, but it is deprecated and will be removed in a future major version.
+
+**Note**: with no API key configured at all, the server still registers and exposes the full set of 21 tools — only calls to key-gated sources fail, and they fail with a clear error message instead of silently disappearing from the tool list.
 
 ## Installation & Usage
 
@@ -71,7 +76,6 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
         "CORE_API_KEY": "your_core_api_key_here"
       }
@@ -81,9 +85,8 @@ Simply add the following configuration to your client's MCP settings (e.g., `cla
 ```
 
 > **About the `env` fields**: Only `ELSEVIER_API_KEY` is required (for Scopus / ScienceDirect). All the others are **optional** — if you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line must not end with a comma). The optional fields are:
-> - `ELSEVIER_INSTTOKEN` — only if your institution issued an Elsevier Institutional Token, for broader Elsevier access.
-> - `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec.
-> - `CORE_API_KEY` — CORE works without it but is heavily rate-limited (~5 requests, then a ~10-minute lockout); a key is recommended.
+> - `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec ([get one here](https://account.ncbi.nlm.nih.gov/settings/)).
+> - `CORE_API_KEY` — CORE works without it but is heavily rate-limited (~5 requests, then a ~10-minute lockout); a key is recommended ([apply here](https://core.ac.uk/services/api#form)).
 
 If you do not want to force refresh the cache package every time you restart, then instead add the following content: (but this will cause you to need to manually update the package when the package is updated)
 
@@ -97,7 +100,6 @@ If you do not want to force refresh the cache package every time you restart, th
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
         "CORE_API_KEY": "your_core_api_key_here"
       }
@@ -144,14 +146,13 @@ Create a `.env` file in the project root:
 
 ```env
 ELSEVIER_API_KEY=your_elsevier_api_key
-# Optional. Only if your institution issued an Elsevier Institutional Token
-# (broader Elsevier access). Leave unset otherwise.
-ELSEVIER_INSTTOKEN=your_elsevier_insttoken
 # Optional. NCBI Entrez works without it; setting it only raises the PubMed
-# rate limit from 3 to 10 requests/sec (free from NCBI).
+# rate limit from 3 to 10 requests/sec. Free: log in at https://www.ncbi.nlm.nih.gov/
+# then create a key at https://account.ncbi.nlm.nih.gov/settings/
 NCBI_API_KEY=your_ncbi_api_key
 # Optional. CORE works without it but is heavily rate-limited (~5 requests, then
-# a ~10-minute lockout); setting it is recommended. Free from https://core.ac.uk/services/api
+# a ~10-minute lockout); setting it is recommended.
+# Free: https://core.ac.uk/services/api#form
 CORE_API_KEY=your_core_api_key
 ```
 

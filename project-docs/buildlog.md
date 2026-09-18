@@ -2114,3 +2114,32 @@ Hashing uniarticles_mcp-3.4.0.tar.gz (800.0KiB)
 - ✅ 步骤 68 全部完成，v3.4.0 已发布至 PyPI（<https://pypi.org/project/uniarticles-mcp/3.4.0/>）。
 - ⏭️ 待决策（非阻塞）：是否把 arXiv 外层超时阈值由 45s 下调至 ~20s。
 - ⏭️ `teach.md` 仍滞后三轮（用户已指示本轮不更新）。
+
+## [2026-09-18] 文档：补齐 API Key 申请指引、下架 ELSEVIER_INSTTOKEN、强化"个人身份即可"表述
+
+### 本轮背景
+用户指令逐字："在两份README.md中增加申请API key的说明：scopus的API key在<https://dev.elsevier.com/>申请；CORE_API_KEY可以在<https://core.ac.uk/services/api#form>申请；NCBI_API_KEY可以在 <https://www.ncbi.nlm.nih.gov/> 登录NCBI账号后在 <https://account.ncbi.nlm.nih.gov/settings/> 中申请；移除README.md和example等地方中关于"ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",的使用示例和说明，因为该APIKey申请需要机构订阅；在README.md中强调所用工具和数据源都可以以个人身份获得API key或者无须API key"
+
+### 改动清单
+| 文件 | 改动 |
+|---|---|
+| `README.md` | 重写 `## ⚠️ API Key Requirements`：改为三行密钥表（`ELSEVIER_API_KEY` / `CORE_API_KEY` / `NCBI_API_KEY`），逐条给出申请路径与链接；新增"5 个源完全不需要 Key"的列举；新增"一个 Key 都不配也仍暴露全部 21 个工具"的说明；两处 JSON 示例与 `.env` 示例删除 `ELSEVIER_INSTTOKEN` 行；可选字段说明补申请链接 |
+| `README_ZH.md` | 与英文版逐条对应的同构改动 |
+| `tutorial/step_by_step_guide_en.md`、`..._zh.md` | JSON 示例删除 `ELSEVIER_INSTTOKEN` 行；可选字段说明删除该条目并补 NCBI/CORE 申请链接；"其余三个字段"→"其余两个字段" |
+| `.env.example` | 删除 `ELSEVIER_INSTTOKEN` 块；NCBI/CORE 注释补申请链接 |
+| `AGENTS.md` | Elsevier 权限段落改写：不再把 Insttoken 作为可选路径介绍，改为明确标注"代码仍支持但**刻意不在任何用户可见文档中宣传**"（因为该令牌需要机构订阅），并说明原因（文档描述的每条取 Key 路径都必须个人可达） |
+
+### 一处主动修正（超出指令字面，但属同一问题的直接矛盾）
+两份教程原有一句"**必须使用教育邮箱注册并完成对应教育机构的身份验证**"，与用户本轮要强调的"个人身份即可"、以及 QA-R003 早已确认的"非商业个人 Key 即可跑通全部 Elsevier 工具"**直接冲突**。已改写为"使用个人 Elsevier Developer 账号即可——本服务器全部工具都不需要机构订阅，也不需要 Insttoken"。该表述此前未被修正过（v2.1.0 修的是 README，教程遗漏）。
+
+### 未改动的部分（有意保留）
+- **代码仍完整支持 Insttoken**：`src/uniarticles/config.py` 的 `settings.elsevier_insttoken` 与 `src/uniarticles/sources/scopus.py` 中条件发送的 `X-ELS-Insttoken` 请求头均保持原样——本轮是"文档层面下架"，不是功能移除；已设置该环境变量的用户不受影响。
+- `project-docs/` 下的历史条目（`goal.md`、`project-plan.md`、`buildlog.md` 旧记录）与 `teach.md` 按惯例不改写。
+
+### 验证
+- 用户可见文档（README×2 / tutorial×2 / `.env.example` / `claude_desktop_config.example.json`）中再无 Insttoken 的**用法示例或获取说明**；残留匹配仅为「不需要 Insttoken」这类肯定性表述，属本轮刻意保留。
+- 三处申请链接（`dev.elsevier.com`、`core.ac.uk/services/api#form`、`account.ncbi.nlm.nih.gov/settings`）在两份 README 中均存在。
+- 四个 Markdown 文件的代码围栏数均为偶数（提示词与 JSON 块未被破坏）。
+
+### 遗留提示
+README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元数据**不可修改**——若不发新版本，PyPI 的 3.4.0 页面仍显示改动前的文本。如需让 PyPI 页面同步，需发布 `3.4.1`。本 agent 未擅自提版本号。

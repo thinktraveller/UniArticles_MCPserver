@@ -13,9 +13,7 @@ https://dev.elsevier.com/
 
 ![image-20260121000131000](images/image-20260121000131000_1.png)
 
-注意：你需要使用一个教育邮箱注册，并且需要进行对应教育机构的身份验证；获得的 API Key 请勿泄露，否则可能被他人滥用。Scopus 和 ScienceDirect 是 Elsevier 旗下数据库，该 Key 本质为 Elsevier API Key，在订阅权限与密钥作用域允许时也可用于其他 Elsevier API 服务。
-
-**如果您的机构提供了机构令牌 (Insttoken)，您还可以配置 `ELSEVIER_INSTTOKEN` 以获取更多数据访问权限。**
+注意：使用**个人** Elsevier Developer 账号即可——本服务器的全部工具都不需要机构订阅，也不需要 Insttoken。获得的 API Key 请勿泄露，否则可能被他人滥用。Scopus 和 ScienceDirect 是 Elsevier 旗下数据库，该 Key 本质为 Elsevier API Key，在订阅权限与密钥作用域允许时也可用于其他 Elsevier API 服务。
 
 ## 2、下载cherrystudio
 
@@ -56,7 +54,6 @@ https://dev.elsevier.com/
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
         "CORE_API_KEY": "your_core_api_key_here"
       }
@@ -67,10 +64,9 @@ https://dev.elsevier.com/
 
 **请注意这段json代码的缩进！！任何不恰当的缩进都可能导致服务器导入的失败！！！**
 
-其中只有 `ELSEVIER_API_KEY` 是必需的，其余三个字段均为**可选项**。如果您没有某个 Key，请**整行删除**（JSON 不支持注释，且删除后 `env` 内最后一行末尾不能带逗号）：
-- `ELSEVIER_INSTTOKEN` —— 仅当您的机构签发了 Elsevier 机构令牌（Insttoken）时填写。
-- `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。
-- `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格，建议配置。
+其中只有 `ELSEVIER_API_KEY` 是必需的，其余两个字段均为**可选项**。如果您没有某个 Key，请**整行删除**（JSON 不支持注释，且删除后 `env` 内最后一行末尾不能带逗号）：
+- `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。免费申请：先登录 https://www.ncbi.nlm.nih.gov/ ，再到 https://account.ncbi.nlm.nih.gov/settings/ 创建。
+- `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格，建议配置。免费申请：https://core.ac.uk/services/api#form
 
 
 **如果您暂时不持有任何API Key**，则改为输入以下token：

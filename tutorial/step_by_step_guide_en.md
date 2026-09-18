@@ -15,9 +15,7 @@ https://dev.elsevier.com/
 
 ![image-20260121000131000](images/image-20260121000131000_1.png)
 
-Note: You need to register with an institutional email address and verify your affiliation with the corresponding educational institution. Do not disclose the obtained API Key, as it may be misused by others. Scopus and ScienceDirect are Elsevier databases, and this key can also be used for other Elsevier APIs if your subscription and key scope allow it.
-
-**If your institution provides an Institutional Token (Insttoken), you can also configure `ELSEVIER_INSTTOKEN` to access more data.**
+Note: a **personal** Elsevier Developer account is enough — no institutional subscription and no Insttoken is required for any tool in this server. Do not disclose the obtained API Key, as it may be misused by others. Scopus and ScienceDirect are Elsevier databases, and this key can also be used for other Elsevier APIs if your subscription and key scope allow it.
 
 ## 2. Download Cherry Studio
 
@@ -58,7 +56,6 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
         "CORE_API_KEY": "your_core_api_key_here"
       }
@@ -69,10 +66,9 @@ Click "Add" in the top right corner, select "Import from JSON", and enter the "s
 
 **Please pay attention to the indentation of this JSON code!! Any improper indentation may cause the server import to fail!!!**
 
-Only `ELSEVIER_API_KEY` is required; the other three fields are **optional**. If you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line inside `env` must not end with a comma):
-- `ELSEVIER_INSTTOKEN` — only if your institution issued an Elsevier Institutional Token.
-- `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec.
-- `CORE_API_KEY` — CORE works without it but is heavily rate-limited; a key is recommended.
+Only `ELSEVIER_API_KEY` is required; the other two fields are **optional**. If you don't have a given key, **delete that entire line** (JSON does not allow comments, and the last remaining line inside `env` must not end with a comma):
+- `NCBI_API_KEY` — PubMed works without it; a key only raises the rate limit from 3 to 10 requests/sec. Free: sign in at https://www.ncbi.nlm.nih.gov/ and create one at https://account.ncbi.nlm.nih.gov/settings/
+- `CORE_API_KEY` — CORE works without it but is heavily rate-limited; a key is recommended. Free: https://core.ac.uk/services/api#form
 
 **If you do not currently hold any API Key**, enter the following token instead:
 
