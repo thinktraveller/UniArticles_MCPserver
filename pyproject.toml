@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "uniarticles-mcp"
-version = "3.4.0"
+version = "3.5.0"
 description = "Unified MCP server for multi-source academic literature retrieval"
 readme = "README.md"
 # v3.4.0: 双许可（开源侧 AGPL-3.0-or-later + 可另行获取的商业授权）。

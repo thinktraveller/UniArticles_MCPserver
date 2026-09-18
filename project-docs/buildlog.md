@@ -2689,3 +2689,77 @@ $ rg --no-ignore -n "core_work_search_by_query|core_work_detail_by_identifier|�
 
 ### 下一步计划
 - ⏭️ 步骤 77：版本号提升至 `3.5.0`（`pyproject.toml` + `src/uniarticles/__init__.py`）+ 全量回归验证 + v3.5.0 交付检查点。**不构建、不发布 PyPI**。
+
+## [2026-09-19 00:50] 步骤 77 完成：版本号 `3.5.0` + 整体回归验证（v3.5.0 交付检查点）
+
+### 执行的任务
+- 版本号提升至 `3.5.0`：`pyproject.toml` 第 7 行、`src/uniarticles/__init__.py` 第 20 行（两处字面值，与计划书一致）。
+- 运行全量可用性回归 `_verify/tool_availability_check.py`，并对 3 个失败项逐项复测。
+- **未构建、未发布 PyPI**（按计划书硬门禁：发布属不可逆对外操作，须用户在场明确授权）。
+
+### 全量回归结果（29 个工具，2026-09-19 00:46～00:49）
+
+```text
+registered tools: 29
+called 28 tools, 25 ok, 3 failed
+```
+
+| 阶段 | 结果 |
+|---|---|
+| PHASE 1 关键词检索（8 个源） | Scopus / PubMed / Crossref / Europe PMC / DOAJ / OpenAIRE / CORE 全部 OK；**arXiv 超时失败** |
+| PHASE 2 标识符与浏览（20 个工具） | 17 个 OK；**arXiv 详情超时失败**、**CORE output 详情 60 s 读超时失败** |
+| CORE 新增工具专项 | `core_work_detail_by_identifier`（2.0 s）/ `core_work_outputs_by_id`（1.9 s）/ `core_work_stats_by_id`（1.7 s）/ `core_work_aggregate_by_query`（1.9 s，3 个维度）/ `core_data_provider_search_by_query`（2.1 s）/ `core_data_provider_detail_by_id`（1.2 s）**全部 OK** |
+
+**3 个失败项的复测与归因（按 QA-R013 流程，均未定性为代码缺陷）**：
+
+| 失败项 | 报错 | 复测结果 | 归因 |
+|---|---|---|---|
+| `arxiv_paper_search_by_query` | `arXiv request timed out (per-request limit 15s, overall deadline 45s)` | 复测 **2.7 s 正常返回** | 上游 `export.arxiv.org` 偶发卡顿（该项目自 v3.4.0 起已有的已知问题，且同主机同批次的 `arxiv_latest_paper_list_by_category` 在 32.0 s 内成功、复测正常） |
+| `arxiv_paper_detail_by_id` | 同上 | 同源同一失败窗口 | 同上 |
+| `core_output_detail_by_id` | `CORE 请求异常：ReadTimeout:`（60.7 s） | 连续 3 次复测 **9.17 s / 2.01 s / 6.27 s 全部成功** | 本机到 `api.core.ac.uk` 的间歇性慢读（本文件步骤 69/72/74 已三次记录同类现象） |
+
+**结论**：**CORE 系全部 9 个工具在回归与复测中均未出现实现层失败**；3 个失败全部属上游/网络瞬时波动，重试即恢复。计划书步骤 77 第 3 条第 2 项的判据（"CORE 系新增工具中稳定可用的那几项不得全部失败"）满足。
+
+### 终验自检（逐项）
+
+| 检查项 | 结果 |
+|---|---|
+| `uniarticles.__version__` | **`3.5.0`** |
+| `pyproject.toml` 的 `version` | **`3.5.0`** |
+| `list_tools()` 计数与集合 | **29 个**；`core_` 前缀恰为 **9 个**（`core_data_provider_detail_by_id` / `core_data_provider_search_by_query` / `core_output_detail_by_id` / `core_output_search_by_query` / `core_work_aggregate_by_query` / `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_search_by_query` / `core_work_stats_by_id`），与两份 README 的 CORE 工具表逐行一致 |
+| 各 CORE 工具入参 | 与文档一致：`core_work_search_by_query(query, max_results, offset)` / `core_work_aggregate_by_query(query, fields, top_n)` / `core_data_provider_detail_by_id(provider_id, include_stats, include_outputs)`，其余为单参或 `(query, max_results)` |
+| `core.py` 常量 | `BASE_URL=https://api.core.ac.uk/v3`、`USER_AGENT=UniArticlesMCP/3.5.0 …`、`REQUEST_TIMEOUT=60.0` |
+| 端到端 golden path | `core_work_search_by_query("machine learning", max_results=3)` → `ok=True`、3 条、1.9 s、题录正确 |
+| 硬边界 | 全部调用返回的 `items` 中均无 `fullText` / `full_text` |
+| 版本号残留检查 | `rg -n "3\.4\.0\|3\.5\.0" README.md README_EN.md pyproject.toml src/uniarticles/__init__.py src/uniarticles/sources/core.py AGENTS.md` 的命中**全部是历史版本陈述**（v3.4.0 的 arXiv 超时机制、双许可更正说明、更早版本号的沿革），无"把上一版本号留在描述当前状态"的句子 |
+| `dist/` 产物 | 仅有 `uniarticles_mcp-3.4.0-py3-none-any.whl` / `.tar.gz`（本地文件，未被 git 跟踪；`dist/.gitignore` 内容为 `*`）。**无任何 3.5.0 产物** |
+| 三条文档自查命令 | 步骤 76 记录的三条命令在收尾后仍为预期结果（旧计数零命中、旧限流口径零命中、回归脚本覆盖 8 个 CORE 条目） |
+| `git status --short` | 仅 `pyproject.toml` 与 `src/uniarticles/__init__.py` 两个文件处于修改状态；**无** `project-docs/goal.md`、`project-docs/teach.md` 的暂存项 |
+
+### 遇到的问题及解决方案
+- 3 个回归失败项均为上游/网络瞬时波动，已按 QA-R013 逐项复测并如实归因（见上表），**未修改任何实现**、未添加重试逻辑、未把网络问题包装成"偶发"结论。
+- 无其他阻塞。
+
+### v3.5.0 状态与剩余待办（**必须在结论区显式列出**）
+- 本轮范围：单数据源（CORE）能力扩展 —— **1 个既有工具增强 + 8 个新增工具**，数据源集合保持 9 个不变，全部工具无条件注册。
+- 工具总数 **29**（21 + 8）；CORE 单源工具数 **9**（1 → 9）。
+- 代码、README×2、`AGENTS.md`、`config.py` 注释、回归脚本均已同步；v3.5.0 **已在本地完成，但尚未构建、尚未发布到 PyPI**。
+- **剩余待办只有一项：是否发布 `3.5.0` 到 PyPI** —— 属不可逆对外操作，须用户在场明确授权后方可执行（延续 v3.4.0 步骤 68 确立的门禁）。发布前需注意：`pyproject.toml` 的 `readme = "README.md"` 现在指向**中文版**，一旦发布，PyPI 项目页的长描述将变为中文（该决策点已在 v3.4.0 步骤 3/3 的记录中提请用户确认，本轮未改动）。
+
+---
+
+## [2026-09-19 00:50] 🎉 v3.5.0 构建完成
+
+### 完成情况
+- 步骤 69～77 全部执行完毕，端到端验证通过（29 个工具注册且集合正确，CORE 系 9 个工具真实调用全部可用，golden path 通）。
+- 本版本实现"单数据源（CORE）能力扩展"：1 个既有工具增强（POST + `exclude:[fullText]`、上限 25→100、新增 `offset`）+ 8 个新增工具（works 详情 / works outputs / works stats / facet 聚合 / 机构库检索 / 机构库详情 / output 详情 / output 检索）。
+- 第 9 项工具 `core_output_search_by_query` 的击杀条件经步骤 69 的 F17 三组合（全部 200）判定**可纳入**。
+- 聚合端点 `POST /v3/search/works/aggregate` 的请求体由步骤 69 真实确证（`{"q", "aggregations": [...]}`），**未触发回退分支**。
+
+### 遗留与门禁
+- **未发布 PyPI**：`3.5.0` 仅存在于本地工作区与 git 历史，PyPI 上不存在该版本；是否发布须用户明确授权。
+- `AGENTS.md` 已按步骤 76 更新内容，但因本机 `.gitignore` 第 54 行忽略该文件（用户既有改动），**未暂存、未提交**。
+- `project-docs/teach.md` 按用户既有指示**未更新**（滞后多轮，属已知失真）。
+
+### 下一步计划
+- ✅ 构建已全部完成，无待执行步骤（仅剩"是否发布 PyPI"这一项需用户决策）。
