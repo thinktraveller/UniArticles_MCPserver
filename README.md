@@ -211,6 +211,8 @@ The tools are grouped below by data source, one table per source. **21 tools are
 | `arxiv_latest_paper_list_by_category` | `category` (required, e.g. `cs.AI`; comma-separate multiple like `cs.AI,cs.LG`), `max_results`=10 | List the most recently submitted papers in one or more arXiv categories. |
 | `arxiv_paper_detail_by_id` | `paper_id` | Get metadata for a specific arXiv paper by ID. |
 
+Availability note: the upstream host `export.arxiv.org` can stall. During the 2026-09-18 sweep, `arxiv_paper_detail_by_id` and `arxiv_latest_paper_list_by_category` both hung ~5 minutes and then failed with a connection timeout, while `arxiv_paper_search_by_query` returned normally from the same host in 1.4s; the stall cleared ~15 minutes later and all three tools worked again. Because `arxiv.py` uses `arxiv.Client()` with its default retry policy and **no explicit timeout**, a stalled upstream makes the tool call hang before it errors, rather than failing fast. If you hit this, `_verify/arxiv_connectivity_test.py` runs a layered DNS→TCP→TLS→HTTP diagnosis to tell an upstream stall apart from a local network problem.
+
 ### PubMed (NCBI Entrez)
 
 These tools call the NCBI E-utilities directly. They work without a key; setting the optional `NCBI_API_KEY` (free from NCBI) only raises the rate limit from 3 to 10 requests/sec.
