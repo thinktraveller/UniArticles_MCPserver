@@ -62,9 +62,9 @@ async def _search(query: str, max_results: int) -> dict:
 
 
 def register(server: FastMCP) -> None:
-    # Unconditional registration (unlike Semantic Scholar): CORE works without a key,
-    # just with a strict rate limit, mirroring the existing Elsevier "register always,
-    # surface limits at runtime" model.
+    # CORE registers unconditionally: it works without a key, just with a strict rate
+    # limit, mirroring the existing Elsevier "register always, surface limits at
+    # runtime" model.
     @server.tool()
     async def core_work_search_by_query(query: str, max_results: int = 10) -> dict:
         """Search CORE (global open-access aggregator) by keyword. Works without an

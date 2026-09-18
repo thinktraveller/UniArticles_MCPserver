@@ -147,7 +147,6 @@ async def main() -> int:
         ("doaj_article_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
         ("openaire_research_product_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
         ("core_work_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
-        ("semantic_scholar_paper_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
     ]
 
     for name, args in search_phase:
@@ -203,7 +202,6 @@ async def main() -> int:
         ("pubmed_pmc_linkage_lookup_by_pmid", {"pmid": "32634418"}),
         ("openalex_work_detail_by_doi", {"doi": openalex_doi}),
         ("crossref_work_detail_by_doi", {"doi": crossref_doi}),
-        ("semantic_scholar_paper_detail_by_doi", {"doi": openalex_doi}),
     ]
 
     for name, args in lookup_phase:
