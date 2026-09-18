@@ -2049,3 +2049,68 @@ METADATA | Classifier: License :: OSI Approved :: MIT License
 - 🚫 阻塞：步骤 68 第 6 项（`uv publish`）——等待用户裁定**目标许可证**。
 - ⏭️ 用户确认许可证后：按裁定结果对齐 `pyproject.toml`（若为 AGPL-3.0：`license = "AGPL-3.0-or-later"` + `AGPLv3+` classifier，并移除 MIT classifier）→ **重新构建**（许可证已写入 METADATA，旧产物必须作废）→ 重跑第 5 项产物核对 → 显式传入 token 执行 `uv publish` → 核对 PyPI 页面并追加本日志。
 - ⏭️（待决策）是否把外层超时阈值由 45s 下调至 ~20s。
+
+---
+
+## [2026-09-18 21:11] 步骤 68 完成（发布）：许可证改为双许可并发布 v3.4.0 至 PyPI
+
+### 用户裁定（解除门禁 ①）
+用户裁定采用**双许可**：开源侧 AGPL-3.0-or-later，另可向作者获取**商业授权**（替代此前"AGPL-3.0 with commercial restriction"的表述）。
+
+### 执行的任务
+1. **对齐包元数据**：`pyproject.toml` 的 `license = { text = "MIT" }` → `license = "AGPL-3.0-or-later"`（PEP 639 SPDX 表达式）；classifier `License :: OSI Approved :: MIT License` → `License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)`。并在该字段上方加注：单个 SPDX 标识无法表达"商业受限"，故元数据只写开源侧标识，双许可条款以 README 为准。
+2. **更正两份 README**（`README.md` / `README_ZH.md`）：徽章与协议章节改为双许可表述；删除"AGPL 限制商业使用"这一错误说法——AGPL 并不限制商业使用，它限制的是**闭源再分发与闭源网络服务**；补充"若 AGPL 条款不适配（闭源集成/闭源网络运营）可另行联系作者获取商业授权"及联系邮箱。
+3. **同步 `AGENTS.md`** 项目概述中的许可证表述为双许可，并写明须保留的两处 v3.4.0 更正（MIT classifier 之误、"AGPL 限制商业使用"之误）。
+4. **重新构建并发布**：清空 `dist/`（3 个文件）→ `uv build --offline` → 解包核对 wheel METADATA → `uv publish --dry-run` → `uv publish` → 核对 PyPI 状态与产物哈希。
+
+### 关键变更
+| 文件 | 变更 |
+|---|---|
+| `pyproject.toml` | `license` 改为 SPDX 表达式 `AGPL-3.0-or-later`；MIT classifier → AGPLv3+ |
+| `README.md` | 徽章 ×2、`### License` 段改为双许可；新增 v3.4.0 更正说明 |
+| `README_ZH.md` | 同上（中文侧） |
+| `AGENTS.md` | 项目概述许可证表述改为双许可，并记录两处更正 |
+| `project-docs/buildlog.md` | 本条目 |
+
+### 产物核对（发布前）：三处口径已一致
+修复后 wheel `uniarticles_mcp-3.4.0.dist-info/METADATA`：
+```
+Metadata-Version: 2.5
+Name: uniarticles-mcp
+Version: 3.4.0
+License-Expression: AGPL-3.0-or-later
+License-File: LICENSE
+Classifier: License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)
+```
+内嵌许可证文件 `uniarticles_mcp-3.4.0.dist-info/licenses/LICENSE`（32890 字节），首行为 `GNU AFFERO GENERAL PUBLIC LICENSE` / `Version 3, 19 November 2007` —— 与 `License-Expression` 一致，**此前"MIT 元数据 + AGPL 正文并存"的矛盾已消除**。
+
+两处构建期核实（先查证再动手，非试错）：
+- `Metadata-Version: 2.5` 不是异常：缓存版 hatchling 1.32.3 的 `hatchling/metadata/spec.py:12-13` 声明 `DEFAULT_METADATA_VERSION = LATEST_METADATA_VERSION = "2.5"`，凡用该版本构建的包均如此。
+- classifier 字符串 `License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)` 取自缓存内 `trove_classifiers` 白名单（hatchling 会对未知 classifier 直接 `raise ValueError`，故不可臆写）。
+- hatchling 的 `license-files` 默认 glob 为 `["LICEN[CS]E*", "COPYING*", "NOTICE*", "AUTHORS*"]`（`metadata/core.py:774`），已自动包含 `LICENSE`，无需额外声明。
+
+### 发布结果：v3.4.0 已上 PyPI
+```
+Publishing 2 files to https://upload.pypi.org/legacy/
+Hashing uniarticles_mcp-3.4.0-py3-none-any.whl (49.9KiB)
+Hashing uniarticles_mcp-3.4.0.tar.gz (800.0KiB)
+```
+发布后核对（`https://pypi.org/pypi/uniarticles-mcp/json`）：
+- `info.version` = **3.4.0**；releases 列表新增 `3.4.0`。
+- 双产物 **sha256 与本地构建物完全一致**（whl `6337b68c…15b00b`、tar.gz `8ac61b76…f6bfc1f`），即 PyPI 上的就是本次修正过许可证元数据的产物。
+- sdist 内容审计（42 项）确认未打包 `project-docs/`、`.claude/`、`CLAUDE.md`、`docs/` 或真实 `.env`（唯一 `\.env` 命中为有意保留的模板 `.env.example`）。
+
+### 遇到的问题及解决方案
+1. **门禁 ① 已解除**：许可证口径由用户裁定为双许可，按上述方案对齐后矛盾消除（详见"产物核对"）。
+2. **发布时段的网络抖动（已绕开，未影响结果）**：`pypi.org/simple` 与 `files.pythonhosted.org` 之外，`pypi.org/simple` 在本时段多次超时——`uv run` 因需同步依赖而失败（`error sending request for url https://pypi.org/simple/python-dotenv/`），`Invoke-RestMethod https://pypi.org/simple/hatchling/` 亦 40s 超时。**故构建改用 `uv build --offline`**（hatchling 及其依赖已在 uv 缓存中），发布仍走 `upload.pypi.org`（TCP 可达），实测 `uv publish` 5.6s 完成。JSON API 路径（`/pypi/<name>/json`）全程正常。
+3. **发布使 3.3.0 被跳过**：发布前 PyPI 最新为 3.2.0，即 3.3.0 与 3.4.0 此前均未发布，本次实际形成 3.2.0 → 3.4.0 的跳版。此为既成事实，已在 README/日志中不做额外处理。
+4. **过程记录（编排层，非项目缺陷）**：本轮曾将我自身的任务名 `/root/license_and_publish` 误当作他人子代理并空等约 15 分钟，后经 `interrupt_agent` 返回"不能中断自己"确认身份，遂自行执行。**教训**：子代理状态显示为 `running` 时，须先确认其身份归属再决定等待或接管，不可仅凭名称判断。
+
+### 文档边界与提交审计
+- `project-docs/` 下**仅**修改 `buildlog.md`；`goal.md`、`project-plan.md`、`teach.md` 未触碰。
+- 未提交 `dist/`（受根 `.gitignore` 第 11 行 `dist/` 忽略）、未提交 `.env`、未将任何 token 写入文件或回显（token 仅从 `.env` 读入进程环境，随 shell 进程结束消失）。
+
+### 下一步计划
+- ✅ 步骤 68 全部完成，v3.4.0 已发布至 PyPI（<https://pypi.org/project/uniarticles-mcp/3.4.0/>）。
+- ⏭️ 待决策（非阻塞）：是否把 arXiv 外层超时阈值由 45s 下调至 ~20s。
+- ⏭️ `teach.md` 仍滞后三轮（用户已指示本轮不更新）。

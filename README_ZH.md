@@ -1,7 +1,7 @@
 # UniArticles MCP Server
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
-[![Commercial-Use](https://img.shields.io/badge/Commercial-Restricted-red.svg)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)
+[![License: Dual (AGPL or Commercial)](https://img.shields.io/badge/License-Dual%3A%20AGPL%20%7C%20Commercial-orange.svg)](LICENSE)
 
 [English Version](README.md)
 
@@ -337,11 +337,14 @@ python -m uniarticles      # 使用 pip 安装时
 
 ### 协议
 
-**AGPL-3.0 License with Commercial Restriction**
-本项目采用 **GNU Affero 通用公共许可证 v3.0 (AGPL-3.0)** 授权。
+**双许可：AGPL-3.0-or-later _或_ 商业授权**
 
-🔴 **商业使用限制**:
-**未经作者明确书面授权，严禁将本软件用于任何商业用途**（包括但不限于销售、集成到商业产品中）。
+本项目以 **GNU Affero 通用公共许可证 v3.0 或更高版本（AGPL-3.0-or-later）** 开源发布，全文见 [`LICENSE`](LICENSE)。你可以据此自由使用、修改与再分发，**包括商业用途**——前提是遵守 AGPL 条款：若你分发修改后的版本，或将其作为网络服务提供给用户，必须向这些用户提供对应的源代码。
+
+💼 **商业授权**：
+若 AGPL 的传染性条款不适合你的场景——例如需要闭源集成到商业产品中，或需要在不公开修改的前提下将修改版作为网络服务运营——可另行联系作者获取商业授权：wangzh685@mail2.sysu.edu.cn。
+
+> 说明：此前“AGPL-3.0 with commercial restriction（商业使用受限）”的表述不准确，已在 v3.4.0 更正。AGPL 并不限制商业使用，它限制的是**闭源再分发与闭源网络服务**。
 
 ###  特别致谢
 

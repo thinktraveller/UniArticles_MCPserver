@@ -7,7 +7,10 @@ name = "uniarticles-mcp"
 version = "3.4.0"
 description = "Unified MCP server for multi-source academic literature retrieval"
 readme = "README.md"
-license = { text = "MIT" }
+# v3.4.0: 双许可（开源侧 AGPL-3.0-or-later + 可另行获取的商业授权）。
+# 单个 SPDX 标识无法表达“商业受限”，故元数据只写开源侧标识；双许可的完整说明
+# 在 README.md / README_ZH.md 的协议章节。此标识必须与 LICENSE 正文保持一致。
+license = "AGPL-3.0-or-later"
 authors = [
     { name = "thinktraveller", email = "wangzh685@mail2.sysu.edu.cn" }
 ]
@@ -15,7 +18,7 @@ keywords = ["mcp", "academic", "research", "scopus", "arxiv", "pubmed", "scholar
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

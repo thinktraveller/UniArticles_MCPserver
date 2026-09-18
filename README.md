@@ -1,7 +1,7 @@
 # UniArticles MCP Server
 
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-blue.svg)](https://opensource.org/licenses/AGPL-3.0)
-[![Commercial-Use](https://img.shields.io/badge/Commercial-Restricted-red.svg)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL%203.0--or--later-blue.svg)](https://www.gnu.org/licenses/agpl-3.0.html)
+[![License: Dual (AGPL or Commercial)](https://img.shields.io/badge/License-Dual%3A%20AGPL%20%7C%20Commercial-orange.svg)](LICENSE)
 
 [中文版本 (Chinese)](README_ZH.md)
 
@@ -353,12 +353,14 @@ Due to the author's background in Chemistry, I am less familiar with databases a
 
 ### License
 
-**AGPL-3.0 License with Commercial Restriction**
+**Dual licensed: AGPL-3.0-or-later _or_ a commercial license**
 
-This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+This project is released under the **GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later)** — full text in [`LICENSE`](LICENSE). You may use, modify, and redistribute it, **including for commercial purposes**, provided you comply with the AGPL: if you distribute a modified version, or expose one to users over a network, you must offer those users the corresponding source code.
 
-🔴 **Commercial Use Restriction**:
-Commercial use of this software is permitted **ONLY** with explicit written authorization from the author.
+💼 **Commercial licensing**:
+If the AGPL's copyleft obligations do not fit your use case — for example, embedding this server in a closed-source product, or operating a modified version as a network service without publishing your changes — a separate commercial license is available from the author: wangzh685@mail2.sysu.edu.cn.
+
+> Note: the earlier wording "AGPL-3.0 with commercial restriction" was inaccurate and has been corrected in v3.4.0. The AGPL does not restrict commercial use; what it restricts is **closed-source redistribution and closed-source network deployment**.
 
 ### Special Acknowledgments
 
