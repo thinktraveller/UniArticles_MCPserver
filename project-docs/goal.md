@@ -252,6 +252,53 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 2. **实测不可用，建议排除**：`plumx_metrics`——与 SciVal 同属 `analytics/` 前缀资源，当前非商业 Key 确认无法访问（401 AUTHENTICATION_ERROR）。
 3. **实测不可用，建议排除**：`fulltext_retrieval` 纯文本变体——同一已实现端点换 `Accept: text/plain` 后固定返回 400，JSON/XML 协商方式均正常，说明问题出在纯文本这一特定响应格式上，而非端点本身或 view 参数；不是新能力，本项目已有的 JSON 归一化返回已能覆盖同等信息，无需为此单独开发。
 
+## 附录：CORE API v3 能力盘点（QA-R021 前置调研，2026-09-18）
+
+来源与取证方式：直接抓取 CORE 官方文档站点与其机器可读规范，并在 `.env` 已配置的真实 `CORE_API_KEY` 下发起真实请求。
+
+**文档入口本身有一处与直觉不符的事实（实测）**：`https://api.core.ac.uk/docs` 返回 **404**（`{"message":"No route found for \"GET https://api.core.ac.uk/docs\""}`），实际文档入口是 `https://api.core.ac.uk/docs/v3`（HTTP 200，Redoc 渲染，147,964 字节）；真正机器可读的规范在 `https://api.core.ac.uk/swagger/v3.json`（HTTP 200，99,273 字节，OpenAPI `info.version = 3.0.0`，21 个真实端点）。文档页还**把大量教程型章节内联在页面 JS 中**——查询语言、关键词/短语匹配、聚合、数据模型、限流档位、PDF 下载政策都只存在于页面脚本里，不在 `v3.json` 中；只读规范会漏掉官方对查询语法与限流的全部说明。本附录两条线都读过。
+
+### 1. 鉴权与限流（官方文档口径 + 本机实测）
+
+- **鉴权两种方式**：`Authorization: Bearer <API_KEY>`（官方标注为 preferred）或 URL 查询参数 `api_key=<API_KEY>`。
+- **限流是 token 制，不是请求计数**：简单查询约 1 token，复杂查询约 3–5 token，recommender / scroll search / 批量查询更贵；官方称会按服务器负载动态调整单价。
+- **档位（官方原文）**：未认证 = 100 tokens/天、最多 10 次/分钟、无支持，**且未认证用户不提供 fullText**；注册个人 = 1,000 tokens/天、25 次/分钟；注册学术（非 Supporting/Sustaining 机构）= 5,000 tokens/天、10 次/分钟；Supporting/Sustaining 机构用户与非学术机构用户 ≈ 200k tokens/天；VIP 另议。
+- **三个限流响应头**（官方称每个响应都带）：`X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Retry-After`。**实测确认存在且可直接用于错误提示**：匿名请求触发 429 时返回 `x-ratelimit-limit: 10`、`x-ratelimit-remaining: 0`、`x-ratelimit-retry-after: 2026-09-18T15:35:09+0000`（ISO 时间戳，不是秒数）。
+- **与仓库现有表述不一致（需定案）**：`src/uniarticles/sources/core.py` 的注释与 429 错误文案、以及 `AGENTS.md` 写的是"无 key 约 5 次请求后约 10 分钟锁死"；官方现行口径是"未认证 100 tokens/天、10 次/分钟"，重试窗口应以上述响应头为准。另外 `https://core.ac.uk/services/api` 页面另有一句"One batch request or five single requests per 10 seconds"，与 token 档位表也不同源，三处口径互不一致。
+- **Key 有效期提示**：`.env` 中 `CORE_API_KEY` 的注释称该 key 30 天有效、**2026/09/04 到期**；但 2026-09-18 实测该 key 仍可用（多端点 200）。即注释与现状不符，或该 key 实际未被停用。CORE 相关能力的可用性判断依赖这把 key，建议用户确认其真实有效期。
+
+### 2. 能力矩阵与实测结果（2026-09-18，使用 `.env` 中真实 `CORE_API_KEY`）
+
+| CORE 能力（文档中的形态） | 端点 | 实测结果 | 当前 MCP 覆盖情况 |
+|---|---|---|---|
+| Works 关键词检索（支持字段限定、布尔、范围、`_exists_`、短语/关键词两种匹配语义） | `GET /v3/search/works/?q=&limit=&offset=&stats=` | 200 | **已覆盖**——`core_work_search_by_query` 只用 `q` + `limit`，未暴露 `offset`/`stats` |
+| Works 检索的高级控制（排序 / 过滤 / 字段裁剪 / CSV 导出） | `POST /v3/search/works`（body: `q`/`limit`/`offset`/`sort`/`filter`/`search_fields`/`exclude`/`accept`） | 200。`exclude:["fullText"]` **确实生效**：同样 2 条结果，响应体由 163,329 字节降到 3,337 字节；`limit=100` 被接受（100 条 = 516,335 字节） | ❌ 未接入（现工具上限 25，且只能走 GET） |
+| Works 聚合统计（按年 / 作者 / 机构 / 类型 / 期刊 / 语言 / 出版社分布） | `POST /v3/search/works/aggregate` | 200，1.4 秒，返回 `{"aggregations":{"yearPublished":{"2019":575,…}}}` | ❌ 未接入 |
+| Works 按 CORE ID 取详情 | `GET /v3/works/{id}` | 200（27,681 字节） | ❌ 未接入 |
+| Works 生命周期时间戳（deposited / published / updated / accepted） | `GET /v3/works/{id}/stats` | 200（126 字节） | ❌ 未接入 |
+| Works 关联的多个 Outputs（同一作品在各机构库中的版本） | `GET /v3/works/{id}/outputs` | 200（2,703 字节） | ❌ 未接入 |
+| Works 结构化全文 TEI | `GET /v3/works/tei/{id}` | **形态可疑**：ID 267312 → 200 但响应体 **0 字节**；文档示例 ID 127610059 → 404 | ❌ 未接入 |
+| Works 文件下载（pdf / txt / raw / tei） | `GET /v3/works/{id}/download` | 未探测（返回二进制）。官方《PDF download policy》：优先用记录里的 `downloadUrl` 链接；直接走 API 下载**计入 token 且"更贵"**；**绕过 API 直连 `fileserver-az.core.ac.uk` 属违规，会被封 key** | ❌ 未接入 |
+| Outputs（未去重的原始采集记录：license、SDG 分类、仓库信息、版本、`fulltextStatus` 等） | `GET /v3/outputs/{id}` | 200（18,078 字节） | ❌ 未接入 |
+| Outputs 关键词检索 | `GET /v3/search/outputs/?q=` | **500**（两次不同查询均失败）——上游 Azure Search 报 `Invalid expression: The operand for a binary operator 'Equal' is not a single value` | ❌ 未接入 |
+| Outputs 历史版本 / 原始 XML / 下载 / 统计 | `GET /v3/outputs/{id}/history`、`/raw`、`/download`、`/stats` | 未探测（`OutputStats` 字段结构已从规范读到） | ❌ 未接入 |
+| Data Providers（机构库 / 期刊源）检索 | `GET /v3/search/data-providers/?q=` | 200（1,141 字节） | ❌ 未接入 |
+| Data Provider 详情 / 统计 / 其下 outputs | `GET /v3/data-providers/{id}`、`/{id}/stats`、`/{id}/outputs?q=&sort=&limit=` | 均 200（537 / 139 / 2,769 字节；其 outputs 单次上限 100，支持 `sort=relevance|recency`） | ❌ 未接入 |
+| Journals 按 ISSN 或 CORE ID 查询 / 统计 | `GET /v3/journals/issn:{issn}`、`/v3/journals/{id}`、`/{id}/stats` | 均 200（168 / 70 字节） | ❌ 未接入 |
+| Journals 关键词检索 | `GET /v3/search/journals/?q=` | **连续三次超时**（45 秒 / 60 秒 / 95 秒均在超时前未返回） | ❌ 未接入 |
+| Discovery（按 DOI/标题找全文最佳链接，聚合 CORE 与外部源） | `POST /v3/discover` | **500**——错误体显示其下游服务 `oadiscovery` 返回 404（上游服务故障） | ❌ 未接入 |
+| Recommender（相似记录推荐，支持 CORE ID 或自由文本） | `POST /v3/recommend` | **500**——错误体显示下游 `core-recommender-service` 返回 HTTP/2 500 | ❌ 未接入 |
+| 全文（`fullText` 纯文本抽取） | Works / Outputs 响应内字段 | 200，且**检索响应默认就带 fullText**（`limit=2` 的 works 响应达 163 KB）；未认证调用不提供该字段 | 现有工具**主动剔除**该字段 |
+| 批量数据获取（不属于 API 工具） | CORE Dataset（749 GB 压缩 / 约 2.7 TB 解压，凭据申请制）、FastSync（增量同步） | 未涉及 | 超出 MCP 工具范畴 |
+
+### 3. 与本项目既有决策的冲突点（本轮提问的直接依据）
+
+1. **与"不返回文件内容、不下载二进制"的既有立场直接冲突**：`/v3/works/{id}/download`、`/v3/works/tei/{id}`、`/v3/outputs/{id}/download|raw|history` 都属于"取回文件本体或原始全文"，而本项目对外口径一直是"只给元数据与链接"（`AGENTS.md`：*Nothing in this server returns file contents or downloads binaries*）。
+2. **与 v3.2.0–v3.4.0 的收缩趋势相反**：这三轮连续删源（ChEMBL、HAL、bioRxiv/medRxiv、dblp、Zenodo、Semantic Scholar、OpenAlex）的核心理由之一正是"工具太多造成选择噪声与上下文开销"；而 CORE 单源按文档最多可再扩出 8–12 个工具。
+3. **但新增维度确实不与现有 9 个源重叠**：Data Providers（机构库画像）、Journals（期刊维度）、聚合统计（分布/facet）在现有工具集中没有对应物，属于**新查询维度**，而不是"又一个关键词检索源"。
+4. **按 QA-R013 流程必须由 project-builder-cn 复测的失败项**：outputs 检索 500、journals 检索超时、discover / recommend 500、TEI 返回 0 字节。本 agent 不得据本机单次结果把这些能力定性为"不可用"；复测脚本应写入 `_verify/`（creator 角色本轮只允许写 `project-docs/goal.md`，不代写该目录）。
+5. **一处对能力判断有影响的口径**：本附录的探测全部在"已配置真实 key"的条件下完成。官方明确"未认证用户不提供 fullText"，而现有 `core_work_search_by_query` 的归一化本来就剔除了 `fullText`，因此无 key 用户的实际能力落差比文档字面看上去更小。
+
 ## 澄清问答记录
 <!-- GOAL-QA-LOG-START -->
 
@@ -780,6 +827,36 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
 - **影响的目标文档章节**
   - 核心目标 / 范围界定 / 约束条件 / 成功标准 / 备注（许可证口径与发布状态）
 <!-- GOAL-QA-R020-END -->
+
+### QA-R021：CORE API v3 能力扩展调研——候选功能取舍、全文下载边界与验证/发布节奏
+<!-- GOAL-QA-R021-START -->
+- **提问时间**：2026-09-18 23:30
+- **提问目的**：用户要求"详细了解 CORE 官方 API 文档，还有什么功能可以加入到这个 MCP server"。本 agent 已完成**文档站 + OpenAPI 规范**双线调研，并用 `.env` 中真实 `CORE_API_KEY` 对文档列出的全部端点做了真实探测（端点清单、状态码、响应体大小、失败时的上游错误体详见上文《附录：CORE API v3 能力盘点（QA-R021 前置调研，2026-09-18）》）。调研结论是：CORE 目前只接入了 1 个工具（`core_work_search_by_query`，即 GET works 关键词检索），文档中另有约 18 项能力未接入——其中 **11 项实测可用**（works 详情 / 生命周期 / 关联 outputs / 聚合统计、POST 高级检索含 `exclude` 字段裁剪、data-providers 检索与详情统计及其下 outputs、journals 按 ISSN 查询与统计、outputs 按 ID 取详情），**4 项实测失败或形态可疑**（outputs 检索 500、journals 检索连续超时、discover 500、recommend 500、TEI 返回 0 字节），**3 项与项目既有立场直接冲突**（PDF/TEI/raw 文件下载）。因此在写入任何"核心目标/范围界定"条目之前，必须先由用户定三件事：扩展范围收到哪一档、"文件内容与下载"这条边界要不要为 CORE 破例、以及先复测再定范围还是直接按本次实测结论立项。
+- **问题列表**
+  1. **CORE 能力扩展的范围档位**——请选择一档（也可自定义组合）：
+     (a) **只做现有工具的检索质量增强，工具数量保持 1 个**：`limit` 上限由 25 提到 100、补 `offset` 分页、改用 POST `exclude:["fullText"]` 把响应体压小（实测可从 163 KB 降到 3 KB 量级）、错误文案改为按 `X-RateLimit-*` 响应头给出可执行的重试时间；
+     (b) **在 (a) 之上新增 3 个 works 维度工具**（CORE 工具 1 → 4）：按 CORE ID 取详情（`/v3/works/{id}`）、取该作品在各机构库的实例列表（`/works/{id}/outputs`）、取生命周期时间戳（`/works/{id}/stats`）；
+     (c) **在 (b) 之上再新增"聚合统计 + 机构库/期刊维度"工具**（CORE 工具约 7–9）：按年/作者/机构/类型分布统计（`/v3/search/works/aggregate`）、数据源检索与详情统计及其下 outputs（`/v3/search/data-providers`、`/v3/data-providers/{id}` 系列）、期刊按 ISSN 精确查询与统计（期刊关键词检索实测超时，故只做 ISSN/ID 精确查询）；
+     (d) 其他组合，请具体列出保留/剔除哪些（例如只要聚合统计，不要机构库与期刊维度）。
+     同时请一并表态：CORE 的这些新维度（机构库画像、期刊维度、分布统计）不与现有 9 个源重叠，是否按"新查询维度值得扩"处理；还是延续 v3.2.0–v3.4.0 的"继续收窄工具规模、降低选择噪声"方向，本轮只做 (a)。
+  2. **"文件内容 / 下载"这条边界要不要为 CORE 破例**——CORE 文档提供了 4 类"取回文件本体或原始全文"的端点（`/v3/works/{id}/download`、`/v3/works/tei/{id}`、`/v3/outputs/{id}/download|raw|history`），与本项目"只给元数据与链接、不下载二进制"的既有立场直接冲突：
+     (a) **维持既有立场**：不下载任何文件、不返回原始全文，只返回 `downloadUrl` / `sourceFulltextUrls` 链接（现有 `core.py` 已是这个口径）；
+     (b) **有限破例**：新增一个"全文/结构化全文"工具，但只返回解析后的文本、不落地二进制文件（本机实测 TEI 端点返回 0 字节，需先复测）；
+     (c) **允许下载 PDF**：新增 PDF 下载工具（官方 PDF 政策：该调用计入 token 且"更贵"，并明确禁止绕过 API 直连 `fileserver-az.core.ac.uk`，违者封 key）。
+     供决策的补充事实：官方写明**未认证用户不提供 fullText**；而 CORE 检索响应默认就内含 `fullText`（实测 `limit=2` 即 163 KB），现有工具是主动把它剔除的。
+  3. **验证节奏与目标版本号**——本次失败项（outputs 检索 500、journals 检索超时、discover/recommend 500、TEI 空响应）按 QA-R013 流程应由 project-builder-cn 编写 `_verify/core_api_probe.py` 交用户在真实环境复测后再定去留：
+     (a) **先复测再立项**：本轮先在 `goal.md` 保留调研与候选清单，等复测结果回来再决定实现范围；
+     (b) **直接按本次实测结论立项**：可用的扩、失败的排除，不再单独复测；
+     (c) **先复测失败项，同时把已实测可用的能力立即立项**（推荐，若接受请一并确认目标版本号——v3.4.0 已发布，本轮建议定为 `3.5.0`）。
+- **用户回答**
+  1. [等待用户回答]
+  2. [等待用户回答]
+  3. [等待用户回答]
+- **提炼结论**
+  - [收到回答后补充]
+- **影响的目标文档章节**
+  - [核心目标 / 期望成果 / 成功标准 / 范围界定（包含、排除）/ 约束条件]
+<!-- GOAL-QA-R021-END -->
 
 <!-- GOAL-QA-LOG-END -->
 
