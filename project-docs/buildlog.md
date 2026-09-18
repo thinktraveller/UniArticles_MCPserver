@@ -2224,3 +2224,60 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 3/3：`README_ZH.md` → `README.md`、`README.md` → `README_EN.md` 更名互换，并修正头部语言切换链接、`pyproject.toml` 注释与 `AGENTS.md` 中的文件名引用。
+
+## [2026-09-18 23:56] 步骤 3/3：两份 README 更名互换 + 全仓库文件名引用修正
+
+### 本轮背景
+用户指令："最后，将 README_ZH.md 更名为 README.md，将 README.md 更名为 README_EN.md"。即 **README.md 从此为中文版（GitHub 默认展示页），英文版退居 README_EN.md**。
+
+### 执行顺序（顺序不可颠倒）
+1. `git mv README.md README_EN.md` —— 先把英文版挪走，腾出 `README.md` 这个文件名。
+2. `git mv README_ZH.md README.md` —— 再把中文版放到主位。
+
+若先做第 2 步会覆盖掉英文版（Windows 文件系统下直接丢失），故严格按上述顺序执行。
+
+### 关于 `git mv` 与工作区未提交改动（重要）
+用户在 `README_ZH.md` 上有**未提交**的改动（+9/−26，即步骤 1 的同步来源）。`git mv` 的语义是"移动文件并更新索引"，它暂存的是**索引中的旧 blob**，不会把工作区的新内容一并暂存——因此更名后 `git status` 出现 `MM README.md`：
+
+- 已暂存部分 = 更名前最后一次提交的中文版内容；
+- 未暂存部分 = 用户的 +9/−26 改动。
+
+已额外执行 `git add README.md`，把用户的改动一并纳入本次提交。理由：本步是"更名"，而更名应当原样保留文件内容；若只提交旧 blob，则 HEAD 会出现"英文版 README_EN.md 已含同步后的改动、中文版 README.md 却仍是旧文案"的自相矛盾状态。**该改动虽由用户在工作区做出、未经用户逐字确认为单独提交，但内容即为步骤 1 的同步来源，属本任务必需。**
+
+### 改动清单
+| 文件 | 改动 |
+|---|---|
+| `README.md` | 由 `README_ZH.md` 更名而来（中文版上位，含用户未提交的改动）；第 6 行语言切换链接 `[English Version](README.md)` → `[English Version](README_EN.md)`（原名会自我指向） |
+| `README_EN.md` | 由 `README.md` 更名而来（英文版）；第 6 行 `[中文版本 (Chinese)](README_ZH.md)` → `[中文版本 (Chinese)](README.md)` |
+| `README_ZH.md` | 删除（内容已迁至 `README.md`） |
+| `pyproject.toml` | 第 12 行注释中的文件名引用 `README.md / README_ZH.md` → `README.md / README_EN.md` |
+| `AGENTS.md` | 第 9 行双许可段落中的 `README.md` / `README_ZH.md` → `README.md` / `README_EN.md`（本 agent 对 `AGENTS.md` 的改动**仅此一处文件名引用**，未触及任何指导性内容） |
+
+### 验证
+- `git status` 更名识别正常：`README_EN.md` 为新增、`README_ZH.md` 为删除，与旧 `README.md` 的 blob 一致（git 在 diff 时按内容配对为 rename）。
+- 文件身份核对：`README.md` 第 10 行为 `## 总览`、正文为中文；`README_EN.md` 第 10 行为 `## Overview`、正文为英文——两者未混淆。
+- `git grep "README_ZH\|tutorial/"`（排除 `project-docs/`、`reference-projects/`）**零命中**，全仓库用户可见文档中旧的 `README_ZH.md` 与 `tutorial/` 引用已彻底清零。
+- 正文内容未在更名过程中被改写：`README_EN.md` 的英文正文与步骤 1 提交的 `README.md` 逐行一致（仅第 6 行链接按上文修改）。
+
+### 需要用户决策的一处连带影响（未擅自改动）
+`pyproject.toml` 第 9 行 `readme = "README.md"` **保持原样**。本步之后该路径指向的是**中文版**，其后果是：**下一次构建发布时，PyPI 项目页的长描述将变成中文**（PyPI 上已发布的 3.4.0 不受影响，其元数据不可修改）。
+
+- 保持原样（当前状态）= 与"中文版为主"的整体意图一致；
+- 或改为 `readme = "README_EN.md"` = PyPI 维持英文、GitHub 展示中文。
+
+两种都可行，属发布物对外呈现的口味问题，故本 agent 未替用户决定。另注：同文件 sdist `exclude` 清单中的 `/CLAUDE.md` 条目在更早的轮次中已随该文件删除成为死配置（无害，未一并清理，避免扩大本轮改动范围）。
+
+### 越界防护说明
+执行期间检测到 `project-docs/goal.md` 出现**非本 agent 造成的改动**（内容为 CORE API 端点探测表与 6 条候选结论，属 goal 定义角色的工作）。本 agent **未读取后修改、未暂存、未提交**该文件；本步提交路径为显式列举，不含 `goal.md`。
+
+### 并发写入事件（如实记录，已恢复）
+本步执行期间，**另一个代理（goal 定义角色）在同一工作区并发操作 git**，发生过一次索引冲突，过程如 reflog 所载：
+
+1. 本 agent 执行 `git mv` 后，更名处于**已暂存、未提交**状态；
+2. 该代理执行 `git add project-docs/goal.md` + `git commit`，因 `git commit` 提交整个索引，**把本 agent 暂存中的更名一并卷入**其提交 `92d0e3d`；
+3. 该代理随后执行 `git reset --mixed HEAD~1` 撤销该提交（reflog：`92d0e3d → 9f040b1`），索引回退到更名之前的状态，**工作区未被触碰**，本 agent 的更名文件与全部文本改动均完好保留；
+4. 该代理改为只提交 goal.md，产生新提交 `fd5da87`（现为 HEAD）。
+
+**影响与处置**：本 agent 的步骤 1/2 提交（`99046ba`、`9f040b1`）全程未受影响；更名在索引中的暂存记录丢失，已在工作区核对无误后重新暂存并提交，最终结果与既有步骤 3 计划完全一致。
+
+**经验记录**：`git commit`（不带 pathspec）会提交整个索引，多代理共享同一工作区时，任何一方暂存但未提交的内容都可能被他方提交卷入 —— 本次即为实例。后续在本仓库并行运行多个角色代理时，建议各代理提交前先 `git diff --cached --name-only` 确认索引归属，或避免同时暂存。
