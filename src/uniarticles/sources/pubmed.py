@@ -343,7 +343,14 @@ def register(server: FastMCP) -> None:
     async def pubmed_paper_search_by_query(query: str, max_results: int = 10) -> dict:
         """Search PubMed by keyword via NCBI Entrez (ESearch to get PMIDs, then
         EFetch to retrieve and parse the article XML). Returns normalized records
-        (title, abstract, authors, journal, doi, pmid, pmcid, keywords, date)."""
+        (title, abstract, authors, journal, doi, pmid, pmcid, keywords, date).
+
+        ``query`` is passed to NCBI verbatim, so PubMed field tags and MeSH
+        terms work. To pin down one known paper, use the title tag WITHOUT
+        quotes, e.g. ``Genome engineering using the CRISPR-Cas9 system[Title]``
+        — wrapping the title in quotes together with the tag
+        (``"..."[Title]``) makes NCBI return 0 results.
+        """
         normalized_query = query.strip()
         if not normalized_query:
             return _err(query=query, message="query must not be empty")

@@ -95,7 +95,14 @@ def _get_paper_details(paper_id: str) -> dict:
 def register(server: FastMCP) -> None:
     @server.tool()
     async def arxiv_paper_search_by_query(query: str, max_results: int = 10) -> dict:
-        """Search for papers in ArXiv using a query string."""
+        """Search for papers in ArXiv using a query string.
+
+        ``query`` is passed to arXiv verbatim, so arXiv's field prefixes work —
+        use them to pin down one known paper, e.g.
+        ``ti:"Attention Is All You Need"``, ``au:Vaswani``,
+        ``abs:transformer``, ``cat:cs.LG``. A bare title string is a loose
+        full-text query and will not reliably return the paper itself.
+        """
         normalized_query = query.strip()
         bounded = max(1, min(max_results, 25))
         if not normalized_query:
