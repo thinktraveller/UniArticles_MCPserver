@@ -209,7 +209,7 @@ python -m uniarticles      # 使用 pip 安装时
 | `arxiv_latest_paper_list_by_category` | `category`（必填，如 `cs.AI`；多个用逗号分隔如 `cs.AI,cs.LG`）、`max_results`=10 | 列出指定 arXiv 分类下最新提交的论文。 |
 | `arxiv_paper_detail_by_id` | `paper_id` | 按 ID 获取指定 arXiv 论文的元数据。 |
 
-可用性提示：上游主机 `export.arxiv.org` 可能偶发卡住。在 2026-09-18 的全量回归中，`arxiv_paper_detail_by_id` 与 `arxiv_latest_paper_list_by_category` 均挂起约 5 分钟后以连接超时失败，而同一时刻、同一主机上的 `arxiv_paper_search_by_query` 在 1.4 秒内正常返回；约 15 分钟后故障自行恢复，三个工具全部正常。由于 `arxiv.py` 使用 `arxiv.Client()` 的默认重试策略且**未设置显式超时**，上游卡住时工具调用会先长时间挂起再报错，而不是快速失败。若遇到该现象，可运行 `_verify/arxiv_connectivity_test.py` 做 DNS→TCP→TLS→HTTP 分层诊断，以区分上游卡顿与本机网络问题。
+可用性提示：上游主机 `export.arxiv.org` 可能偶发卡住。在 2026-09-18 的全量回归中，`arxiv_paper_detail_by_id` 与 `arxiv_latest_paper_list_by_category` 均挂起约 5 分钟后以连接超时失败，而同一时刻、同一主机上的 `arxiv_paper_search_by_query` 在 1.4 秒内正常返回；约 15 分钟后故障自行恢复，三个工具全部正常。那次挂起原本是无上限的：`arxiv.Client` 根本不暴露任何超时参数，只有 `page_size` / `delay_seconds` / `num_retries`。自 v3.4.0 起，客户端改为**单次请求 15 秒超时 + 整体 45 秒兜底**，因此上游卡住时会快速失败并给出同时标明两个上限的可操作错误，而不是长时间挂起。`_verify/arxiv_timeout_check.py` 通过把客户端指向一个"只接受连接、从不响应"的本机监听来离线复现该行为；若真的遇到超时，可运行 `_verify/arxiv_connectivity_test.py` 做 DNS→TCP→TLS→HTTP 分层诊断，以区分上游卡顿与本机网络问题。
 
 ### PubMed（NCBI Entrez）
 
