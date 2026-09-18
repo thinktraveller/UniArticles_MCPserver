@@ -852,14 +852,34 @@ UniArticles（亿文通）是一个基于 Python + FastMCP 的学术文献检索
      (a) **先复测再立项**：本轮先在 `goal.md` 保留调研与候选清单，等复测结果回来再决定实现范围；
      (b) **直接按本次实测结论立项**：可用的扩、失败的排除，不再单独复测；
      (c) **先复测失败项，同时把已实测可用的能力立即立项**（推荐，若接受请一并确认目标版本号——v3.4.0 已发布，本轮建议定为 `3.5.0`）。
-- **用户回答**
-  1. [等待用户回答]
-  2. [等待用户回答]
-  3. [等待用户回答]
+- **用户回答**（2026-09-19 00:04）
+  1. **C** —— 采纳 (c) 档：在 (a) 现有工具检索质量增强、(b) works 维度 3 项之上，再新增"聚合统计 + 机构库维度"工具；CORE 工具数由 1 个扩至约 6–8 个。期刊维度按调研证据不纳入。
+  2. **不破例，不加入相关功能** —— 采纳 (a) 维持既有立场：不新增任何"全文 / 结构化全文 / 文件下载"类工具。`/v3/works/{id}/download`、`/v3/works/tei/{id}`、`/v3/outputs/{id}/download|raw|history` 全部不接入；(b)"有限破例"与 (c)"允许下载 PDF"两档均未采纳。
+  3. **a** —— 先复测再立项：本轮只在 `goal.md` 保留调研与候选清单，等复测结果回来再决定实现范围，不预先锁定目标版本号。
 - **提炼结论**
-  - [收到回答后补充]
+  - **档位方向已定为 (c) 档，但实现范围与目标版本号不在本轮锁定**：第 1 问与第 3 问并不冲突——第 1 问定的是"扩到哪一档"（C），第 3 问定的是"何时把范围写死"（复测之后）。据此本 agent 本轮**不向《核心目标》《期望成果》《成功标准》《范围界定》写入任何新的范围条目**，只登记候选清单与复测裁决项；待复测结果回来后由本 agent 补写范围条目，再交 `project-planner-cn` 制定构建计划书。
+  - **(c) 档中不含任何破例项，下载 / 全文是硬边界**：CORE 作为全项目第 9 个数据源，不因其官方文档能力更宽而改变"只给元数据与链接、不返回文件内容、不下载二进制"的既有口径。该边界与 (a) 档"改用 POST `exclude:["fullText"]` 把响应体压小"并不矛盾——前者禁止**取回**文件/原始全文，后者只是不再**下载**一个本来就要被 `_normalize()` 丢弃的字段；未认证用户本就不提供 `fullText`，因此该边界不产生能力落差。
+  - **(c) 档候选工具清单**（依据 2026-09-18 真实探测，除注明"待复测"者外**均已实测 200 可用**；工具名为本 agent 按既定 `<source>_<object>_<action>_by_<axis>` 风格的建议名，最终命名由 `project-planner-cn` 确认）：
+    1. **现有工具增强（非新增）** `core_work_search_by_query`：`limit` 上限由 25 提到 100、补 `offset` 分页、改用 `POST /v3/search/works` + `exclude:["fullText"]`、429 错误文案改按 `X-RateLimit-Retry-After` 响应头给出可执行重试时间。**实测收益**：`max_results=25` 时响应体 676,692 B / 4.8 s → 112,549 B / 2.8 s；
+    2. `core_work_detail_by_identifier`（暂定名）：`GET /v3/works/{identifier}`，**须同时接受裸 DOI 与数字 CORE ID**（实测裸 DOI 通、`doi:` 前缀写法 404、仅收数字 ID 对 LLM 调用方几乎不可用）；已知边界：未知 DOI 的 404 响应体是空 message，工具层需兜底文案；
+    3. `core_work_outputs_by_id`（暂定名）：`GET /v3/works/{id}/outputs`，返回该作品在各机构库的版本实例（含 `downloadUrl`/`license`/`fulltextStatus`/`dataProvider`）；**只接受数字 CORE ID**（用 DOI 会 404）；
+    4. `core_work_stats_by_id`（暂定名）：`GET /v3/works/{id}/stats`，生命周期时间戳（deposited / published / updated / accepted）；DOI 亦可；
+    5. `core_work_aggregate_by_query`（暂定名）：`POST /v3/search/works/aggregate`，按年 / 作者 / 机构 / 类型 / 期刊 / 语言 / 出版社分布统计；这是当前工具集中**完全没有的 facet / 分布维度**；
+    6. `core_data_provider_search_by_query`（暂定名）：`GET /v3/search/data-providers`；
+    7. `core_data_provider_detail_by_id`（暂定名，可含 `/stats` 与其下 `/outputs`）：`GET /v3/data-providers/{id}`；"works → 机构库画像"链路已端到端实测通过（`/v3/works/171513974` 的 `dataProviders[]` → `/v3/data-providers/1630` 200）；
+    8. `core_output_detail_by_id`（暂定名）：`GET /v3/outputs/{id}`，未去重的原始采集记录（`license`/`sdg`/`repositories`/`fulltextStatus` 等）；实测 200 可用，**无条件纳入**；
+    9. （**待复测裁决**）`core_output_search_by_query`：`GET /v3/search/outputs`，creator 环境两次 500、/root 环境四种组合 4/4 全 200，按 QA-R013 不得定性为失败。**这是唯一可能改变 (c) 档工具清单的待复测项**：若复测稳定可用则纳入（候选清单第 9 项），若仍不稳定则 (c) 档按"不含 outputs 关键词检索"成立。
+  - **按 QA-R013 需复测的 5 类项目及其对本轮范围的实际影响**（复测脚本应由 `project-builder-cn` 写入 `_verify/` 并交用户在真实网络环境执行；本 agent 按角色边界不代写该目录）：
+    - **outputs 关键词检索**（`GET /v3/search/outputs`）：creator 环境 500、/root 环境 4/4 全 200 → **有影响**，决定候选清单第 9 项去留；
+    - **discover**（`POST /v3/discover`）：500，下游 `oadiscovery` 返回 404 → 无影响，不在 (c) 档内（语义是"按 DOI 找全文链接"，且已被第 2 问的"不加入相关功能"覆盖）；
+    - **recommend**（`POST /v3/recommend`）：500，下游 recommender 服务 500 → 无影响，不在 (c) 档内；
+    - **works TEI**（`/v3/works/tei/{id}`）：200 但响应体 0 字节 → 无影响，已被第 2 问的硬边界排除；
+    - **journals 关键词检索**（`GET /v3/search/journals`）：连续三次超时（45 / 60 / 95 秒均未返回）→ 无影响，期刊维度已确认排除（`/v3/journals/issn:{issn}` 为回显式空壳，无刊名 / 出版商 / OA 状态）。
+  - **顺带更正项（属修既有缺陷，实现阶段一并处理）**：`src/uniarticles/sources/core.py` 的注释与 429 错误文案、以及 `AGENTS.md` 中"无 key 约 5 次请求后约 10 分钟锁死"的表述，与 CORE 官方现行 token 制口径不符（未认证 100 tokens/天、10 次/分钟且**不提供 fullText**；注册个人 1,000 tokens/天、25 次/分钟；实测响应头为 `x-ratelimit-limit: 150` / `x-ratelimit-remaining` / `x-ratelimit-retry-after`，后者是 **ISO 时间戳**而非秒数），应改为按响应头给出可执行的重试时间。另：官方文档入口 `https://api.core.ac.uk/docs` 实测 404，正确入口是 `https://api.core.ac.uk/docs/v3`，机器可读规范在 `https://api.core.ac.uk/swagger/v3.json`——仓库内若有引用需一并更正。
+  - **遗留待用户确认事项（不阻塞复测）**：`.env` 中 `CORE_API_KEY` 的注释称该 key 30 天有效、2026-09-04 到期，但 2026-09-18 实测多端点仍全部 200。由于 (c) 档的全部新工具都依赖这把 key，建议用户确认其真实有效期，以免工具落地后即失效。
 - **影响的目标文档章节**
-  - [核心目标 / 期望成果 / 成功标准 / 范围界定（包含、排除）/ 约束条件]
+  - 本轮**暂不改动**《核心目标 / 期望成果 / 成功标准 / 范围界定》——按第 3 问选择的 (a) 档"先复测再立项"，这些章节的范围条目待复测结果回来后由本 agent 补写
+  - 复测结果回来后预计影响的章节：范围界定（包含）新增 CORE (c) 档工具清单、范围界定（排除）新增 CORE 下载/全文类端点与期刊维度、成功标准新增 CORE 工具数与验证条目、约束条件新增"下载/全文硬边界"与 CORE 限流口径更正
 <!-- GOAL-QA-R021-END -->
 
 <!-- GOAL-QA-LOG-END -->
