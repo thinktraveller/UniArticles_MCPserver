@@ -19,13 +19,13 @@
   - **ScienceDirect**: 全文文章检索、文章对象（配图/表格/补充材料）元信息获取。
   - **ArXiv**: 论文搜索、最新论文列表、按 ID 读取论文元数据。
   - **PubMed（NCBI Entrez）**: 关键词检索、批量摘要查询、相关文献发现、PMC 全文/引用关联——直连 NCBI E-utilities（不再依赖第三方封装包）。
-  - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
+  - **通用学术检索（v3.0.0）**: Crossref、Europe PMC、DOAJ、OpenAIRE、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
 ## 当前支持的文献数据源
 
-亿文通将以下 **10 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构，且全部默认启用，共提供 **23 个工具**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
+亿文通将以下 **9 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构，且全部默认启用，共提供 **21 个工具**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
 
 | 数据源 | 覆盖范围 | 接入方式 | API Key |
 |---|---|---|---|
@@ -33,7 +33,6 @@
 | **ScienceDirect** | Elsevier 的同行评审期刊与图书全文平台。 | Elsevier REST API（`api.elsevier.com`），经 `httpx` 直连 | **必需** —— `ELSEVIER_API_KEY` |
 | **arXiv** | 物理、数学、计算机科学、定量生物、经济学等领域的开放预印本。 | 官方 [`arxiv`](https://pypi.org/project/arxiv/) Python 包封装 | 无需 |
 | **PubMed** | 美国国立医学图书馆（NCBI）收录的生物医学与生命科学文献。 | NCBI Entrez E-utilities REST API（`eutils.ncbi.nlm.nih.gov`），经 `httpx` 直连 | 可选 —— `NCBI_API_KEY`（仅提升限速） |
-| **OpenAlex** | 开放、跨学科的学术成果/作者/期刊目录。 | OpenAlex REST API（`api.openalex.org`），经 `httpx` 直连 | 无需 |
 | **Crossref** | 覆盖所有学科的 DOI 注册元数据。 | Crossref REST API（`api.crossref.org`），经 `httpx` 直连 | 无需 |
 | **Europe PMC** | EBI 的生命科学文献聚合库（区别于 NCBI PubMed），含 PMC 全文。 | Europe PMC REST API（`ebi.ac.uk/europepmc`），经 `httpx` 直连 | 无需 |
 | **DOAJ** | 开放获取期刊目录（Directory of Open Access Journals）中的同行评审文章。 | DOAJ REST API（`doaj.org/api`），经 `httpx` 直连 | 无需 |
@@ -46,7 +45,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前共注册 **23 个工具**、覆盖 10 个数据源；非 Elsevier 数据源均不需要此 Key。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前共注册 **21 个工具**、覆盖 9 个数据源；非 Elsevier 数据源均不需要此 Key。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -182,7 +181,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 ## 可用工具列表
 
-以下工具按数据源分组，每个数据源一张表格。**共注册 23 个工具**，只要对应数据源的 Key（如有要求）已配置即可全部使用。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
+以下工具按数据源分组，每个数据源一张表格。**共注册 21 个工具**，只要对应数据源的 Key（如有要求）已配置即可全部使用。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
 
 ### Scopus
 
@@ -221,13 +220,6 @@ python -m uniarticles      # 使用 pip 安装时
 | `pubmed_related_article_search_by_pmid` | `pmid`、`max_results`=10 | 查询与某 PMID 主题相关的 PubMed 文献（ELink“相似文献”），返回相关 PMID 列表（已剔除该 PMID 自身）。 |
 | `pubmed_pmc_linkage_lookup_by_pmid` | `pmid` | 查询某 PMID 的 PubMed Central 关联——`own_pmc_fulltext`（其自身的开放获取 PMC 记录，若有）与 `cited_by_pmc_articles`（引用它的 PMC 文章），两组明确区分。 |
 
-### OpenAlex
-
-| 工具名 | 参数 | 说明 |
-|---|---|---|
-| `openalex_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。**已知风险**：该端点会偶发 HTTP 429（上游在搜索集群高负载时限流匿名检索，响应含 `retry-after`），等待约 30 秒重试通常即可成功；同一时刻按 DOI 查询的 `openalex_work_detail_by_doi` 不受影响。 |
-| `openalex_work_detail_by_doi` | `doi` | 按 DOI 查询单篇文献。无需 Key。 |
-
 ### Crossref
 
 | 工具名 | 参数 | 说明 |
@@ -263,7 +255,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 下面这段提示词把一句模糊的需求变成可复现的多源检索。把它粘贴到任意已接入 UniArticles 的 MCP 客户端，然后替换最后一行的需求描述即可。其中关于「查询写法」的规则均经过真实接口验证，探测结果见 `project-docs/buildlog.md`。
 
-同一日（2026-09-18）对当前注册的全部 **23 个工具**做了逐一真实调用验证，**23/23 成功**；当时唯一的可用性风险点是 OpenAlex 检索端点的 429，已写入下方第 3 步与上方数据源小节。
+2026-09-18 曾对当时注册的全部工具做过一轮逐一真实调用。当日唯一持续失败的就是 OpenAlex（其检索端点被上游的匿名流量限流，返回 HTTP 429）；该数据源已在 v3.4.0 中移除，随后对剩余的源集合重跑同一轮验证：**21 个工具，21/21 全部成功**。
 
 ```text
 你是一名文献检索助手，已接入 UniArticles 的 MCP 工具。
@@ -297,18 +289,15 @@ python -m uniarticles      # 使用 pip 安装时
 第三步 —— 在剩下的数据源中按以下顺序检索，并遵循对应的查询写法。
 1. Scopus —— 定位已知文献用 TITLE("完整标题")；主题检索用
    TITLE-ABS-KEY(词 AND 词)；count 取 5–10。
-2. OpenAlex —— 普通关键词检索（该源不支持字段语法）。若返回 HTTP 429，
-   等约 30 秒后重试一次：搜索集群在高负载时会限流匿名检索，
-   但它的 DOI 详情接口仍可用。
-3. Crossref —— 普通关键词检索；同时用它核对每篇文献的 DOI。
-4. PubMed（仅生物医学）—— 定位已知文献用  完整标题[Title]，且不要加引号，
+2. Crossref —— 普通关键词检索；同时用它核对每篇文献的 DOI。
+3. PubMed（仅生物医学）—— 定位已知文献用  完整标题[Title]，且不要加引号，
    加了引号反而返回 0 条。不要直接传一长句自然语言：诸如 "in" 这类停用词
    会让整条查询归零。多个词组之间请显式使用 AND。
-5. Europe PMC —— 字段语法与 PubMed 一致，例如 TITLE:"完整标题"。
-6. arXiv（仅限预印本学科）—— 定位已知文献用 ti:"完整标题"；主题检索用 all:词。
-7. DOAJ、CORE、OpenAIRE —— 仅开放获取。DOAJ 的相关度排序偏弱，
+4. Europe PMC —— 字段语法与 PubMed 一致，例如 TITLE:"完整标题"。
+5. arXiv（仅限预印本学科）—— 定位已知文献用 ti:"完整标题"；主题检索用 all:词。
+6. DOAJ、CORE、OpenAIRE —— 仅开放获取。DOAJ 的相关度排序偏弱，
    用标题式查询会返回明显离题的结果，因此每一条都必须先核对标题再写进结果。
-8. ScienceDirect —— 只能按标识符查询（DOI/PII），它没有检索工具，不要试图检索。
+7. ScienceDirect —— 只能按标识符查询（DOI/PII），它没有检索工具，不要试图检索。
 每个源取 5–10 条。同一主题在多个源各查一遍是预期用法，而不是「失败后降级」。
 任何源报错就跳过，并记录下来。
 

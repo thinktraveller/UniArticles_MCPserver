@@ -1736,3 +1736,34 @@ v3.3.0 交付后复核发现：三处排序修复改了行为，但**决定性�
 - 步骤 65：整体终验 + 完成标记。
 
 ---
+
+## [2026-09-18 19:35] v3.4.0（续）：移除 OpenAlex 数据源 —— 步骤 62：README ×2 同步 + 全工具可用性复测
+
+### 执行的任务
+- `_verify/tool_availability_check.py`：删除 4 处 OpenAlex 相关内容——文档字符串计数（23→21）、`keyword_tools` 矩阵条目、Phase 1 检索清单条目、Phase 2 的 `openalex_work_detail_by_doi` 调用。同时删除 `openalex_doi` 变量（其值来自 OpenAlex 搜索结果，是上一轮"DOI 为空"连锁失败的根源），DOI 详情查询改由 `crossref_doi` 承担。
+- 运行该脚本完成一轮**真实网络调用**验证（21 个工具各 1 次）。
+- `README.md` / `README_ZH.md` 同步：特性列表 bullet、数据源对比表（删 OpenAlex 行）、`### OpenAlex` 工具小节（含 2 个工具行与 429 风险说明）、4 处计数、可用性实测结论段、推荐提示词第 3 步（删 OpenAlex 条目并把后续 3~8 重新编号为 2~7）。
+
+### 关键变更
+| 文件 | 改动 |
+|---|---|
+| `_verify/tool_availability_check.py` | 删 4 处 OpenAlex 引用 + 1 个连锁变量 |
+| `README.md` | 计数 10 源/23 工具 → **9 源/21 工具**；删 `### OpenAlex` 小节与表格行；重写可用性结论段；提示词清单去 OpenAlex 并重排编号 |
+| `README_ZH.md` | 同上（中文对应位置） |
+
+### 验证（真实调用，非模拟）
+`.venv\Scripts\python.exe _verify\tool_availability_check.py` 实测输出：
+- `registered tools: 21`
+- Phase 1（8 个关键词源）全部 OK；Phase 2（13 个标识符/浏览类工具）全部 OK
+- 汇总行：**`called 21 tools, 21 ok, 0 failed`**
+- 说明：上一轮 v3.4.0 记录中 `openalex_work_detail_by_doi` 的"doi must not be empty"确系验证脚本连锁失败（其 DOI 取自已 429 的 OpenAlex 搜索），移除该依赖后本次无此类假失败。
+- 静态检查：`rg -i openalex README.md README_ZH.md` 仅剩 2 处（两份 README 各 1 处）**有意保留的历史说明**（"该数据源已在 v3.4.0 中移除"）；`23 tools`/`23 个工具`/`10 data sources`/`10 个数据源`/`23/23` 在 README 中已归零。
+
+### 遇到的问题及解决方案
+- 无（本轮改动为既定范围，实测一次通过）。
+
+### 下一步计划
+- 步骤 63：`AGENTS.md` 同步（项目概述源清单与工具计数、数据源范围表 OpenAlex 行、版本沿革句补 v3.4.0 第二轮排源）。
+- 步骤 64：整体终验（工具枚举 + 端到端抽查 + stdout 洁净性）与完成标记。
+
+---

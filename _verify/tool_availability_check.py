@@ -5,7 +5,7 @@ APIs, because the question being answered is "is this tool usable right now"
 rather than "is the code self-consistent".
 
 Two modes:
-  default     — call all 23 tools once, print an OK/FAIL table.
+  default     — call all 21 tools once, print an OK/FAIL table.
   --matrix    — additionally probe domain coverage: run a humanities, a
                 biomedical, and a Chinese-language query against every keyword
                 source, to ground the "which source certainly won't match"
@@ -100,7 +100,6 @@ async def run_matrix(server, tools) -> None:
         ("scopus", "scopus_document_search_by_query", "count"),
         ("arxiv", "arxiv_paper_search_by_query", "max_results"),
         ("pubmed", "pubmed_paper_search_by_query", "max_results"),
-        ("openalex", "openalex_work_search_by_query", "max_results"),
         ("crossref", "crossref_work_search_by_query", "max_results"),
         ("europepmc", "europepmc_paper_search_by_query", "max_results"),
         ("doaj", "doaj_article_search_by_query", "max_results"),
@@ -141,7 +140,6 @@ async def main() -> int:
         ("scopus_document_search_by_query", {"query": GENERAL_QUERY, "count": 3}),
         ("arxiv_paper_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
         ("pubmed_paper_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
-        ("openalex_work_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
         ("crossref_work_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
         ("europepmc_paper_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
         ("doaj_article_search_by_query", {"query": GENERAL_QUERY, "max_results": 3}),
@@ -183,7 +181,6 @@ async def main() -> int:
     print("-" * 132)
 
     crossref_doi = per_source_doi.get("crossref_work_search_by_query", "")
-    openalex_doi = per_source_doi.get("openalex_work_search_by_query", "")
     elsevier_doi = elsevier_dois[0] if elsevier_dois else ""
     print(f"elsevier-ish DOIs seen in scopus results: {elsevier_dois[:3]}")
 
@@ -200,7 +197,6 @@ async def main() -> int:
         ("pubmed_paper_summary_lookup_by_pmids", {"pmids": ["32634418"]}),
         ("pubmed_related_article_search_by_pmid", {"pmid": "32634418", "max_results": 3}),
         ("pubmed_pmc_linkage_lookup_by_pmid", {"pmid": "32634418"}),
-        ("openalex_work_detail_by_doi", {"doi": openalex_doi}),
         ("crossref_work_detail_by_doi", {"doi": crossref_doi}),
     ]
 

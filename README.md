@@ -19,13 +19,13 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
   - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
   - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
   - **PubMed (NCBI Entrez)**: Keyword search, batch summary lookup, related-article discovery, and PMC full-text/citation linkage — direct NCBI E-utilities calls (no third-party wrapper).
-  - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, OpenAIRE, and CORE keyword/DOI lookup across open scholarly catalogs.
+  - **General academic search (v3.0.0)**: Crossref, Europe PMC, DOAJ, OpenAIRE, and CORE keyword/DOI lookup across open scholarly catalogs.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
 ## Supported Data Sources
 
-UniArticles unifies the following **10 data sources** behind one consistent MCP interface, all returning the same normalized JSON shape and all active by default, providing **23 tools**. Every source except arXiv is a direct call to the provider's official REST API (via `httpx`); arXiv is wrapped through the official `arxiv` Python package.
+UniArticles unifies the following **9 data sources** behind one consistent MCP interface, all returning the same normalized JSON shape and all active by default, providing **21 tools**. Every source except arXiv is a direct call to the provider's official REST API (via `httpx`); arXiv is wrapped through the official `arxiv` Python package.
 
 | Data Source | Coverage | Access Method | API Key |
 |---|---|---|---|
@@ -33,7 +33,6 @@ UniArticles unifies the following **10 data sources** behind one consistent MCP 
 | **ScienceDirect** | Elsevier's full-text platform for peer-reviewed journals and books. | Elsevier REST API (`api.elsevier.com`) via `httpx` | **Required** — `ELSEVIER_API_KEY` |
 | **arXiv** | Open-access preprints in physics, mathematics, computer science, quantitative biology, economics, and more. | Official [`arxiv`](https://pypi.org/project/arxiv/) Python package | Not needed |
 | **PubMed** | Biomedical and life-sciences literature indexed by the US National Library of Medicine (NCBI). | NCBI Entrez E-utilities REST API (`eutils.ncbi.nlm.nih.gov`) via `httpx` | Optional — `NCBI_API_KEY` (raises rate limit only) |
-| **OpenAlex** | Open, cross-disciplinary catalog of scholarly works, authors, and venues. | OpenAlex REST API (`api.openalex.org`) via `httpx` | Not needed |
 | **Crossref** | DOI registration metadata across all disciplines. | Crossref REST API (`api.crossref.org`) via `httpx` | Not needed |
 | **Europe PMC** | EBI's life-sciences literature aggregator (distinct from NCBI PubMed), including PMC full text. | Europe PMC REST API (`ebi.ac.uk/europepmc`) via `httpx` | Not needed |
 | **DOAJ** | Directory of Open Access Journals — peer-reviewed open-access articles. | DOAJ REST API (`doaj.org/api`) via `httpx` | Not needed |
@@ -46,7 +45,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **23 tools total** covering 10 data sources; the newer non-Elsevier sources do not require this key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **21 tools total** covering 9 data sources; the newer non-Elsevier sources do not require this key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -184,7 +183,7 @@ If the process starts without import or configuration errors, the installation i
 
 ## Available Tools
 
-The tools are grouped below by data source, one table per source. **23 tools are registered in total**, and every one of them is available as long as its source's key (when required) is configured. Every tool returns the same normalized JSON shape (`ok`, `source`, `query`, `count`, `items`, `error`).
+The tools are grouped below by data source, one table per source. **21 tools are registered in total**, and every one of them is available as long as its source's key (when required) is configured. Every tool returns the same normalized JSON shape (`ok`, `source`, `query`, `count`, `items`, `error`).
 
 ### Scopus
 
@@ -223,13 +222,6 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 | `pubmed_related_article_search_by_pmid` | `pmid`, `max_results`=10 | Find PubMed articles topically related to a PMID (ELink "Similar articles"). Returns related PMIDs (source PMID excluded). |
 | `pubmed_pmc_linkage_lookup_by_pmid` | `pmid` | Look up a PMID's PubMed Central linkages — `own_pmc_fulltext` (its own open-access PMC record, if any) and `cited_by_pmc_articles` (PMC articles citing it), kept as two distinct groups. |
 
-### OpenAlex
-
-| Tool | Parameters | Description |
-|---|---|---|
-| `openalex_work_search_by_query` | `query`, `max_results`=10 | Search works by keyword (abstract reconstructed to readable text). No key needed. **Known risk**: this endpoint intermittently returns HTTP 429 (the upstream rate-limits anonymous search while its search cluster is under load; the response carries `retry-after`). Retrying after ~30s usually succeeds, and the DOI lookup `openalex_work_detail_by_doi` keeps working during those windows. |
-| `openalex_work_detail_by_doi` | `doi` | Look up a single work by DOI. No key needed. |
-
 ### Crossref
 
 | Tool | Parameters | Description |
@@ -265,7 +257,7 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 
 The prompt below turns a vague request into a reproducible multi-source search. Paste it into any MCP client with UniArticles connected, then replace the last line with your own request. Its query-shape rules were verified against the live APIs — the probe results are in `project-docs/buildlog.md`.
 
-The same day (2026-09-18) every one of the currently registered **23 tools** was invoked once against the live APIs: **23/23 succeeded**. The only availability risk observed was the OpenAlex search endpoint returning 429, documented in step 3 below and in the data-source section above.
+On 2026-09-18 a sweep invoked every registered tool once against the live APIs. OpenAlex (the one source that kept failing that day — its search endpoint returned HTTP 429 under the upstream's anonymous-traffic rate limiting) has since been removed in v3.4.0, and the sweep was then repeated against the remaining source set: **21 tools, 21/21 succeeded**.
 
 ```text
 You are my literature-search assistant. UniArticles MCP tools are connected.
@@ -305,21 +297,18 @@ Always keep at least two sources.
 STEP 3 — Search the remaining sources in this order, using these query shapes.
 1. Scopus — for a known paper use TITLE("exact title"); for a topic use
    TITLE-ABS-KEY(term AND term); count 5-10.
-2. OpenAlex — plain keyword search (no field syntax available). If it returns
-   HTTP 429, wait ~30 seconds and retry once; the search cluster rate-limits
-   anonymous traffic under load while its DOI lookup keeps working.
-3. Crossref — plain keyword search; also use it to confirm each DOI.
-4. PubMed (biomedical only) — for a known paper use  Exact paper title[Title]
+2. Crossref — plain keyword search; also use it to confirm each DOI.
+3. PubMed (biomedical only) — for a known paper use  Exact paper title[Title]
    and do NOT wrap it in quotes: the quoted form returns 0 results. Never pass
    a long natural-language sentence; stopwords such as "in" can zero the whole
    query. Put explicit AND between term groups.
-5. Europe PMC — same field syntax as PubMed, e.g. TITLE:"exact title".
-6. arXiv (preprint domains only) — ti:"exact title" for a known paper,
+4. Europe PMC — same field syntax as PubMed, e.g. TITLE:"exact title".
+5. arXiv (preprint domains only) — ti:"exact title" for a known paper,
    all:term for a topic.
-7. DOAJ, CORE, OpenAIRE — open-access only. DOAJ's relevance ranking is weak
+6. DOAJ, CORE, OpenAIRE — open-access only. DOAJ's relevance ranking is weak
    and returns off-topic hits for title-like queries, so verify every title
    before reporting it.
-8. ScienceDirect — identifier lookup only (DOI/PII). It has NO search tool, so
+7. ScienceDirect — identifier lookup only (DOI/PII). It has NO search tool, so
    never try to search it.
 Use 5-10 results per source. Running the same topic against several sources is
 the expected pattern, not a fallback chain. Skip any source that errors and
