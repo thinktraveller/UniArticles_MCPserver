@@ -232,7 +232,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 | 工具名 | 参数 | 说明 |
 |---|---|---|
-| `openalex_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。 |
+| `openalex_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索文献（摘要已从倒排索引重建为可读文本）。无需 Key。**已知风险**：该端点会偶发 HTTP 429（上游在搜索集群高负载时限流匿名检索，响应含 `retry-after`），等待约 30 秒重试通常即可成功；同一时刻按 DOI 查询的 `openalex_work_detail_by_doi` 不受影响。 |
 | `openalex_work_detail_by_doi` | `doi` | 按 DOI 查询单篇文献。无需 Key。 |
 
 ### Crossref
@@ -279,6 +279,8 @@ python -m uniarticles      # 使用 pip 安装时
 
 下面这段提示词把一句模糊的需求变成可复现的多源检索。把它粘贴到任意已接入 UniArticles 的 MCP 客户端，然后替换最后一行的需求描述即可。其中关于「查询写法」的规则均经过真实接口验证，探测结果见 `project-docs/buildlog.md`。
 
+同一日（2026-09-18）对当前注册的全部 **23 个工具**做了逐一真实调用验证，**23/23 成功**（该次运行未配置 `SEMANTIC_SCHOLAR_API_KEY`，其 2 个工具按设计未注册）；当时唯一的可用性风险点是 OpenAlex 检索端点的 429，已写入下方第 3 步与上方数据源小节。
+
 ```text
 你是一名文献检索助手，已接入 UniArticles 的 MCP 工具。
 请严格按以下四步依次执行，不要跳步。
@@ -290,15 +292,20 @@ python -m uniarticles      # 使用 pip 安装时
 
 第二步 —— 判断哪些数据源「一定不匹配」，并明确告诉我。
 按以下规则直接跳过，不要调用这些源：
-- 主题仅属生物医学/生命科学 —— 排除 arXiv、DOAJ、CORE、OpenAIRE。
+- 主题仅属生物医学/生命科学 —— 排除 arXiv（学科不对口）。注意 DOAJ、CORE、
+  OpenAIRE 是全学科的开放获取聚合源，生物医学一样覆盖，不要按学科排除它们；
+  它们是否该排除只取决于下一条。
 - 主题属物理、数学、计算机、统计、定量生物学、经济学 —— arXiv 可用；
-  其他任何学科 —— 排除 arXiv（它只有预印本，没有期刊覆盖）。
+  其他学科（人文社科、临床医学等）—— 排除 arXiv（它只有预印本，没有期刊覆盖）。
 - 我要找同行评审 / 主流期刊 / 非开放获取的文献 —— 排除 DOAJ、CORE、OpenAIRE
   （三者只收开放获取内容，会把结果集带偏）。
 - 我要全文或 PDF —— UniArticles 的任何工具都不返回全文或二进制文件。
   请先说明这一点，然后只把各源用作「元数据 + 链接」。
-- 我要非英文（如中文）文献 —— 这些源都不收录 CNKI 与万方，只有 Crossref
-  偶尔返回中文语种记录。请直接说明这个盲区，不要假装有覆盖。
+- 我要非英文（如中文）文献 —— 本服务器不收录 CNKI / 万方 / 维普，没有任何中文
+  数据库源。实测「深度学习」这类中文查询：Crossref、DOAJ、CORE 能返回中文题录，
+  Europe PMC 返回中文期刊的英译题录（标题带方括号），Scopus 命中不稳定（同一查询
+  0~1 条），PubMed 与 arXiv 为 0 条。请如实说明覆盖率远低于中文数据库，不要声称
+  可以替代 CNKI/万方。
 - Scopus、ScienceDirect、Semantic Scholar —— 仅在对应 API Key 已配置时可用。
   若调用返回授权/配额错误，把该源标记为「不可用」后继续，不要悄悄放弃这部分需求。
 无论如何至少保留两个数据源。

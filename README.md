@@ -234,7 +234,7 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 
 | Tool | Parameters | Description |
 |---|---|---|
-| `openalex_work_search_by_query` | `query`, `max_results`=10 | Search works by keyword (abstract reconstructed to readable text). No key needed. |
+| `openalex_work_search_by_query` | `query`, `max_results`=10 | Search works by keyword (abstract reconstructed to readable text). No key needed. **Known risk**: this endpoint intermittently returns HTTP 429 (the upstream rate-limits anonymous search while its search cluster is under load; the response carries `retry-after`). Retrying after ~30s usually succeeds, and the DOI lookup `openalex_work_detail_by_doi` keeps working during those windows. |
 | `openalex_work_detail_by_doi` | `doi` | Look up a single work by DOI. No key needed. |
 
 ### Crossref
@@ -281,6 +281,8 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 
 The prompt below turns a vague request into a reproducible multi-source search. Paste it into any MCP client with UniArticles connected, then replace the last line with your own request. Its query-shape rules were verified against the live APIs — the probe results are in `project-docs/buildlog.md`.
 
+The same day (2026-09-18) every one of the currently registered **23 tools** was invoked once against the live APIs: **23/23 succeeded** (`SEMANTIC_SCHOLAR_API_KEY` was unset for that run, so its 2 tools were not registered by design). The only availability risk observed was the OpenAlex search endpoint returning 429, documented in step 3 below and in the data-source section above.
+
 ```text
 You are my literature-search assistant. UniArticles MCP tools are connected.
 Follow these four steps exactly, in order.
@@ -292,17 +294,25 @@ Restate what I need as: (a) topic or research question in one sentence;
 
 STEP 2 — Rule out the sources that certainly cannot match, and say so out loud.
 Apply these rules and skip those sources without calling them:
-- Topic is biomedical/life-sciences ONLY -> drop arXiv, DOAJ, CORE, OpenAIRE.
+- Topic is biomedical/life-sciences ONLY -> drop arXiv (wrong domain). Note that
+  DOAJ, CORE and OpenAIRE are open-access aggregators across ALL disciplines and
+  do cover biomedicine, so do not drop them on domain grounds; whether they are
+  dropped depends only on the next rule.
 - Topic is physics, mathematics, computer science, statistics, quantitative
-  biology or economics -> arXiv is usable; ANY other domain -> drop arXiv
-  (it is preprint-only and has no journal coverage).
+  biology or economics -> arXiv is usable; ANY other domain (humanities, social
+  sciences, clinical medicine) -> drop arXiv (it is preprint-only and has no
+  journal coverage).
 - I want peer-reviewed / mainstream / non-open-access journals -> drop DOAJ,
   CORE and OpenAIRE (open-access only, so they bias the result set).
 - I want the full text or a PDF -> no UniArticles tool returns full text or
   binaries. Say this up front and keep sources only for metadata plus links.
-- I want non-English (e.g. Chinese) literature -> none of these sources index
-  CNKI or Wanfang. Only Crossref returns occasional Chinese-language records.
-  State the gap instead of implying coverage.
+- I want non-English (e.g. Chinese) literature -> this server indexes no Chinese
+  database at all (no CNKI / Wanfang / VIP). Measured with a Chinese query such
+  as "深度学习": Crossref, DOAJ and CORE return Chinese-language records, Europe
+  PMC returns bracketed English translations of Chinese journal articles, Scopus
+  is inconsistent (0~1 hits for the same query), and PubMed and arXiv return 0.
+  State that coverage is far below a Chinese database; never claim it replaces
+  CNKI or Wanfang.
 - Scopus, ScienceDirect, Semantic Scholar -> only usable if their API key is
   configured. If a call returns an auth/quota error, mark that source
   unavailable and continue; do not silently drop the requirement.
