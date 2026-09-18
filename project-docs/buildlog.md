@@ -2281,3 +2281,78 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 **影响与处置**：本 agent 的步骤 1/2 提交（`99046ba`、`9f040b1`）全程未受影响；更名在索引中的暂存记录丢失，已在工作区核对无误后重新暂存并提交，最终结果与既有步骤 3 计划完全一致。
 
 **经验记录**：`git commit`（不带 pathspec）会提交整个索引，多代理共享同一工作区时，任何一方暂存但未提交的内容都可能被他方提交卷入 —— 本次即为实例。后续在本仓库并行运行多个角色代理时，建议各代理提交前先 `git diff --cached --name-only` 确认索引归属，或避免同时暂存。
+
+## [2026-09-19 00:25] 步骤 69 完成：CORE v3 新端点与响应字段真实探测（v3.5.0，QA-R021 编码前置）
+
+### 执行的任务
+- 新建 `_verify/core_api_field_probe.py`（纯标准库、只读，`_print()` 脱敏 IPv4 与 API Key），覆盖计划书步骤 69 的 F1～F17 共 20 个请求项，分「基线 / 请求体 / 聚合 / 字段 / 击杀」五组，末尾输出机器可读的诊断结论。
+- 在本机以真实 `CORE_API_KEY`（取自仓库 `.env`）完整跑通一遍；对首轮异常的两项（F12 超时、F4 耗时 44.82 s）单独放宽超时重跑复核；对 F6 另做一次独立验证明细。
+- 未修改 `_verify/core_api_probe.py`（QA-R021 复测存档证据原样保留），未改动任何源码。
+
+### 关键变更
+- 新增 `_verify/core_api_field_probe.py`（约 650 行）。仅诊断脚本，不参与运行时；按 AGENTS.md 既有规则以 `git add -f` 入库（本机 `.gitignore:52` 有 `_verify` 一行，属用户既有未提交状态，未触碰）。
+
+### 实测数据（本机环境，2026-09-19 00:22～00:26，Asia/Shanghai）
+
+网络层：DNS 解析到 2 个 IPv4 + 2 个 IPv6、TCP 443 连通、TLSv1.3 握手成功（证书 CN = `core.ac.uk`，2026-10-21 到期）。鉴权：`.env` 中的 key 被读到，`x-ratelimit-limit=150`。
+
+| 编号 | 请求 | 状态 | 耗时 | 响应体 |
+|---|---|---|---|---|
+| F1 | `GET /v3/search/works?q=machine learning&limit=2` | 200 | 4.02 s | 5.6 KB |
+| F2 | `POST /v3/search/works` `{q,limit:2,exclude:[fullText]}` | 200 | 1.50 s | 5.5 KB |
+| F3 | 同上 `+offset:2` | 200 | 1.56 s | 20.6 KB |
+| F4 | 同上 `limit:100` | 200 | **44.82 s**（复核 28.75 s） | 435.5 KB |
+| F5 | `POST /v3/search/works/aggregate` `{q}` | 200 | 1.45 s | 7.5 KB |
+| F6 | 同上 `+aggregations:[yearPublished,authors,publisher]` | 200 | 5.03 s | 7.6 KB |
+| F7 | `GET /v3/works/171513974` | 200 | 1.56 s | 2.8 KB |
+| F8 | `GET /v3/works/171513974/outputs` | 200 | 1.51 s | 3.4 KB |
+| F9 | `GET /v3/works/171513974/stats` | 200 | 1.75 s | 129 B |
+| F9b | `GET /v3/works/10.1038/nature12373/stats` | 200 | 1.68 s | 108 B |
+| F10 | `GET /v3/works/10.1000/does-not-exist-xyz` | 404 | 1.26 s | 14 B |
+| F11 | `GET /v3/works/10.1038/nature12373/outputs` | 404 | 1.32 s | 14 B |
+| F12 | `GET /v3/search/data-providers?q=university&limit=2` | **超时**（30 s）→ 复核 **200** | 31.24 s → 1.48 s | — → 1.3 KB |
+| F13 | `GET /v3/data-providers/1630` | 200 | 0.78 s | 549 B |
+| F14 | `GET /v3/data-providers/1630/stats` | 200 | 0.73 s | 144 B |
+| F15 | `GET /v3/data-providers/1630/outputs?limit=2` | 200 | 1.42 s | 6.5 KB |
+| F16 | `GET /v3/outputs/29197653` | 200 | 1.64 s | 77.9 KB |
+| F17a | `GET /v3/search/outputs?q=machine learning` | 200 | 5.26 s | 81.7 KB |
+| F17b | `GET /v3/search/outputs?q=title:"machine learning"` | 200 | 1.90 s | 3.4 KB |
+| F17c | `GET /v3/search/outputs?q=doi:"10.1007/s10994-024-06619-7"` | 200 | 1.88 s | 3.5 KB |
+
+**F12 的处置**：首轮超时属**瞬时网络噪声**（同一请求 90 s 超时下第二次 1.48 s 返回 200），不构成端点失败的证据；按 QA-R013 如实记录两次结果，不作为"该端点不可用"的结论。
+
+### 关键探测结论（步骤 70～75 的编码依据）
+
+1. **聚合端点（本轮最大未知量）确认可用**，请求体形态为 `{"q": <关键词>, "aggregations": [<维度名>, ...]}`：
+   - `aggregations` 字段名正确；`aggregations` 为**可选**（F5 不传也能 200）；
+   - 显式维度名采用 **camelCase**（`yearPublished` / `authors` / `publisher`），三种维度在 F6 中**全部返回**（各 100 个桶），且返回顺序**不保证**与请求顺序一致；
+   - 响应形状为 `{"aggregations": {<维度名>: {<桶值>: <计数>}}}`，**顶层只有 `aggregations` 一个键**（无 `totalHits`）；
+   - **不传 `aggregations` 时的默认维度名是 snake_case**（F5 实测为 `field_of_study` / `publisher` / `year_published`），与显式传入时的 camelCase 不一致 —— 步骤 73 的归一化必须原样透传维度名，不得做命名映射。
+2. **桶数是硬上限 100**：`authors` 这类高基数维度不会返回成千上万个桶，而是被上游截断到 100。因此计划书步骤 73 设想的 `total_buckets`（"被截断了多少"）**无法从响应中得出**，只能如实回传 `len(buckets)`；`top_n` 截断仍保留（用于控制返回体）。桶值也出现脏数据（年份桶里存在 `"1"`、`"1753"`），排序前必须做类型判断。
+3. **POST 检索请求体全部被接受**：`exclude:["fullText"]`、`offset`、`limit=100` 三项均 200，步骤 71 的改法与上限 100 的前提成立。
+4. **`fullText` 并不总是被 `exclude` 消除的负担**：F1（GET，2 条）5.6 KB 与 F2（POST+exclude，2 条）5.5 KB 几乎无差别 —— 因为 `limit=2` 命中的是 `fullText` 为空的记录。体积收益要在"命中有全文的记录"上才体现；计划书步骤 71 引用的历史数据（676 KB → 112 KB）是大 `limit` 下的结论，不冲突。
+5. **`limit=100` 的实际耗时敏感**：435.5 KB 响应在本机需 28.75～44.82 s（首轮 44.82 s > 30 s）。步骤 70 的 `_request()` 统一超时若固定 30 s，`limit=100` 会在本机网络下**间歇性超时**。本步骤不修改该值（属步骤 70 的实现决策），但作为**必须处理的已知约束**移交步骤 70/71：要么提高 POST 检索的超时，要么在 docstring 中如实提示上限 100 的代价。**不得**把这条当作"端点慢"而静默降低上限。
+6. **标识符规则全部复核通过**：`/works/{裸 DOI}` 200、`/works/{id}/outputs` 传裸 DOI 404（子资源只收数字 ID）、`/works/{裸 DOI}/stats` 200。未知 DOI 的 404 响应体确认为 `{"message":""}` 且 `Content-Type: text/html`，**步骤 70 的 404 分支必须自带兜底文案**。
+7. **字段结构（供归一化直接引用）**：
+   - works 详情（F7）：30 个键，含 `id` / `doi` / `title` / `authors[{name}]` / `abstract` / `citationCount` / `downloadUrl` / `arxivId` / `dataProviders[{id,name,url,logo}]` / `outputs[<url>]` / `identifiers` / `journals` / `publishedDate` / `publisher` / **`fullText`**；
+   - works outputs（F8）：返回**裸列表**（不是 `{"results": …}`），元素 38 个键，含 `id` / `doi` / `downloadUrl` / `license` / `fulltextStatus` / `dataProvider{id,name,url,logo}` / `sourceFulltextUrls` / `identifiers{doi,oai}` / `versions`；
+   - works stats（F9/F9b）：仅 5 个键 `id` / `depositedDate` / `publishedDate` / `updatedDate` / `acceptedDate`；
+   - data-providers 详情（F13）：20 个键，含 `id` / `name` / `type`（实测值 `REPOSITORY`）/ `homepageUrl` / `uri` / `oaiPmhUrl` / `software` / `source` / `openDoarId` / `metadataFormat` / `location` / `stats`(**常为 null**)；
+   - data-providers stats（F14）：`id` / `countMetadata` / `countFulltext` / `history` / `sourceStats` / `lastSeen` / `set`；
+   - data-providers outputs（F15）：**分页对象** `{totalHits, limit, offset, results}`（与 F8 的裸列表不同，故步骤 70 的 `_as_list()` 必须两种形态都支持）；
+   - output 详情（F16）：38 个键（与 F8 元素同构），含 `license` / `documentType`（可能为字符串数组）/ `downloadUrl` / `dataProvider`。
+8. **击杀条件判定：三种组合全部 200 → 判定「可纳入」**（F17a/F17b/F17c 均 200），`core_output_search_by_query` 进入本版本，**本版本工具总数按 29 计**（21 + 8）。按计划书要求，该判定基于**首次运行的完整结果**，未做任何重试碰运气。
+
+### 遇到的问题及解决方案
+- **F12 首轮 30 s 超时**：非端点失败。同请求放宽到 90 s 后 1.48 s 返回 200，属瞬时网络噪声，已按 QA-R013 记录两次结果而非下结论。
+- **F4（limit=100）耗时 44.82 s**：同一请求复核为 28.75 s，两次均 200，说明是"大响应体在网络链路上的传输耗时"而非端点故障。已作为已知约束（结论 5）移交步骤 70/71，由实现层决定超时与 docstring 提示。
+- **脚本内两处中文引号被写成 ASCII 双引号导致 `SyntaxError`**：已在编码阶段用 `py_compile` 捕获并改为中文引号，`python -c` 复检通过。
+
+### 验证
+- `python _verify/core_api_field_probe.py --help` 正常输出；不带参数可完整跑完（20/20 项），退出码 0。
+- 输出脱敏自检：整段输出中 `Bearer` 命中 **0** 次、`CORE_API_KEY=` 命中 **0** 次；出现的 IPv4 已全部打码为 `104.21.xxx.xxx` / `172.67.xxx.xxx`。
+- `git status --short` 显示新增（未跟踪）文件仅 `_verify/core_api_field_probe.py`；`git check-ignore -v` 确认其被本机 `.gitignore:52` 的 `_verify` 一行遮蔽，按既有规则以 `git add -f` 入库。
+- F1 与 F2 均 200 —— 本机网络与鉴权正常，故上述结论可作为编码依据。
+
+### 下一步计划
+- ⏭️ 步骤 70：`core.py` 公共骨架重构（`BASE_URL` 改基址 + `_ok_one` / `_is_core_id` / `_require_core_id` / `_rate_limit_message` / `_error_for` / `_request` / `_as_list` + 三个归一化函数），并落地限流口径更正；**须一并处理本步骤移交的 `limit=100` 超时约束**。
