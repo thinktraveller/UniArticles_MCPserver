@@ -19,14 +19,13 @@ UniArticles(亿文通) is a unified academic literature retrieval server impleme
   - **ScienceDirect**: Full-text article retrieval, article object (figures/tables/supplementary materials) metadata retrieval.
   - **ArXiv**: Search papers, list recent papers, read paper metadata by ID.
   - **PubMed (NCBI Entrez)**: Keyword search, batch summary lookup, related-article discovery, and PMC full-text/citation linkage — direct NCBI E-utilities calls (no third-party wrapper).
-  - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, Zenodo, OpenAIRE, dblp, Semantic Scholar, and CORE keyword/DOI lookup across open scholarly catalogs.
-  - **Specialized sources (v3.0.0)**: bioRxiv/medRxiv preprint browsing by date range.
+  - **General academic search (v3.0.0)**: OpenAlex, Crossref, Europe PMC, DOAJ, OpenAIRE, Semantic Scholar, and CORE keyword/DOI lookup across open scholarly catalogs.
 - **Standardized Returns**: Consistent JSON structure (`ok`, `source`, `query`, `count`, `items`, `error`).
 - **Secure Configuration**: API keys managed via environment variables.
 
 ## Supported Data Sources
 
-UniArticles unifies the following **14 data sources** behind one consistent MCP interface, all returning the same normalized JSON shape. **13 are active by default**, providing **26 tools**; Semantic Scholar registers its 2 additional tools only when `SEMANTIC_SCHOLAR_API_KEY` is set, for a total of **28 tools**. Every source except arXiv is a direct call to the provider's official REST API (via `httpx`); arXiv is wrapped through the official `arxiv` Python package.
+UniArticles unifies the following **11 data sources** behind one consistent MCP interface, all returning the same normalized JSON shape. **10 are active by default**, providing **23 tools**; Semantic Scholar registers its 2 additional tools only when `SEMANTIC_SCHOLAR_API_KEY` is set, for a total of **25 tools**. Every source except arXiv is a direct call to the provider's official REST API (via `httpx`); arXiv is wrapped through the official `arxiv` Python package.
 
 | Data Source | Coverage | Access Method | API Key |
 |---|---|---|---|
@@ -38,12 +37,9 @@ UniArticles unifies the following **14 data sources** behind one consistent MCP 
 | **Crossref** | DOI registration metadata across all disciplines. | Crossref REST API (`api.crossref.org`) via `httpx` | Not needed |
 | **Europe PMC** | EBI's life-sciences literature aggregator (distinct from NCBI PubMed), including PMC full text. | Europe PMC REST API (`ebi.ac.uk/europepmc`) via `httpx` | Not needed |
 | **DOAJ** | Directory of Open Access Journals — peer-reviewed open-access articles. | DOAJ REST API (`doaj.org/api`) via `httpx` | Not needed |
-| **Zenodo** | General-purpose open research repository (CERN); filtered here to publication-type records. | Zenodo REST API (`zenodo.org/api`) via `httpx` | Not needed |
 | **OpenAIRE** | European open-science aggregator of research products. | OpenAIRE REST API (`api.openaire.eu`) via `httpx` | Not needed |
 | **Semantic Scholar** | AI-powered academic graph covering all fields. | Semantic Scholar Graph API (`api.semanticscholar.org`) via `httpx` | **Required** — `SEMANTIC_SCHOLAR_API_KEY` (its tools are not registered at all without it) |
 | **CORE** | Global aggregator of open-access research papers from repositories and journals worldwide. | CORE v3 REST API (`api.core.ac.uk`) via `httpx` | Optional — `CORE_API_KEY` (recommended; heavy rate limit without it) |
-| **dblp** | Computer science bibliography. | dblp REST API (`dblp.org`) via `httpx` | Not needed |
-| **bioRxiv / medRxiv** | Preprints in biology (bioRxiv) and health sciences (medRxiv); browse by date range. | bioRxiv REST API (`api.biorxiv.org`) via `httpx` | Not needed |
 
 ## ⚠️ API Key Requirements
 
@@ -51,7 +47,7 @@ This server integrates multiple data sources, and some advanced features require
 
 1. **Elsevier API (Scopus database, Required)**:
    - **How to get**: Apply at [Elsevier Developer Portal](https://dev.elsevier.com/).
-   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **26 tools total** covering 13 data sources when `SEMANTIC_SCHOLAR_API_KEY` is not configured, or **28 tools** when it is; the newer non-Elsevier sources do not require this key.)
+   - **Restriction**: A basic, non-commercial Elsevier API key (no institutional subscription or Insttoken required) is sufficient to use all remaining Elsevier-related tools in this server — apply for free with a personal account at the Elsevier Developer Portal. (The 8 Elsevier-related tools have been verified against a real non-commercial key. The server currently registers **23 tools total** covering 10 data sources when `SEMANTIC_SCHOLAR_API_KEY` is not configured, or **25 tools** when it is; the newer non-Elsevier sources do not require this key.)
    - **Clarification**: Scopus is an Elsevier database. The `ELSEVIER_API_KEY` configured here is an Elsevier API key and may also be used for other Elsevier API services allowed by your subscription and key scope. (The legacy variable name `SCOPUS_API_KEY` is still accepted for backward compatibility but is deprecated and will be removed in a future major version.)
 
 **Note**: Even without the above API key, you can still use other functions normally.
@@ -195,7 +191,7 @@ If the process starts without import or configuration errors, the installation i
 
 ## Available Tools
 
-The tools are grouped below by data source, one table per source. **26 tools are registered by default**; configuring `SEMANTIC_SCHOLAR_API_KEY` adds the 2 Semantic Scholar tools for a total of **28**. Every tool returns the same normalized JSON shape (`ok`, `source`, `query`, `count`, `items`, `error`).
+The tools are grouped below by data source, one table per source. **23 tools are registered by default**; configuring `SEMANTIC_SCHOLAR_API_KEY` adds the 2 Semantic Scholar tools for a total of **25**. Every tool returns the same normalized JSON shape (`ok`, `source`, `query`, `count`, `items`, `error`).
 
 ### Scopus
 
@@ -260,12 +256,6 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 |---|---|---|
 | `doaj_article_search_by_query` | `query`, `max_results`=10 | Search the Directory of Open Access Journals by keyword. No key needed. |
 
-### Zenodo
-
-| Tool | Parameters | Description |
-|---|---|---|
-| `zenodo_record_search_by_query` | `query`, `max_results`=10 | Search Zenodo for publication-type records by keyword (datasets/software excluded); returns file metadata/links only. No key needed. |
-
 ### OpenAIRE
 
 | Tool | Parameters | Description |
@@ -286,18 +276,6 @@ These tools call the NCBI E-utilities directly. They work without a key; setting
 | Tool | Parameters | Description |
 |---|---|---|
 | `core_work_search_by_query` | `query`, `max_results`=10 | Search CORE (global open-access aggregator) by keyword. Works without a key but is heavily rate-limited (~5 requests then a ~10-minute lockout); configuring `CORE_API_KEY` is strongly recommended. |
-
-### dblp
-
-| Tool | Parameters | Description |
-|---|---|---|
-| `dblp_publication_search_by_query` | `query`, `max_results`=10 | Search dblp (computer science bibliography) by keyword. No key needed. Note: dblp.org may fail intermittently due to network path variance in some environments. |
-
-### bioRxiv / medRxiv
-
-| Tool | Parameters | Description |
-|---|---|---|
-| `biorxiv_paper_list_by_date_range` | `server` (`biorxiv`/`medrxiv`), `start_date` (YYYY-MM-DD), `end_date` (YYYY-MM-DD), `cursor`=0 | Browse bioRxiv/medRxiv preprints within a date range (**browse by date, NOT keyword search**). 30 results per page (use `cursor` to page). |
 
 ---
 

@@ -19,14 +19,13 @@
   - **ScienceDirect**: 全文文章检索、文章对象（配图/表格/补充材料）元信息获取。
   - **ArXiv**: 论文搜索、最新论文列表、按 ID 读取论文元数据。
   - **PubMed（NCBI Entrez）**: 关键词检索、批量摘要查询、相关文献发现、PMC 全文/引用关联——直连 NCBI E-utilities（不再依赖第三方封装包）。
-  - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、Zenodo、OpenAIRE、dblp、Semantic Scholar、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
-  - **专项数据源（v3.0.0）**: bioRxiv/medRxiv 预印本按日期区间浏览。
+  - **通用学术检索（v3.0.0）**: OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、Semantic Scholar、CORE 的关键词/DOI 检索，覆盖多个开放学术目录。
 - **标准化返回**: 一致的 JSON 结构 (`ok`, `source`, `query`, `count`, `items`, `error`)。
 - **安全配置**: 通过环境变量管理 API 密钥。
 
 ## 当前支持的文献数据源
 
-亿文通将以下 **14 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构。其中 **13 个默认即启用**，共提供 **26 个工具**；Semantic Scholar 仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 后才额外注册其 2 个工具，总数达到 **28 个**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
+亿文通将以下 **11 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构。其中 **10 个默认即启用**，共提供 **23 个工具**；Semantic Scholar 仅在配置 `SEMANTIC_SCHOLAR_API_KEY` 后才额外注册其 2 个工具，总数达到 **25 个**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
 
 | 数据源 | 覆盖范围 | 接入方式 | API Key |
 |---|---|---|---|
@@ -38,12 +37,9 @@
 | **Crossref** | 覆盖所有学科的 DOI 注册元数据。 | Crossref REST API（`api.crossref.org`），经 `httpx` 直连 | 无需 |
 | **Europe PMC** | EBI 的生命科学文献聚合库（区别于 NCBI PubMed），含 PMC 全文。 | Europe PMC REST API（`ebi.ac.uk/europepmc`），经 `httpx` 直连 | 无需 |
 | **DOAJ** | 开放获取期刊目录（Directory of Open Access Journals）中的同行评审文章。 | DOAJ REST API（`doaj.org/api`），经 `httpx` 直连 | 无需 |
-| **Zenodo** | CERN 的通用开放研究仓储；本项目仅过滤出 publication 类型记录。 | Zenodo REST API（`zenodo.org/api`），经 `httpx` 直连 | 无需 |
 | **OpenAIRE** | 欧洲开放科学研究成果聚合库。 | OpenAIRE REST API（`api.openaire.eu`），经 `httpx` 直连 | 无需 |
 | **Semantic Scholar** | AI 驱动的跨学科学术图谱。 | Semantic Scholar Graph API（`api.semanticscholar.org`），经 `httpx` 直连 | **必需** —— `SEMANTIC_SCHOLAR_API_KEY`（无 Key 时其工具完全不注册） |
 | **CORE** | 汇聚全球仓储与期刊的开放获取论文聚合库。 | CORE v3 REST API（`api.core.ac.uk`），经 `httpx` 直连 | 可选 —— `CORE_API_KEY`（建议配置，无 Key 限流严格） |
-| **dblp** | 计算机科学文献库。 | dblp REST API（`dblp.org`），经 `httpx` 直连 | 无需 |
-| **bioRxiv / medRxiv** | 生物学（bioRxiv）与健康科学（medRxiv）预印本；按日期区间浏览。 | bioRxiv REST API（`api.biorxiv.org`），经 `httpx` 直连 | 无需 |
 
 ## ⚠️ API 密钥说明
 
@@ -51,7 +47,7 @@
 
 1. **Elsevier API（Scopus 数据库，必需）**:
    - **获取方式**: 需前往 [Elsevier Developer Portal](https://dev.elsevier.com/) 申请。
-   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前未配置 `SEMANTIC_SCHOLAR_API_KEY` 时共注册 **26 个工具**、覆盖 13 个数据源；配置后为 **28 个**；新增的非 Elsevier 数据源均不需要此 Key。）
+   - **限制**: 非商业性质、无机构订阅/Insttoken 的基础级 Elsevier API Key 即可让本服务器当前保留的全部 Elsevier 相关工具正常工作——可在 Elsevier Developer Portal 用个人账号免费申请。（其中 8 个 Elsevier 相关工具已用真实的非商业 Key 实测验证。本服务器当前未配置 `SEMANTIC_SCHOLAR_API_KEY` 时共注册 **23 个工具**、覆盖 10 个数据源；配置后为 **25 个**；新增的非 Elsevier 数据源均不需要此 Key。）
    - **说明**: Scopus 是 Elsevier 旗下数据库。此处配置项名为 `ELSEVIER_API_KEY`，其本质是 Elsevier API Key，在订阅权限与密钥作用域允许的前提下，也可用于其他 Elsevier API 服务。（旧变量名 `SCOPUS_API_KEY` 仍向后兼容可用，但已弃用，将在未来主版本中移除。）
 
 **注意**: 即使您没有上述 API 密钥，您仍然可以正常使用其他相关功能。
@@ -193,7 +189,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 ## 可用工具列表
 
-以下工具按数据源分组，每个数据源一张表格。**默认注册 26 个工具**；配置 `SEMANTIC_SCHOLAR_API_KEY` 后会追加 Semantic Scholar 的 2 个工具，总数达到 **28 个**。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
+以下工具按数据源分组，每个数据源一张表格。**默认注册 23 个工具**；配置 `SEMANTIC_SCHOLAR_API_KEY` 后会追加 Semantic Scholar 的 2 个工具，总数达到 **25 个**。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
 
 ### Scopus
 
@@ -258,12 +254,6 @@ python -m uniarticles      # 使用 pip 安装时
 |---|---|---|
 | `doaj_article_search_by_query` | `query`、`max_results`=10 | 检索开放获取期刊目录（DOAJ）。无需 Key。 |
 
-### Zenodo
-
-| 工具名 | 参数 | 说明 |
-|---|---|---|
-| `zenodo_record_search_by_query` | `query`、`max_results`=10 | 检索 Zenodo 中 publication 类型的记录（排除数据集/软件），仅返回文件元信息/链接。无需 Key。 |
-
 ### OpenAIRE
 
 | 工具名 | 参数 | 说明 |
@@ -284,18 +274,6 @@ python -m uniarticles      # 使用 pip 安装时
 | 工具名 | 参数 | 说明 |
 |---|---|---|
 | `core_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索 CORE（全球开放获取聚合库）。无 Key 亦可用但限流严格（约 5 次请求后锁定约 10 分钟），**建议配置 `CORE_API_KEY`** 以获得完整体验。 |
-
-### dblp
-
-| 工具名 | 参数 | 说明 |
-|---|---|---|
-| `dblp_publication_search_by_query` | `query`、`max_results`=10 | 按关键词检索 dblp（计算机科学文献库）。无需 Key。注意：dblp.org 在部分网络环境下可能因网络路径波动间歇性失败。 |
-
-### bioRxiv / medRxiv
-
-| 工具名 | 参数 | 说明 |
-|---|---|---|
-| `biorxiv_paper_list_by_date_range` | `server`（`biorxiv`/`medrxiv`）、`start_date`（YYYY-MM-DD）、`end_date`（YYYY-MM-DD）、`cursor`=0 | 按日期区间浏览 bioRxiv/medRxiv 预印本（**按日期浏览，非关键词检索**）。每页 30 条（用 `cursor` 翻页）。 |
 
 ---
 

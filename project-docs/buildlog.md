@@ -1338,3 +1338,31 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - 步骤 55：`README.md` / `README_ZH.md` 全量同步（计数下修 + 三个源小节删除）。
 
 ---
+
+### 步骤 55 完成：`README.md` / `README_ZH.md` 全量同步（2026-09-18 16:51）
+
+**执行的任务**
+- **功能特性分类 bullet**：两份均从"通用学术检索"列表中删去 `Zenodo`、`dblp`（保留 OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、Semantic Scholar、CORE，共 7 个）；「专项数据源」bullet **整行删除**（该分类仅含 bioRxiv/medRxiv 一个源，删除后分类为空，不保留空 bullet）。
+- **数据源总览段**：`14 个数据源`→`11`、`13 个默认即启用`→`10`、`26 个工具`→`23`、配置 key 后 `28 个`→`25 个`。
+- **数据源对比表格**：删除 `Zenodo`、`dblp`、`bioRxiv / medRxiv` 三行，表格由 14 行降为 11 行。
+- **API 密钥说明（Elsevier 限制段）**：`共注册 26 个工具、覆盖 13 个数据源`→`23 个工具、10 个数据源`；`配置后为 28 个`→`25 个`。
+- **可用工具列表计数摘要段**：`默认注册 26 个工具`→`23`、`总数达到 28 个`→`25`。
+- **删除三个独立工具小节及其表格**：`### Zenodo`、`### dblp`、`### bioRxiv / medRxiv`。其中 `### bioRxiv / medRxiv` 原为「可用工具列表」章节最后一节，删除后该章节直接接 `---` / `## 🤝 Call for Contributions`，已确认无多余空行或孤立分隔。
+
+**关键变更**
+- 两份 README 的 `###` 级小节目录逐项对应一致（各 11 个数据源小节：Scopus、ScienceDirect、ArXiv、PubMed、OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、Semantic Scholar、CORE）。
+- 计数散落的 4 处互不相邻位置（分类 bullet、总览段、Key 说明段、工具列表段）全部改到；历史上 v2.2.0 步骤 17、v2.3.0 步骤 23 两次漏改均出在此类隐蔽位置，故本轮按计划书要求以全文检索数字的方式穷尽检查。
+
+**验证**
+- `rg "Zenodo|dblp|bioRxiv|medRxiv" README.md README_ZH.md` **零命中**（正文中分类 bullet、数据源表格、工具小节均已清空，无历史叙述残留）。
+- `rg "\b26\b|\b28\b|14 个|13 个|\*\*14|\*\*13" README.md README_ZH.md` 零命中，确认无遗留旧计数；两份 README 现有计数与 `list_tools()` 实测的 11 源 / 23 工具 / 25 工具一致。
+- 检查 `### DOAJ → ### OpenAIRE` 与 `### CORE → ---` 两处接缝，表格与分隔线结构完整，无孤立分隔或多余空行。
+- `README.md:204` / `README_ZH.md:202` 的 Scopus 表格 `sort="coverDate"` 本轮**未改**（属步骤 60 排序修复的同步范围，届时一并更新）。
+
+**遇到的问题及解决方案**
+- 无。
+
+**下一步计划**
+- 步骤 56（用户修订版）：`AGENTS.md` 同步至 v3.3.0 基线；`CLAUDE.md` 按用户指令**直接删除**（原计划为同步刷新，用户已确认该文件不再使用）。
+
+---
