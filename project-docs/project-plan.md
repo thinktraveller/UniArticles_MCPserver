@@ -166,7 +166,61 @@ v3.2.0 已在 QA-R016 定案发布（本轮改动前基线：`pyproject.toml` �
 
 步骤 1～53（v2.0～v3.2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
 
+### v3.5.0 范围补充（QA-R021，2026-09-19）
+
+v3.4.0 已发布（当前 `pyproject.toml` 版本号 `3.4.0`，基线状态：**9 个数据源 / 21 个工具**，全部无条件注册、无任何配置相关的工具数变化）。本轮范围源自用户要求"详细了解 CORE 官方 API 文档，还有什么功能可以加入到这个 MCP server"，经 `project-docs/goal.md` 附录《CORE API v3 能力盘点（QA-R021 前置调研，2026-09-18）》双线调研（文档站 + OpenAPI 规范 `https://api.core.ac.uk/swagger/v3.json`）加 `.env` 真实 `CORE_API_KEY` 的真实端点探测，再经 QA-R021 三轮问答与会后复测定案。
+
+**本轮是 CORE 单数据源的能力扩展（新增 + 既有工具增强），不是新增数据源，也不是范围收缩。** 数据源集合保持 9 个不变，全部工具仍无条件注册。用户决策（QA-R021 逐字记录）：
+
+1. **范围档位 = (c) 档**：在 (a) 现有工具检索质量增强、(b) works 维度新工具之上，再新增"聚合统计 + 机构库维度"工具。**期刊维度确认不纳入**（`/v3/journals/issn:{issn}` 实测返回 200 但只有回显式空壳记录：无刊名、出版商为 `null`、`dataProviderId` 为空串，不提供任何产品语义所需信息；`/v3/search/journals` 累计 4 次超时）。
+2. **"文件内容 / 下载"边界不破例**：维持项目既有硬边界——只返回元数据与链接，不取回文件本体、不返回原始全文、不下载二进制。`/v3/works/{id}/download`、`/v3/works/tei/{id}`、`/v3/outputs/{id}/download|raw|history` **全部不接入**。
+3. **验证节奏**：复测脚本已产出并经由第三个环境复测通过（见下），闸门已由用户"key 既然有效就不用管，开始更新计划书"解除，实现范围锁定为 C 档 9 项。
+
+**C 档最终范围 = 1 个现有工具增强 + 8 个新增工具**（工具名沿用 `goal.md` 候选名并按本项目 `<source>_<object>_<action>_by_<axis>` 命名风格复核，结论见步骤 69；最终命名仍由 `project-builder-cn` 在真实探测后确认，如调整须说明理由）：
+
+| # | 工具 | 端点 | 语义 | 状态 |
+|---|---|---|---|---|
+| 1 | `core_work_search_by_query` | `POST /v3/search/works` | 现有工具增强：`limit` 上限 25 → 100、新增 `offset` 分页、改用 POST + `exclude:["fullText"]`、429 文案改为按响应头给出可执行重试时间 | 增强（非新增） |
+| 2 | `core_work_detail_by_identifier` | `GET /v3/works/{identifier}` | 按**裸 DOI 或数字 CORE ID** 取单篇作品详情 | 新增 |
+| 3 | `core_work_outputs_by_id` | `GET /v3/works/{id}/outputs` | 该作品在各机构库的版本实例列表（含 `downloadUrl`/`license`/`fulltextStatus`/`dataProvider`） | 新增，**只接受数字 CORE ID** |
+| 4 | `core_work_stats_by_id` | `GET /v3/works/{id}/stats` | 生命周期时间戳（deposited / published / updated / accepted） | 新增，DOI 亦可 |
+| 5 | `core_work_aggregate_by_query` | `POST /v3/search/works/aggregate` | 按年 / 作者 / 机构 / 类型 / 期刊 / 语言 / 出版社分布统计（项目工具集中**首个 facet / 分布维度**） | 新增 |
+| 6 | `core_data_provider_search_by_query` | `GET /v3/search/data-providers` | 机构库 / 期刊源检索 | 新增 |
+| 7 | `core_data_provider_detail_by_id` | `GET /v3/data-providers/{id}`（含 `/stats`、`/outputs`） | 机构库详情、统计与其下 outputs（"works → 机构库画像"链路端到端实测通过） | 新增 |
+| 8 | `core_output_detail_by_id` | `GET /v3/outputs/{id}` | 未去重的原始采集记录（`license`/`sdg`/`repositories`/`fulltextStatus` 等） | 新增，无条件纳入 |
+| 9 | `core_output_search_by_query` | `GET /v3/search/outputs` | outputs 关键词检索 | **条件纳入** |
+
+**第 9 项的条件纳入与击杀条件**：该端点历史上在 creator 环境两次 HTTP 500（上游 Azure Search 报 `Invalid expression: The operand for a binary operator 'Equal' is not a single value`），而在另一环境四种组合 4/4 全 200；第三个环境的复测中三种查询组合（普通关键词 / `title:` 字段限定 / DOI 精确命中）**再次全部 200**，累计 **7 次连续 200、跨 2 个环境**。据此本计划书支持纳入，但保留击杀条件——**实现期探测（步骤 69）或用户自行复测只要出现任何一次非 200，则该工具不纳入**，其余 8 项完全不受影响（此时工具总数为 27 而非 28）。
+
+**顺带更正项（属修既有缺陷，实现阶段一并处理；`goal.md` 未逐字要求版本号，但由 QA-R021 明确要求更正）**：
+
+- `src/uniarticles/sources/core.py` 的模块注释与 429 错误文案、以及 `AGENTS.md` 关于 CORE 限流的表述（"无 key 约 5 次请求后约 10 分钟锁死"），与 CORE 官方现行 token 制口径不符（未认证 100 tokens/天、10 次/分钟且**不提供 `fullText`**；注册个人 1,000 tokens/天、25 次/分钟），须改为按响应头 `X-RateLimit-Limit` / `X-RateLimit-Remaining` / `X-RateLimit-Retry-After` 给出可执行重试时间（该头实测为 **ISO 时间戳**而非秒数）。
+- 官方文档入口 `https://api.core.ac.uk/docs` 实测 404，正确入口是 `https://api.core.ac.uk/docs/v3`，机器可读规范在 `https://api.core.ac.uk/swagger/v3.json`——仓库内如有引用需一并更正。
+
+**规模与版本号**：
+
+- 数据源 **9 个不变**；工具由 **21 → 27 个**（不含条件第 9 项）/ **28 个**（含之）。CORE 单源工具数由 1 → 8 或 9。
+- 本轮**纯增量**：不删除、不重命名、不改动其余 8 个数据源现有的 20 个工具的名称/参数/返回结构/注册顺序（增强的 `core_work_search_by_query` 工具名与返回结构也保持不变，仅新增可选参数并放宽 `max_results` 上限）。
+- 目标版本号 **`3.5.0`**（当前 `3.4.0`）。**该版本号由 `goal.md` 标注为"默认值、未获用户逐字确认"**，比照 v3.2.0 步骤 53 先例：若用户另有指定，只需替换 `pyproject.toml` 与 `src/uniarticles/__init__.py` 两处字面值。
+- `project-docs/teach.md` 按用户既有指示**不更新**（已滞后多轮，属已知失真，非本轮缺陷）。
+
+**本计划书组织的步骤 69～77**：
+
+- 步骤 69：CORE v3 新端点与响应字段真实探测（编码前置，产出 `_verify/core_api_field_probe.py`）。
+- 步骤 70：`core.py` 公共骨架重构（标识符解析、限流头解析、单条/多条响应构造、公共请求入口）。
+- 步骤 71：增强现有工具 `core_work_search_by_query`（POST + `exclude` + `offset` + 上限 100 + 可执行 429 文案）。
+- 步骤 72：新增 `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_stats_by_id`（works 维度 3 项）。
+- 步骤 73（编号顺延说明见该步骤）：新增 `core_work_aggregate_by_query`（聚合统计维度）。
+- 步骤 74：新增 `core_data_provider_search_by_query` / `core_data_provider_detail_by_id` / `core_output_detail_by_id`（机构库 + output 详情维度）。
+- 步骤 75：新增 `core_output_search_by_query`（条件纳入，含击杀条件与回退处理）。
+- 步骤 76：文档同步（`README.md` / `README_EN.md` / `AGENTS.md` / `_verify/tool_availability_check.py` + 限流与文档入口口径更正）。
+- 步骤 77：版本号提升至 `3.5.0` + `buildlog.md` 记录 + 整体回归验证（v3.5.0 交付检查点）。
+
+步骤 1～68（v2.0～v3.4.0 构建，含已发布的 v3.4.0）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
 ## 可行性分析
+
+**v3.5.0 增补（CORE 扩展，2026-09-19）**：本轮不引入任何新技术栈或新依赖——8 个新增工具全部复用 `core.py` 现有的 `httpx.AsyncClient` + `_ok`/`_err` + `@server.tool()` 模式，端点可用性已由三轮真实探测（两个环境、共 7 次连续 200）与官方 OpenAPI 规范交叉确认，技术可行性无阻断项。风险集中在三处，均已在步骤 69～77 中给出应对：(1) `POST /v3/search/works/aggregate` 的**请求体 schema 从未在真实探测中覆盖**（现有 `_verify/core_api_probe.py` 未含该端点），故把真实探测列为强制前置步骤 69；(2) CORE 响应对非 JSON 错误体、空 `message` 的 404、以及 ISO 时间戳格式的重试头都不友好，需在归一化层统一兜底；(3) 工具数由 21 增至 27/28，与本项目 v3.2.0–v3.4.0 的收缩趋势相反，但新增维度（facet 分布、机构库画像）不与现有任何源重叠，属**新查询维度**而非"又一个关键词检索源"，已在范围小节中记录该判断依据。
 
 ### 技术可行性评估
 - 两个新工具接入的端点（`content/serial/title/issn/{issn}`、`content/object/{id_type}/{id}`）均已在 goal.md 阶段用真实 `SCOPUS_API_KEY` 实测返回 HTTP 200，技术可行性已验证，无需额外可行性摸底。
@@ -2531,6 +2585,745 @@ except Exception as exc:
 - 构建须用 `uv build`（遵循 `uv.lock` 锁定版本），不要改用全局 `python -m build`，以免产物元数据来自未经锁定验证的环境。
 - 发布后若发现产物内容缺陷，只能 bump 至 `3.4.1` 重发，**不能重发 `3.4.0`**。
 - `pyproject.toml` 的 sdist `exclude` 中仍列有已删除的 `/CLAUDE.md`，属无害冗余，可选清理，不属本步门禁。
+
+---
+
+### 步骤 69：CORE v3 新端点与响应字段真实探测（v3.5.0，QA-R021，**编码前置步骤，必须最先执行**）
+
+#### 目标说明
+步骤 70～75 的全部参数签名与归一化字段必须建立在**真实响应结构**之上，不得依据官方文档字面描述或历史备注凭空定义。现有 `_verify/core_api_probe.py`（commit `ad95420`）只覆盖两类请求：**连通性与复测项**（`GET /v3/search/works`、`GET /v3/works/{裸 DOI}`、`POST /v3/search/works` + `exclude`、`GET /v3/data-providers/{id}`、`GET /v3/outputs/{id}`、以及 journals / discover / recommend / TEI / outputs 检索的复测），**没有**覆盖本轮新增工具依赖的以下结构与字段：
+
+- `POST /v3/search/works/aggregate` 的**请求体 schema**（聚合维度字段名、是否支持 `limit`、`q` 与 `filter` 的关系）——这是本轮**唯一一处从未被真实探测过的请求体**；
+- `GET /v3/works/{id}/outputs`、`/works/{id}/stats` 的响应字段；
+- `GET /v3/data-providers/{id}/stats`、`/data-providers/{id}/outputs` 的响应字段；
+- `GET /v3/search/data-providers?q=` 的响应结构；
+- 以上各端点在 `offset` / `limit` 边界上的真实行为（`limit=100` 是否被接受、越界 `offset` 是空结果还是 400）。
+
+本步骤产出一个**独立、纯标准库、只读**的诊断脚本并按 `goal.md` QA-R013 的既有流程交用户在真实网络环境复测；同时它也是 `project-builder-cn` 自身编码时的字段依据。**不得**在本步骤之前编写任何归一化代码。
+
+> **命名与流程说明**：本步骤**新增** `_verify/core_api_field_probe.py`，**不修改、不替换** `_verify/core_api_probe.py`（后者是 QA-R021 复测的存档证据，须原样保留）。两者的分工是：前者回答"新端点/新字段长什么样"，后者回答"此前的失败是不是环境噪声"。
+
+#### 具体操作
+1. 新建 `_verify/core_api_field_probe.py`，沿用 `_verify/core_api_probe.py` 的三个既有约定（照抄其实现风格，不要另起一套）：
+   - **零第三方依赖**（仅 `argparse`/`json`/`os`/`re`/`socket`/`ssl`/`sys`/`time`/`urllib`），保证用户在未安装项目依赖的环境里也能直接 `python _verify/core_api_field_probe.py`；
+   - **输出脱敏**：所有输出走一个 `_print()` 包装器，先对 IPv4 点分十进制后两段打码，再把 API Key 明文替换为 `***API_KEY***`；Key 读取顺序为环境变量 `CORE_API_KEY` → 仓库根目录 `.env`，都取不到时以匿名请求继续跑完并显式提示该档位更低；
+   - **只读**：不改任何文件、不下载任何二进制、不落地任何内容。
+2. 脚本的请求清单（建议一次性跑完，允许 `--only` 选择子集）应至少覆盖下表；每项记录 `status` / `elapsed` / 字节数 / 三个限流响应头 / 响应体前 N 字节（截断，防 1MB+ 的 `fullText` 刷屏）：
+
+| 编号 | 请求 | 探测目的 |
+|---|---|---|
+| F1 | `GET /v3/search/works?q=machine learning&limit=2` | 对照组：确认本机网络与鉴权正常 |
+| F2 | `POST /v3/search/works`，body `{"q": "...", "limit": 2, "exclude": ["fullText"]}` | 确认 `exclude` 与响应体积收益（对照 F1） |
+| F3 | `POST /v3/search/works`，body 追加 `"offset": 2` | 验证 `offset` 分页被接受、且与 `limit` 组合后的结果条数 |
+| F4 | `POST /v3/search/works`，body `limit=100` | 验证步骤 71 把上限提到 100 的前提 |
+| F5 | `POST /v3/search/works/aggregate`，body `{"q": "machine learning"}` | **核心待测项**：确认聚合请求体最小可用集；若 400/422，逐一试 `{"q": ..., "limit": ...}`、`{"q": ..., "aggregations": [...]}` 等候选形态并记录上游错误体 |
+| F6 | 同上，body 增加显式维度字段（如 `"aggregations": ["yearPublished","authors","publisher"]`） | 确认维度字段名与"是否可指定维度"；与 F5 对照得出最终签名 |
+| F7 | `GET /v3/works/171513974` | 取 `dataProviders` / `outputs` / `identifiers` 真实字段（含 `core_id` / `doi` / `oai` 等键名） |
+| F8 | `GET /v3/works/171513974/outputs` | `core_work_outputs_by_id` 的字段依据（`downloadUrl`/`license`/`fulltextStatus`/`dataProvider` 等确切键名与嵌套层级） |
+| F9 | `GET /v3/works/171513974/stats` 与 `GET /v3/works/10.1038/nature12373/stats` | `core_work_stats_by_id` 字段依据 + 确认"DOI 亦可" |
+| F10 | `GET /v3/works/10.1000/does-not-exist-xyz` | 未知 DOI 的 404 响应体形态（历史记录为 `{"message":""}`，需复核是否为空 message，供兜底文案使用） |
+| F11 | `GET /v3/works/10.1038/nature12373/outputs` | 复核"子资源只接受数字 CORE ID、DOI 会 404"这一边界（`core_work_outputs_by_id` 的输入校验依据） |
+| F12 | `GET /v3/search/data-providers?q=university&limit=2` | `core_data_provider_search_by_query` 字段依据 + 该端点的 `limit` 上限 |
+| F13 | `GET /v3/data-providers/1630` | `core_data_provider_detail_by_id` 主字段依据 |
+| F14 | `GET /v3/data-providers/1630/stats` | 统计子资源字段依据（决定是否并入详情工具或单独暴露参数） |
+| F15 | `GET /v3/data-providers/1630/outputs?limit=2` | 机构库下 outputs 字段依据 + 确认 `sort` 取值 |
+| F16 | `GET /v3/outputs/29197653` | `core_output_detail_by_id` 字段依据（`license`/`sdg`/`repositories`/`fulltextStatus`/`sourceFulltextUrls` 等确切键名） |
+| F17 | `GET /v3/search/outputs?q=machine learning&limit=2`、`?q=title:"machine learning"&limit=2`、`?q=doi:"10.1007/s10994-024-06619-7"&limit=2` | **第 9 项工具（条件纳入）的击杀条件判据**：三种查询组合必须全部 200 方可纳入 |
+
+3. 脚本末尾输出一段"诊断结论"，把 F17 的三种组合结果显式判定为"可纳入 / 不纳入"两种结论之一（与 `core_api_probe.py` 的 `_conclusions()` 同样风格），并对 F5/F6 给出"聚合请求体的确证形态"或"聚合端点不可用，需回退方案"。
+4. 脚本写好后先由 `project-builder-cn` 在本机跑一遍（若本机同样出现网络/HTTP 异常，**不得据此定性端点失败**，按 QA-R013 交用户复测）；结果（尤其 F5/F6/F8/F16/F17）如实抄录进 `project-docs/buildlog.md` 的本步骤条目，作为步骤 70～75 的编码依据。
+
+#### 验证方法
+- `python _verify/core_api_field_probe.py --help` 正常输出；不带参数可完整跑完（有 key 与无 key 两种情形都不崩）。
+- 输出中不含任何未脱敏的 IPv4 明文与 API Key 明文（逐行核对关键字 `104.` / `Bearer`）。
+- F1/F2 至少一项 200（否则说明本机网络问题，结论不可用于编码依据）。
+- `git status --short` 显示新增文件仅为 `_verify/core_api_field_probe.py`（未被 `.gitignore` 遮蔽；若被遮蔽须 `git add -f`，与既有 `_verify/` 脚本的处理方式一致）。
+- 关键探测结果（聚合请求体确证形态、F17 三组合状态码）已写入 `buildlog.md`。
+
+#### 风险提示
+- **聚合端点是本轮最大的未验证点**：`POST /v3/search/works/aggregate` 的请求体此前从未被真实请求验证过；若 F5/F6 全部失败，**不得**擅自把该工具改为"猜测的请求体"上线，应按 QA-R013 记录失败证据、交用户复测，并准备回退方案（步骤 73 的备选：本轮缩减为 8 项工具，聚合维度顺延到后续版本）。
+- 该端点的响应是**字典而非列表**（历史记录为 `{"aggregations":{"yearPublished":{"2019":575,...}}}`），与项目既有"`items` 为列表"的约定不同——归一化方案必须在拿到真实结构后再定（见步骤 73），本步骤**只记录结构、不写转换代码**。
+- CORE 对 4xx/5xx 可能返回非 JSON 或空 `message` 的错误体（F10 即为此设计），脚本解析响应体时须容错，避免诊断脚本自己崩在 JSON 解析上。
+- `limit=100` 的 outputs/works 响应体可达 1 MB 以上（`fullText` 内联），脚本必须截断读取，否则在慢网络上极易超时并污染结论。
+- 本脚本会消耗 CORE token（个人档 1,000 tokens/天）；17 项请求属轻量范围，但**不要**把它写成循环压测或批量扫描。
+- 严禁把真实 Key 写入脚本、命令回显或 buildlog——脚本只从环境变量/`.env` 读取，不打印。
+
+---
+
+### 步骤 70：`core.py` 公共骨架重构（v3.5.0）
+
+#### 目标说明
+步骤 71～75 会在同一文件内新注册 8 个工具，如果每个工具各自拼 URL、各自处理 429、各自拼错误文案，`core.py` 会迅速退化成一堆重复代码。本步骤先把公共能力抽出来，使后续 5 个编码步骤只写"参数校验 + 调用 + 归一化"三段。**本步骤不改变任何已注册工具的名称、参数或返回结构**（增强本身放在步骤 71）。
+
+本步骤同时落地 QA-R021 明确要求的**限流口径更正**（原注释与文案"无 key 约 5 次请求后约 10 分钟锁死"与官方现行 token 制不符）。
+
+#### 具体操作
+1. `USER_AGENT` 由 `UniArticlesMCP/3.0.0` 更新为 `UniArticlesMCP/3.5.0`（同一 URL 后缀不变）。**不要**顺手去改 `crossref.py`/`doaj.py`/`europepmc.py`/`openaire.py`/`pubmed.py`/`scopus.py` 里各自的 `USER_AGENT` 版本串——那是既存的版本串漂移问题（多个源仍写 3.0.0/3.1.0/0.1.0），影响面超出本轮授权范围，按 v3.1.0 步骤 9"不蔓延"的先例留待后续独立事项；如需一并处理，须先取得用户同意。
+2. URL 常量改为基址 + 端点拼装的形式，避免每个工具各自硬编码长字符串：
+```python
+BASE_URL = "https://api.core.ac.uk/v3"
+```
+并在各工具内部用 `f"{BASE_URL}/works/{identifier}"` 这类写法拼装；原 `BASE_URL = "https://api.core.ac.uk/v3/search/works"` 常量被替换（注意：该常量此前只在 `_search()` 内部使用，替换后须全文确认无残留引用）。
+3. 公共响应构造统一为三个 helper，并对**单条结果**明确使用 `items` 单元素列表以保持全局响应形状不变：
+```python
+def _ok(query: str, items: list[dict]) -> dict:
+    """标准成功响应：items 恒为列表（跨全部数据源统一形状）。"""
+    return {"ok": True, "source": "core", "query": query, "count": len(items), "items": items, "error": None}
+
+
+def _ok_one(query: str, item: dict) -> dict:
+    """单条记录类工具（详情 / stats）专用：语义由调用方写入工具 docstring。"""
+    return _ok(query=query, items=[item])
+
+
+def _err(query: str, message: str) -> dict:
+    return {"ok": False, "source": "core", "query": query, "count": 0, "items": [], "error": message}
+```
+4. 新增**标识符解析 helper**，把"哪些端点接受 DOI、哪些只接受数字 CORE ID"这条真实边界固化在一处，并给出可操作错误文案：
+```python
+_CORE_ID_RE = re.compile(r"^\d+$")
+
+
+def _is_core_id(identifier: str) -> bool:
+    return bool(_CORE_ID_RE.match(identifier.strip()))
+
+
+def _require_core_id(identifier: str, *, tool: str) -> str | None:
+    """返回规范化后的数字 CORE ID；若调用方传了 DOI 等非数字标识符则返回 None。
+
+    CORE 的 works 子资源（/outputs）只接受数字 CORE ID——实测传裸 DOI 会 404，
+    因此调用方需要在工具层给出明确提示，而不是把上游 404 原样抛给 LLM。
+    """
+    candidate = identifier.strip()
+    return candidate if _is_core_id(candidate) else None
+```
+5. 新增**限流响应解析 helper**（替换既有"Retry after: 原样字符串"的文案）：
+```python
+from datetime import datetime, timezone
+
+
+def _rate_limit_message(response: httpx.Response) -> str:
+    """把 CORE 的限流响应头翻译成可执行的中文提示。
+
+    X-RateLimit-Retry-After 实测是 ISO 时间戳（如 2026-09-18T15:35:09+0000），
+    不是秒数；解析失败时原样回显，绝不抛异常。官方档位：未认证 100 tokens/天、
+    10 次/分钟且不提供 fullText；注册个人 1,000 tokens/天、25 次/分钟。
+    """
+    raw = response.headers.get("x-ratelimit-retry-after") or response.headers.get("Retry-After")
+    limit = response.headers.get("x-ratelimit-limit")
+    remaining = response.headers.get("x-ratelimit-remaining")
+    when = raw or "未知"
+    if raw:
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            seconds = (parsed - datetime.now(parsed.tzinfo or timezone.utc)).total_seconds()
+            if seconds > 0:
+                when = f"{raw}（约 {int(seconds)} 秒后）"
+        except ValueError:
+            pass
+    hint = "" if settings.core_api_key else " 配置 CORE_API_KEY 可获得更高额度（未认证档：100 tokens/天、10 次/分钟，且不提供 fullText）。"
+    return f"CORE 触发限流（HTTP 429）。可重试时间：{when}；额度：limit={limit or '未知'} / remaining={remaining or '未知'}。{hint}".strip()
+```
+6. 新增统一的**错误响应工厂**，覆盖三类真实失败：
+```python
+def _error_for(response: httpx.Response, *, query: str) -> dict:
+    if response.status_code == 429:
+        return _err(query=query, message=_rate_limit_message(response))
+    if response.status_code == 404:
+        return _err(query=query, message=f"CORE 未找到该记录（HTTP 404）。请确认标识符存在且端点接受该标识符类型；{query!r} 对应的记录可能未收录。")
+    try:
+        detail = response.json()
+    except ValueError:
+        detail = (response.text or "").strip()[:200]
+    message = detail.get("message") if isinstance(detail, dict) else detail
+    return _err(query=query, message=f"CORE 请求失败（HTTP {response.status_code}）：{message or '上游未返回错误说明'}")
+```
+   **注意**：`raise_for_status()` 不再作为主路径——它抛出的英文异常信息既不带限流重试时间，也不带可读的上游错误体，全部改用 `_error_for()` 显式分支。
+7. 新增统一的**公共请求入口**，把 `follow_redirects`、超时、headers、错误转换集中处理（CORE 偶发 301 重定向，既有代码已开 `follow_redirects=True`，必须保留）：
+```python
+async def _request(method: str, path: str, *, query: str, params: dict | None = None, json_body: dict | None = None) -> dict:
+    """所有 CORE 工具的唯一出口：成功返回归一化后的原始 payload，失败返回 _err 结构。
+
+    返回值为 dict：成功时是 {"ok": True, "payload": <原始 JSON>}，失败时就是 _err(...)。
+    """
+    url = f"{BASE_URL}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0, headers=_headers(), follow_redirects=True) as client:
+            response = await client.request(method, url, params=params, json=json_body)
+        if response.status_code != 200:
+            return _error_for(response, query=query)
+        return {"ok": True, "payload": response.json()}
+    except Exception as exc:  # noqa: BLE001 - 工具层必须把任何异常转成 _err，不能让它冒泡
+        return _err(query=query, message=f"CORE 请求异常：{type(exc).__name__}: {exc}")
+```
+   `_on_error(response, query)` 判定与 `{ok: True, payload}` 解包在调用方统一为：
+```python
+result = await _request("GET", f"/works/{identifier}", query=identifier)
+if not result["ok"]:
+    return result          # 已是 _err 结构，直接回给调用方
+payload = result["payload"]
+```
+8. 新增/整理**归一化 helper**（字段名必须在步骤 69 真实探测后最终确认；下列键名来自 2026-09-18 探测记录，仍须复核）：
+   - `_normalize_work(work: dict) -> dict`：保留既有字段语义（`title`/`authors`/`abstract`/`doi`/`cited_by_count`/`download_url`/`arxiv_id`/`pubmed_id`），并把 `authors` 的取值改为**兼容 dict 与 str 两种元素形态**（不同端点返回的作者元素形态可能不一致：详情端点历史上出现过对象数组），其余字段**按步骤 69 实测结构增补**（如 `year_published`/`publisher`/`journals`/`data_providers`/`core_id`）。
+   - `_normalize_output(output: dict) -> dict`：`title`/`doi`/`download_url`/`source_fulltext_urls`/`license`/`fulltext_status`/`repositories`/`sdg`/`year_published`/`data_provider_id`。
+   - `_normalize_data_provider(provider: dict) -> dict`：`id`/`name`/`url`/`type`/`metadata_count`/`fulltext_count`（字段名以 F13/F12 实测为准）。
+   - **三个归一化函数都不得把 `fullText` 写入返回值**——这是项目"只给元数据与链接"的硬边界；即便上游返回了也必须丢弃（现有 `_normalize()` 已如此，重构时不得回退）。
+
+#### 验证方法
+- `uv run python -c "from uniarticles.sources import core; print(core._is_core_id('171513974'), core._is_core_id('10.1038/nature12373'))"` 输出 `True False`。
+- `uv run python -c "import uniarticles.sources.core as c; print(c.BASE_URL)"` 输出 `https://api.core.ac.uk/v3`。
+- 静态检查：`rg -n "raise_for_status|_normalize\(" src/uniarticles/sources/core.py` 在本步骤结束时不再出现 `raise_for_status`（被 `_error_for` 取代）；`_normalize` 已按用途拆成三个函数且被步骤 71～75 调用。
+- `create_server()` 后 `list_tools()` 仍为 **21 个工具**（本步骤不新增工具，仅重构）；`core_work_search_by_query` 的入参签名在本步骤结束时**尚未**改变（增强在步骤 71）。
+- 已用真实 key 跑通至少一次 `GET /v3/search/works`，确认重构后 `items` 字段内容与重构前一致（对照 `_verify/tool_availability_check.py` 的 `core_work_search_by_query` 调用）。
+
+#### 风险提示
+- **重构与增强混在一起最容易出回归**：本步骤刻意不改变任何工具签名与输出字段；如执行中发现"顺手改一下更顺"，应放到步骤 71 之后单独进行，避免把签名变更混进纯重构导致难以定位回归来源。
+- `_error_for()` 的 404 分支文案要能同时覆盖两类完全不同的 404：**记录不存在**（F10，空 `message`）与**端点不接受该标识符类型**（F11，DOI 打到 `/outputs`）。二者的区分在步骤 72 由调用方预校验完成，本步骤的兜底文案只是最后一道防线。
+- `datetime.fromisoformat()` 在 Python 3.10 上对 `+0000`（无冒号时区）与 `Z` 的解析支持存在版本差异：代码必须 `try/except ValueError` 兜底为原样回显字符串，**不得**引入 `dateutil` 等新依赖（本项目坚持零新增依赖）。
+- `httpx.AsyncClient` 每个工具各自开一次仍是既有模式（`scopus.py`/`pubmed.py` 均如此），本步骤沿用，不引入连接池/全局 client——避免在无自动化测试的项目里改变并发行为面。
+- `_headers()` 在未配置 `CORE_API_KEY` 时不带 `Authorization`，属预期（匿名档可用）；不要因为"新工具都依赖 key"就改成缺失即报错——本项目所有工具无条件注册，缺失凭证只在**调用**时以 `_err` 表现。
+- 本步骤**不要**改动 `sources/__init__.py` 的注册顺序或分组注释（CORE 仍在"v3.0.0 新增：通用检索型"分组内，文件级顺序不变）。
+
+---
+
+### 步骤 71：增强现有工具 `core_work_search_by_query`（v3.5.0，QA-R021 第 1 项）
+
+#### 目标说明
+这是 C 档中**唯一的"修既有缺陷"项**（其余 8 项都是纯新增），也是性价比最高的一项。现有实现的真实缺陷有两处，均有实测证据：
+
+1. **性能浪费**：works 检索响应**默认内联 `fullText`**。实测 `GET /v3/search/works?q=machine learning&limit=25`（正是现工具的 `max_results` 上限）→ **676,692 字节 / 4.8 秒**，其中 `fullText` 占 **536,574 字符**，而 `_normalize()` 拿到之后又把整个字段丢弃。改用 `POST /v3/search/works` + `exclude:["fullText"]` 后同样 25 条 → **112,549 字节 / 2.8 秒**（体积约 1/6、耗时约六折）。
+2. **能力上限偏低**：现有 `max_results` 被硬夹在 25（`bounded = max(1, min(max_results, 25))`），且没有分页参数；实测 `limit=100` 被 CORE 接受。
+
+本步骤**保持工具名 `core_work_search_by_query` 与响应结构不变**（`items` 仍是 `_normalize_work()` 产出的列表），只新增可选参数、放宽上限、切换请求方式、改进错误文案——因此对现有调用方是**向后兼容的增强**，不需要 README 里的"破坏性变更"警示。
+
+#### 具体操作
+1. 把 `_search()` 从 GET 改为 POST，请求体按步骤 69 实测确认的字段拼装（下列为基准形态）：
+```python
+async def _search(query: str, max_results: int, offset: int = 0) -> dict:
+    body = {"q": query, "limit": max_results, "offset": offset, "exclude": ["fullText"]}
+    result = await _request("POST", "/search/works", query=query, json_body=body)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    items = [_normalize_work(w) for w in payload.get("results", []) or [] if isinstance(w, dict)]
+    return _ok(query=query, items=items)
+```
+2. 工具签名增加一个**可选**分页参数（默认 0，保持既有调用方行为不变），并放宽上限：
+```python
+@server.tool()
+async def core_work_search_by_query(query: str, max_results: int = 10, offset: int = 0) -> dict:
+    """按关键词检索 CORE（全球开放获取聚合库）。
+
+    query 支持 CORE 自身的查询语法（字段限定、布尔、范围、短语/关键词匹配）。
+    max_results 上限 100（CORE 单次上限）；offset 用于翻页。返回体已剔除 fullText
+    只保留题录与下载链接；无 Key 亦可用但限流严格（官方未认证档 100 tokens/天、
+    10 次/分钟且不提供 fullText），配置 CORE_API_KEY 后为 1,000 tokens/天。
+    """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return _err(query=query, message="query must not be empty")
+    bounded = max(1, min(max_results, 100))
+    bounded_offset = max(0, offset)
+    try:
+        return await _search(query=normalized_query, max_results=bounded, offset=bounded_offset)
+    except Exception as exc:
+        return _err(query=normalized_query, message=f"CORE 请求异常：{type(exc).__name__}: {exc}")
+```
+3. **同步更新 docstring 中的限流口径**——现有 docstring 写的"~5 requests before a ~10-minute rate-limit lockout"与官方现行 token 制不符，必须按步骤 70 的更正口径重写（如上方示例）。`README.md` / `README_EN.md` / `AGENTS.md` 中的同类表述在步骤 76 统一处理。
+4. 注释里"without a key CORE locks out after ~5 requests for ~10 minutes"（`_search()` 内 429 分支的旧注释）删除或改写，改为指向 `_rate_limit_message()`；429 文案不再手写，统一由步骤 70 的 helper 产出。
+5. 明确**不暴露** `stats=`（GET 端点的统计参数）与 `sort` / `filter` / `search_fields` / CSV 导出等 POST 字段：本轮范围内只加 `offset` 与 `exclude`；其余字段留待有真实需求时再评估，避免一次把工具参数面撑得过大（与 v3.2.0–v3.4.0"控制工具选择噪声"的取向一致）。
+
+#### 验证方法
+- `list_tools()` 中 `core_work_search_by_query` 的入参为 `query` / `max_results` / `offset`（`offset` 有默认值）；**工具总数本步骤后仍为 21 个**（本步骤只增强、不新增，总数从步骤 72 起才变化）。
+- 真实调用对照（需 `.env` 中真实 key）：
+  - `core_work_search_by_query(query="machine learning", max_results=25)` 的返回条数为 25，且耗时与响应体相较重构前明显下降（可用 `_verify/tool_availability_check.py` 的耗时输出对照；预期从约 4.8 s / 676 KB 降至约 2.8 s / 112 KB 量级）。
+  - `core_work_search_by_query(query="machine learning", max_results=100)` 返回 100 条且**不报错**（旧上限会静默夹到 25，本条是新旧行为差异的直接判据）。
+  - `offset=2` 与 `offset=0` 的前 2 条不重复（分页确实生效）。
+  - 空 `query` 返回 `ok=False` 且 `error` 明确；`max_results=999` 被夹到 100；`offset=-5` 被夹到 0。
+- 429 文案检查（可临时用无效 key 或连续请求触发）：错误信息包含 `HTTP 429`、可重试时间，且**不含**旧文案"~5 requests / ~10 minutes"。
+
+#### 风险提示
+- **`POST /v3/search/works` 对空 `query` 的行为未验证**：现有实现是在工具层先挡掉空串（`query must not be empty`），本步骤必须保留这道前置校验，不能依赖上游 400。
+- **`exclude` 与 `offset` 的实际交互以步骤 69 的 F3/F4 为准**：若探测发现 `offset` 不被接受或与 `limit` 有额外约束，以探测结果调整参数名/边界，**不得**沿用文档字面描述硬写。
+- 上限从 25 提到 100 会显著放大单次响应体（`exclude` 后 100 条仍可能达数百 KB），对 LLM 客户端的上下文是真实成本。docstring 必须明示"上限 100，请按需设置"，默认值仍保留 10。
+- 若步骤 69 发现 `exclude` 在 POST 路径下**不生效**（与 GET 表现不同），应回退为"仍然剔除 `fullText` 但接受较大响应体"，并在 buildlog 如实记录——不得为了性能指标而编造已生效的结论。
+- 本步骤**不得**改动 `source` 字段值（仍是 `"core"`）、不得改动 `_ok`/`_err` 的键集合，也不得删除 `arxiv_id`/`pubmed_id`/`cited_by_count` 等既有字段——这些字段是既有调用方的可见契约。
+
+---
+
+### 步骤 72：新增 works 维度 3 个工具（v3.5.0，QA-R021 第 2～4 项）
+
+#### 目标说明
+现有 CORE 工具只能"按关键词检索"，拿不到 CORE 自身的**作品详情**、**机构库实例**与**生命周期**。本步骤补齐这三个维度（C 档 (b) 层）：
+
+- `core_work_detail_by_identifier`：给定一篇作品，取它的完整题录（含 `dataProviders` / `outputs` / `identifiers` 等检索结果里没有的字段）；
+- `core_work_outputs_by_id`：取该作品在**各机构库中的版本实例**（同一篇论文的多个采集副本，含 `downloadUrl` / `license` / `fulltextStatus` / `dataProvider`）；
+- `core_work_stats_by_id`：取生命周期时间戳（deposited / published / updated / accepted）。
+
+三者的输入语义有**实测确认的差异**，必须在工具层就区分开，不能把上游 404 直接透传给调用方：
+
+| 工具 | 接受的标识符 | 实测依据 |
+|---|---|---|
+| `core_work_detail_by_identifier` | **裸 DOI 或数字 CORE ID 均可** | `GET /v3/works/10.1038/nature12373` → 200；带 `doi:` 前缀写法 → **404 No route found**（前缀不通、裸 DOI 通） |
+| `core_work_outputs_by_id` | **只接受数字 CORE ID** | `/works/{id}/outputs` → 200；`/works/{裸 DOI}/outputs` → **404** |
+| `core_work_stats_by_id` | **裸 DOI 或数字 CORE ID 均可** | `/works/{裸 DOI}/stats` → 200（返回体含内部 CORE id） |
+
+#### 具体操作
+1. **`core_work_detail_by_identifier`**：
+```python
+@server.tool()
+async def core_work_detail_by_identifier(identifier: str) -> dict:
+    """按裸 DOI（如 10.1038/nature12373）或数字 CORE ID 取 CORE 作品详情。
+
+    注意 DOI 必须使用裸写法，不要加 "doi:" 前缀（上游对前缀写法返回 404）。
+    详情比检索结果多出 dataProviders / outputs / identifiers 等字段。
+    """
+    candidate = identifier.strip()
+    if not candidate:
+        return _err(query=identifier, message="identifier must not be empty")
+    result = await _request("GET", f"/works/{candidate}", query=candidate)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    if not isinstance(payload, dict):
+        return _err(query=candidate, message="CORE 返回了非预期的详情结构（不是单个对象）。")
+    return _ok_one(query=candidate, item=_normalize_work(payload))
+```
+   已知边界：未知 DOI 的 404 响应体是**空 message**（`{"message":""}`），因此 `_error_for()` 的 404 文案（步骤 70）是兜底关键；本工具**不得**依赖上游 message 报错。
+2. **`core_work_outputs_by_id`**：先在工具层做数字 ID 预校验，命中 DOI 时返回**可操作**的提示而不是 404：
+```python
+@server.tool()
+async def core_work_outputs_by_id(identifier: str) -> dict:
+    """取某个 CORE 作品在各机构库中的版本实例列表（未去重的采集副本）。
+
+    identifier 必须是**数字 CORE ID**（如 171513974）；该子资源不接受 DOI，
+    传入 DOI 会得到 404。若手上只有 DOI，请先用 core_work_detail_by_identifier
+    取详情，再从 identifiers / core_id 字段拿到数字 ID。返回各项含 downloadUrl /
+    license / fulltextStatus / dataProvider，可用于判断同一论文有多少机构库版本。
+    """
+    candidate = identifier.strip()
+    if not candidate:
+        return _err(query=identifier, message="identifier must not be empty")
+    if not _is_core_id(candidate):
+        return _err(
+            query=candidate,
+            message=(
+                f"该端点只接受数字 CORE ID，收到 {candidate!r}。"
+                "请先用 core_work_detail_by_identifier 按 DOI 取详情，"
+                "再从返回的 identifiers / core_id 字段取得数字 ID 后重试。"
+            ),
+        )
+    result = await _request("GET", f"/works/{candidate}/outputs", query=candidate)
+    ...
+    items = [_normalize_output(o) for o in _as_list(payload) if isinstance(o, dict)]
+    return _ok(query=candidate, items=items)
+```
+   `_as_list(payload)` 是步骤 70 之外的**新增小 helper**（若响应是 `{"results": [...]}` 或裸列表两种形态之一，均能取出列表）——其确切形态由步骤 69 的 F8 决定，不得预先假设。
+3. **`core_work_stats_by_id`**：DOI 与数字 ID 均可：
+```python
+@server.tool()
+async def core_work_stats_by_id(identifier: str) -> dict:
+    """取 CORE 作品的生命周期时间戳（deposited / published / updated / accepted）。
+
+    标识符可为裸 DOI 或数字 CORE ID。返回体为单个对象（items 长度为 1）。
+    """
+    candidate = identifier.strip()
+    if not candidate:
+        return _err(query=identifier, message="identifier must not be empty")
+    result = await _request("GET", f"/works/{candidate}/stats", query=candidate)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    if not isinstance(payload, dict):
+        return _err(query=candidate, message="CORE 返回了非预期的时间戳结构。")
+    return _ok_one(query=candidate, item=_normalize_work_stats(payload))
+```
+   `_normalize_work_stats()` 按 F9 实测键名提取（历史记录显示响应体约 126 字节，字段极少）；**不得**把 `id`/`core_id` 之外的推断字段写进返回值。
+4. 三个工具的 docstring 都必须写明**接受哪种标识符**，这是本步骤最容易被 LLM 调用方踩坑的地方（DOI 打在 `/outputs` 上 404）；同时不要为了"统一"把 `core_work_outputs_by_id` 的参数也改名为 `identifier` 后假装三者等价。
+5. 本步骤结束时 `list_tools()` 应为 **24 个**（21 + 3）。
+
+#### 验证方法
+- 真实调用（`.env` 中真实 key）：
+  - `core_work_detail_by_identifier("10.1038/nature12373")` → `ok=True`，`items` 长度为 1，标题为 Nature 那篇论文的正确标题；
+  - `core_work_detail_by_identifier("171513974")` → `ok=True`；
+  - `core_work_detail_by_identifier("10.1000/does-not-exist-xyz")` → `ok=False`，`error` 中**不含**空字符串（走兜底文案）；
+  - `core_work_outputs_by_id("171513974")` → `ok=True`，各项含 `download_url`/`license`/`fulltext_status`/`data_provider` 中至少若干键；
+  - `core_work_outputs_by_id("10.1038/nature12373")` → `ok=False`，错误文案含"只接受数字 CORE ID"并指向 `core_work_detail_by_identifier`；
+  - `core_work_stats_by_id("10.1038/nature12373")` 与 `core_work_stats_by_id("171513974")` 均 `ok=True`。
+- 返回结构一致性：三个工具的响应键集合与其余全部工具完全一致（`ok`/`source`/`query`/`count`/`items`/`error`），`source` 恒为 `"core"`。
+- `items` 中**不出现** `fullText` / `full_text` 键（硬边界回归检查）。
+
+#### 风险提示
+- **`/works/{identifier}` 与 `/works/{id}/outputs` 的标识符规则相反**（前者接受 DOI、后者只收数字 ID），这是本轮最容易写错的点；测试用例必须同时覆盖"DOI 打详情"与"DOI 打 outputs"两侧。
+- 详情端点响应体较大（历史记录 27,681 字节），其中可能内联 `fullText`——归一化必须丢弃该字段；若发现去掉 `fullText` 后仍异常大，检查是否把 `outputs`/`dataProviders` 原样塞进了返回值（应只取 id/name/url 这类轻量子字段）。
+- **不要给 `core_work_detail_by_identifier` 加 `doi:` 前缀自动补全**：实测前缀写法返回 404，自动补全反而会制造失败。
+- `core_work_outputs_by_id` 的返回值是"版本实例"，**不是**"正文"；docstring 必须避免写成"获取全文"，否则会与项目硬边界的口径冲突，也误导 LLM 调用方。
+- 若 F8 显示 outputs 列表是**分页对象**（含 `totalHits` 等），是否需要 `offset` 参数以步骤 69 结果为准；本步骤默认不加深，避免无依据的复杂化。
+
+---
+
+### 步骤 73：新增 `core_work_aggregate_by_query`（v3.5.0，QA-R021 第 5 项）
+
+#### 目标说明
+这是**本项目工具集中首次出现的 facet / 分布维度**——现有 9 个源的 21 个工具清一色是"检索列表"或"按标识符取单条"，没有任何工具能回答"某个主题的文献都发在哪些年/哪些期刊/哪些机构/哪些语言"。CORE 的聚合端点正好补上这个空档，且与检索类工具互补：检索给具体文献，聚合给分布画像。
+
+本步骤的难点不在 HTTP（就是一次 POST），而在**响应形状与全局约定不一致**：聚合返回的是 `{"aggregations": {"yearPublished": {"2019": 575, ...}, ...}}` 这样的**字典嵌套**，而项目所有工具的 `items` 都是列表。如何在不破坏全局响应形状的前提下承载分布数据，是本步骤的核心设计点。
+
+> **编号说明**：C 档候选清单里 works 维度是 3 项（第 2～4 项）、聚合是第 5 项，但 `goal.md` 把"聚合统计 + 机构库维度"合并表述为 (c) 层。本计划书按**实现特征**拆成两步（步骤 73 聚合 / 步骤 74 机构库与 output 详情），与 v3.0.0"按实现复杂度分批"的既有组织方式一致；步骤 73 因此不承载 `goal.md` 中某个单独的编号，属编号顺延而非新增范围。
+
+#### 具体操作
+1. 先依据步骤 69 的 F5/F6 **确证请求体**，再写死参数。基准形态（待 F5/F6 复核）：
+```python
+async def _aggregate(query: str, fields: list[str], top_n: int) -> dict:
+    body = {"q": query}
+    if fields:
+        body["aggregations"] = fields          # 确切键名以 F6 实测为准
+    result = await _request("POST", "/search/works/aggregate", query=query, json_body=body)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    aggregations = payload.get("aggregations") if isinstance(payload, dict) else None
+    if not isinstance(aggregations, dict):
+        return _err(query=query, message="CORE 聚合返回了非预期的结构（未找到 aggregations 字段）。")
+    items = []
+    for field, buckets in aggregations.items():
+        if not isinstance(buckets, dict):
+            continue
+        ranked = sorted(buckets.items(), key=lambda kv: kv[1] if isinstance(kv[1], (int, float)) else 0, reverse=True)
+        items.append({
+            "field": field,
+            "total_buckets": len(buckets),
+            "top": [{"value": str(value), "count": count} for value, count in ranked[:top_n]],
+        })
+    return _ok(query=query, items=items)
+```
+2. 工具签名（`fields` 可选，留空表示让 CORE 返回其默认维度集；`top_n` 控制每个维度的取值条数，防响应体过大）：
+```python
+@server.tool()
+async def core_work_aggregate_by_query(query: str, fields: list[str] | None = None, top_n: int = 10) -> dict:
+    """按关键词统计 CORE 文献的分布（年 / 作者 / 机构 / 类型 / 期刊 / 语言 / 出版社）。
+
+    返回的不是文献列表，而是每个维度的取值分布：items 的每一项对应一个维度
+    （field / total_buckets / top[{value, count}]），top 按出现次数降序，最多
+    取 top_n 条（默认 10，上限 50）。query 语法与 core_work_search_by_query 相同；
+    fields 留空则由 CORE 决定返回哪些维度。
+    """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return _err(query=query, message="query must not be empty")
+    bounded_top = max(1, min(top_n, 50))
+    normalized_fields = [f.strip() for f in (fields or []) if isinstance(f, str) and f.strip()]
+    try:
+        return await _aggregate(query=normalized_query, fields=normalized_fields, top_n=bounded_top)
+    except Exception as exc:
+        return _err(query=normalized_query, message=f"CORE 请求异常：{type(exc).__name__}: {exc}")
+```
+3. **`query` 字段的语义**在本工具中与其他工具不同：聚合工具没有"单条命中"，故 `query` 应回显**输入的关键词**（与检索工具一致），而 `count` 取 `len(items)` 即"返回的维度个数"。这一约定必须写进 docstring，避免调用方误以为 `count` 是文献数——**文献总量若需要，应从各维度 top 之外的 `totalHits` 类字段获取；该字段是否存在以 F5 实测为准**，存在则以 `total_hits` 之类的顶层扩展键补充（扩展键只能新增，不得改动既有 6 个键）。
+4. `fields` 传入未知维度名时的行为（400 / 静默忽略）以 F6 为准；若上游 400，工具层应把错误文本原样透出并提示"维度名以 CORE 文档为准"。
+5. 本步骤结束时 `list_tools()` 应为 **25 个**（24 + 1）。
+
+#### 验证方法
+- `core_work_aggregate_by_query(query="machine learning")` → `ok=True`，`items` 至少含 `yearPublished` 一个维度，且 `top` 内 count 降序。
+- `core_work_aggregate_by_query(query="machine learning", fields=["yearPublished","publisher"], top_n=5)` → 返回维度数 ≤ 2、每个维度 `top` 长度 ≤ 5。
+- `core_work_aggregate_by_query(query="", ...)` → `ok=False`，错误明确。
+- 响应键集合仍为标准的 6 键（若新增 `total_hits` 之类的附加键，须在 buildlog 与 docstring 中显式记录为**新增扩展键**，且不得影响既有 6 键）。
+- 实测耗时（历史记录约 1.4 秒）可接受，无长尾。
+
+#### 风险提示
+- **这是本轮唯一的"请求体从未被真实验证"的工具**。若步骤 69 的 F5/F6 表明聚合端点不可用（400/500/超时），本步骤**必须整体回退**：本轮范围缩减为 8 项、工具总数按 27 计，并在 buildlog 与范围小节中如实标注"聚合维度因上游不可用顺延"。**严禁**用猜测的请求体硬上线，或把失败包装成"偶发"。
+- `aggregations` 字典的**规模不可控**：某些维度（如 `authors`）可能返回成千上万个桶。因此 `top_n` 截断是必需的，且 `total_buckets` 必须如实回传（让调用方知道被截断了），不得静默丢弃。
+- 桶值可能是**数字**也可能是**字符串**（如年份 `"2019"`），排序前必须做类型判断，否则 `TypeError` 会让工具直接崩。
+- 该端点消耗的 token 比普通检索高（官方口径"复杂查询约 3～5 token"），docstring 应提示按需使用；本步骤不要把它包装成"每次检索后自动调用"的组合工具。
+- 不要把它命名为 `core_work_search_by_query` 的变体或给检索工具加 `aggregate: bool` 开关——独立工具 + 独立语义更符合本项目"一工具一职责"的既有风格。
+
+---
+
+### 步骤 74：新增机构库与 output 详情 3 个工具（v3.5.0，QA-R021 第 6～8 项）
+
+#### 目标说明
+本步骤补齐 C 档 (c) 层的剩余已实测可用端点。"机构库画像"是 CORE 相对其余 8 个源的独特价值——它能回答"某篇论文来自哪些机构库/期刊源"，而这条链路的可行性已端到端实测：`/v3/works/171513974` 的 `dataProviders` 字段给出 `[{"id":1630,"name":"Intellectum (Universidad de La Sabana)","url":".../v3/data-providers/1630"}]`，再取 `/v3/data-providers/1630` 返回 200。
+
+| 工具 | 端点 | 语义 |
+|---|---|---|
+| `core_data_provider_search_by_query` | `GET /v3/search/data-providers?q=` | 按关键词检索机构库 / 期刊源 |
+| `core_data_provider_detail_by_id` | `GET /v3/data-providers/{id}`（可选 `/stats` 与 `/outputs`） | 机构库详情、统计、其下 outputs |
+| `core_output_detail_by_id` | `GET /v3/outputs/{id}` | 未去重的原始采集记录详情 |
+
+**`work` 与 `output` 的语义区别必须在 docstring 中讲清楚**，否则 LLM 调用方会随机选用两者：`work` 是 CORE **去重后的作品级记录**（同一论文只一条），`output` 是**未经去重的原始采集信号**（同一论文在各机构库各有一条，含 `license`/`sdg`/`repositories`/`fulltextStatus`）。要"这篇论文的基本信息"用 works 系工具；要"这个采集副本的许可与仓库信息"才用 outputs 系工具。
+
+#### 具体操作
+1. **`core_data_provider_search_by_query`**：
+```python
+@server.tool()
+async def core_data_provider_search_by_query(query: str, max_results: int = 10) -> dict:
+    """按关键词检索 CORE 的机构库 / 期刊源（data providers）。
+
+    返回各机构的 id / name / url / 类型与收录量统计；拿到 id 后可用
+    core_data_provider_detail_by_id 查看详情与其下 outputs。
+    """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return _err(query=query, message="query must not be empty")
+    bounded = max(1, min(max_results, 100))     # 上限以步骤 69 的 F12 实测为准
+    result = await _request("GET", "/search/data-providers", query=normalized_query, params={"q": normalized_query, "limit": bounded})
+    if not result["ok"]:
+        return result
+    items = [_normalize_data_provider(p) for p in _as_list(result["payload"]) if isinstance(p, dict)]
+    return _ok(query=normalized_query, items=items)
+```
+2. **`core_data_provider_detail_by_id`**：详情为主，`include_stats` / `include_outputs` 两个可选布尔控制是否附带子资源（默认都关，避免单次调用放大成三个请求）：
+```python
+@server.tool()
+async def core_data_provider_detail_by_id(provider_id: str, include_stats: bool = False, include_outputs: bool = False) -> dict:
+    """按数字 ID 取 CORE 机构库详情（可选附带统计与其下 outputs）。
+
+    include_stats / include_outputs 会各追加一次上游请求（更慢、消耗更多 token），
+    仅在确实需要时开启。机构库 ID 可从 core_data_provider_search_by_query 或
+    core_work_detail_by_identifier 的 dataProviders 字段获得。
+    """
+    candidate = provider_id.strip()
+    if not _is_core_id(candidate):
+        return _err(query=provider_id, message=f"机构库 ID 必须是数字（收到 {candidate!r}）。")
+    result = await _request("GET", f"/data-providers/{candidate}", query=candidate)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    if not isinstance(payload, dict):
+        return _err(query=candidate, message="CORE 返回了非预期的机构库详情结构。")
+    item = _normalize_data_provider(payload)
+    if include_stats:
+        stats = await _request("GET", f"/data-providers/{candidate}/stats", query=candidate)
+        if stats["ok"]:
+            item["stats"] = stats["payload"]           # 字段名以 F14 实测为准
+    if include_outputs:
+        outputs = await _request("GET", f"/data-providers/{candidate}/outputs", query=candidate, params={"limit": 25})
+        if outputs["ok"]:
+            item["outputs"] = [_normalize_output(o) for o in _as_list(outputs["payload"]) if isinstance(o, dict)]
+    return _ok_one(query=candidate, item=item)
+```
+   子资源失败**不改变**主结果的成功状态（`ok=True`），但必须把失败原因写进该子键（如 `item["stats"] = {"ok": False, "error": ...}`），不允许静默吞掉——这是"部分成功"在既有 `_ok`/`_err` 二元结构下的处理方式，须在 docstring 与本步骤 buildlog 中说明。
+3. **`core_output_detail_by_id`**：
+```python
+@server.tool()
+async def core_output_detail_by_id(output_id: str) -> dict:
+    """按数字 ID 取 CORE 的原始采集记录（output）详情。
+
+    output 是**未去重**的原始采集信号（同一论文在各机构库各一条），含 license /
+    sdg / repositories / fulltextStatus / sourceFulltextUrls 等字段；若只需要
+    作品级信息，请改用 works 系工具（core_work_detail_by_identifier）。
+    """
+    candidate = output_id.strip()
+    if not _is_core_id(candidate):
+        return _err(query=output_id, message=f"output ID 必须是数字（收到 {candidate!r}）。")
+    result = await _request("GET", f"/outputs/{candidate}", query=candidate)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    if not isinstance(payload, dict):
+        return _err(query=candidate, message="CORE 返回了非预期的 output 结构。")
+    return _ok_one(query=candidate, item=_normalize_output(payload))
+```
+   **这是本步骤唯一无条件纳入的**（`goal.md` QA-R021 明确标注"实测 200 可用，无条件纳入"）。
+4. `_as_list()` / `_normalize_data_provider()` / `_normalize_output()` 的确切字段以步骤 69 的 F12～F16 为准；所有归一化函数同样**不得**写入 `fullText`。
+5. 本步骤结束时 `list_tools()` 应为 **28 个**（25 + 3）。
+
+#### 验证方法
+- 真实调用：
+  - `core_data_provider_search_by_query("university")` → `ok=True`，各项含 id 与 name；
+  - `core_data_provider_detail_by_id("1630")` → `ok=True`，`items[0]` 含 `name`（预期为 Intellectum 相关机构库）；
+  - `core_data_provider_detail_by_id("1630", include_stats=True, include_outputs=True)` → `ok=True`，`items[0]` 含 `stats` 与 `outputs` 两个子键；
+  - `core_data_provider_detail_by_id("abc")` → `ok=False`，错误含"必须是数字"；
+  - `core_output_detail_by_id("29197653")` → `ok=True`，含 `license` / `fulltext_status` / `repositories` 等字段中的若干；
+  - 端到端链路：`core_work_detail_by_identifier("171513974")` → 取 `data_providers[0].id` → `core_data_provider_detail_by_id(<该 id>)` 两者均 `ok=True`。
+- `items` 中不出现 `fullText`（硬边界回归）。
+- 三个工具的响应键集合与其他工具一致，`source` 恒为 `"core"`。
+
+#### 风险提示
+- **子资源的"部分成功"是本步骤最容易被漏掉的语义**：`include_stats=True` 但上游 500 时，如果用 `_err` 直接返回，会把已经取到的机构库详情一起丢掉。必须按第 2 条实现"主结果成功 + 子键记录失败"，并在 docstring 里明说。
+- **`/outputs` 的响应体极大**（历史记录：`q=machine learning&limit=2` → 81,738 字节；`limit=100` → 1,145,330 字节），因为 output 记录内联 `fullText`。`include_outputs=True` 的 `limit` 必须保守（示例取 25），且归一化必须丢弃 `fullText`。
+- **`dataProviders` 的 `id` 是数字、`url` 是完整 API URL**，工具应接受数字 `id`（与 `_is_core_id()` 一致），不要接受 URL——URL 形态解析会引入无谓的脆弱性。
+- 机构库 `type` 字段的取值集合（如 `Journal` / `Repository` / `Aggregator`）未在探测记录中穷举，归一化时按原值透传，**不要**自建枚举映射表。
+- 不要把 `core_output_detail_by_id` 与 `core_output_search_by_query`（步骤 75，条件纳入）打包成"一步交付/一步回退"——两者纳入条件不同，回退时必须能独立处理。
+
+---
+
+### 步骤 75：新增 `core_output_search_by_query`（v3.5.0，QA-R021 第 9 项，**条件纳入**）
+
+#### 目标说明
+这是 C 档 9 项中**唯一带击杀条件**的一项，也是全轮证据链最特殊的一项：
+
+- **失败证据**：creator 环境 `GET /v3/search/outputs` 两次 HTTP 500，上游 Azure Search 返回 `Invalid expression: The operand for a binary operator 'Equal' is not a single value`；
+- **通过证据**：另一环境四种查询组合 4/4 全 200；第三个环境按 QA-R013 复测的三种组合（普通关键词 / `title:` 字段限定 / DOI 精确命中）**再次全部 200**——累计 **7 次连续 200、跨 2 个环境**；
+- **判定**：按 QA-R013"不得凭单次结果定性失败"，证据足以支持纳入；但保留**击杀条件**——步骤 69 的 F17 或后续任何一次真实调用出现非 200，则该工具不纳入，其余 8 项不受影响。
+
+**注意该工具与步骤 74 的 `core_output_detail_by_id` 是不同粒度**：前者按关键词检索一批原始采集记录，后者按 ID 取一条。两者都属 outputs 维度，但纳入条件相互独立。
+
+#### 具体操作
+1. 先读步骤 69 的 F17 结论，据此二选一：
+   - **三种组合全部 200** → 按下方代码注册该工具，本版本工具总数按 **28** 计；
+   - **任意组合非 200** → **不注册该工具**，在 `buildlog.md` 中记录失败证据（状态码 + 响应体摘要 + 请求形态），工具总数按 **27** 计；步骤 76 的文档同步与步骤 77 的计数一律按 27 执行。
+2. 注册实现（仅在通过击杀条件时执行）：
+```python
+@server.tool()
+async def core_output_search_by_query(query: str, max_results: int = 10) -> dict:
+    """按关键词检索 CORE 的原始采集记录（outputs，未去重）。
+
+    与 core_work_search_by_query 的区别：works 是去重后的作品级记录，outputs 是
+    各机构库的原始采集信号（同一论文可能多条），适合按 DOI/标题精确定位某个机构的
+    采集副本并查看其 license / fulltextStatus / repositories。上限 100，返回体已
+    剔除 fullText。
+    """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return _err(query=query, message="query must not be empty")
+    bounded = max(1, min(max_results, 100))
+    result = await _request(
+        "GET", "/search/outputs", query=normalized_query,
+        params={"q": normalized_query, "limit": bounded},
+    )
+    if not result["ok"]:
+        return result
+    items = [_normalize_output(o) for o in _as_list(result["payload"]) if isinstance(o, dict)]
+    return _ok(query=normalized_query, items=items)
+```
+   **已知边界**：该端点历史上触发过上游 500（Azure Search 表达式错误），因此 `_error_for()` 的 5xx 分支文案必须直接可用——不要把 500 包装成"未知错误"，应透出上游 message 并提示"该端点对部分查询表达式不稳定，可改用 `title:"..."` / `doi:"..."` 限定写法或改查 works"。
+3. 写入 docstring 的**稳定性提示**：说明该端点历史上对部分查询表达式出现过 5xx（属上游行为），建议用字段限定写法；这是对调用方的诚实告知，也是 QA-R013 记录的风险在工具层的显式表达。
+4. **不得**为了"提高稳定性"自行加自动重试循环——重试会放大 token 消耗且掩盖真实失败；失败就按 `_err` 如实返回（与全项目其余工具一致，无任何重试逻辑）。
+5. 本步骤结束时 `list_tools()` 为 **28 个**（通过）或 **27 个**（未通过）；两者都是本步骤的合法终态，取决于判定而非执行质量。
+
+#### 验证方法
+- `list_tools()` 工具数与本步骤第 1 条的判定一致（28 或 27），且 `core_output_search_by_query` 的出现/缺席与判定一致。
+- 通过时的真实调用：
+  - `core_output_search_by_query("machine learning", max_results=2)` → `ok=True`；
+  - `core_output_search_by_query('doi:"10.1007/s10994-024-06619-7"', max_results=2)` → `ok=True` 且命中 1 条（历史记录为精确命中）；
+  - 空 `query` → `ok=False`。
+- 未通过时的记录要求：`buildlog.md` 中必须有"日期 / 环境 / 请求形态 / 状态码 / 上游响应体摘要 / 结论（不纳入）"六项，且明确写出"其余 8 项不受影响"。
+
+#### 风险提示
+- **击杀条件是硬约束，不得"再试一次看看"**：若 F17 出现非 200，反复重试直到碰上一次 200 再据此纳入，属于对 QA-R013 结论的选择性采信，明确禁止。判定应基于**首次**运行的完整结果。
+- 该端点的响应体比 works 检索更大（`limit=100` 历史记录 1,145,330 字节），即使剔除 `fullText`，`max_results=100` 下的响应仍可能让 LLM 客户端上下文吃紧；docstring 与 README 应保留"上限 100，按需设置"的提示。
+- **不要**因为该工具"条件纳入"就把它写成可选注册（依赖配置/环境变量）——本项目的工具集必须对每个客户端都一致（`goal.md` 与 `AGENTS.md` 都已把"配置相关的工具数可预测性"列为架构约束）。条件只决定**是否进入本版本的代码**，一旦纳入即无条件注册。
+- 若未通过击杀条件，README 中"28/27"的计数与 CORE 工具表必须同步为"不含 outputs 关键词检索"，并在表格中**不出现**该行（不要留空行或注释行）。
+- 该工具与 `core_work_search_by_query` 的 docstring 必须互相点明差异，否则 LLM 调用方会对同一查询随机二选一，直接损害工具选择的可预测性——这正是 v3.2.0–v3.4.0 三轮收缩试图解决的问题。
+
+---
+
+### 步骤 76：文档同步与既有口径更正（v3.5.0）
+
+#### 目标说明
+CORE 工具数由 1 变为 8（或含条件项 9），工具总数由 21 变为 27（或 28），同时 QA-R021 明确要求更正仓库内关于 CORE 限流与文档入口的失实表述。本步骤把代码变更与文档、回归脚本一次性对齐，避免留下"文档写了但代码没有"或"代码变了但文档没跟"的任何一侧不一致——这是本项目历次版本（v2.2.0 步骤 17、v2.3.0 步骤 23、v3.3.0 步骤 55）都特别点名过的高频事故点。
+
+**计数一律以 `list_tools()` 返回值为准**，不得用 `rg -c "@server.tool"` 直接计数（历史上有注释中的该字符串导致虚高的先例，`goal.md` QA-R018 已明确禁止）。
+
+#### 具体操作
+1. **先确定本版本的实际工具数**：执行 `create_server()` → `list_tools()`，记下真实数量（预期 **27** 或 **28**）；后续所有计数改写以该值为准，**不得**在各文档里分别推算。
+2. `README.md`（中文上位）与 `README_EN.md`（英文）逐处同步，**两份必须逐项对齐**：
+   - 首段"**9 个数据源、21 个工具**" → "9 个数据源、**27/28 个工具**"（按实际值）；
+   - §数据源总览后的"共提供 **21 个工具**"；
+   - §API Key Requirements 表中 `CORE_API_KEY` 行的"（1 个工具）"→ CORE 实际工具数，并把"约 5 次请求后锁定约 10 分钟"改写为官方现行口径（未认证 100 tokens/天、10 次/分钟且不提供 `fullText`；配置 key 后 1,000 tokens/天、25 次/分钟），同时把"建议配置"提升为"使用 CORE 系工具时强烈建议配置"；
+   - "即使一个 Key 都不配置，服务器仍会注册并暴露全部 **21** 个工具"这句中的数字；
+   - `### CORE` 小节的工具表：由 1 行扩为完整工具表，逐行给出工具名 / 参数 / 说明，参数与 docstring 完全一致（含 `offset`、`fields`、`top_n`、`include_stats`、`include_outputs`）；
+   - 工具总览段落"**共注册 21 个工具**"；
+   - §故障排查或 FAQ 中任何提及 CORE 限流次数的句子（同样口径更正）；
+   - "文献查找"推荐提示词小节中，把 CORE 的定位由"仅开放获取聚合源"补充为"另可给出分布统计（`core_work_aggregate_by_query`）与机构库画像（`core_data_provider_*`）"，使提示词与新增能力匹配。
+3. `AGENTS.md` 同步（该文件已在版本控制中，属正常可提交文件）：
+   - 项目概述段的"**9 data sources / 21 tools**"→ 实际值；并补一句说明 CORE 是本版本唯一被扩展的源（1 → 8/9 个工具）；
+   - `.env` 配置段与"Registration is unconditional"段中 CORE 的限流口径更正为 token 制；
+   - §Data sources and searchable scope 表格中 **CORE 行**由"1 — search"改为完整工具清单（工具名 + 端点 + 语义 + 上限），并把它与其余 8 个源的区别写清（全书唯一提供 facet 分布与机构库画像的源）；
+   - **不要**改动本轮无关的源描述、也不要"顺手"更新其余源的 `USER_AGENT` 版本串（属既有漂移，按步骤 70 的说明留待独立事项）。
+4. `_verify/tool_availability_check.py` 同步（该脚本被本地 `.gitignore` 遮蔽，搜索引用时须 `rg --no-ignore`）：
+   - 现有第 107 行附近的三元组 `("core", "core_work_search_by_query", "max_results")` 与第 147 行附近的调用条目须扩展覆盖新增工具；
+   - 新增条目应选择**低成本、稳定命中**的调用形态（例如 `core_work_detail_by_identifier("10.1038/nature12373")`、`core_work_stats_by_id("171513974")`、`core_data_provider_detail_by_id("1630")`、`core_output_detail_by_id("29197653")`），聚合工具用小 `top_n`；
+   - **`core_work_aggregate_by_query` 是否纳入该脚本以步骤 69 的 F5/F6 结论为准**：若聚合端点在真实探测中可用则纳入，否则脚本中不得留会稳定失败的条目（回归脚本的失败必须意味着真回归）；
+   - 若第 75 步判定"不纳入"，脚本中**不得**包含 `core_output_search_by_query` 条目。
+5. `CLAUDE.md` 实际已不存在（仓库内无该文件，且 `.gitignore` 仍有 `CLAUDE.md` 一行、`pyproject.toml` 的 sdist `exclude` 仍列有 `/CLAUDE.md`，二者均为历史残留）——本项**跳过并在 buildlog 说明**，该 agent 指导角色已由 `AGENTS.md` 承担。**不得**为了"清理干净"而删除 `.gitignore` 或 `pyproject.toml` 中的这两条历史条目（属无关改动，超出本轮授权范围）。
+6. `project-docs/teach.md` **不更新**（用户既有指示，已滞后多轮，属已知失真，非本轮缺陷）。
+7. 全文一致性自查命令（结果贴入 buildlog）：
+```powershell
+rg -n "21 个工具|21 tools|共注册 21|9 个数据源、21" README.md README_EN.md AGENTS.md
+rg -n "5 次请求|10 分钟|five requests|10-minute" README.md README_EN.md AGENTS.md src/uniarticles/sources/core.py
+rg --no-ignore -n "core_work_search_by_query" _verify/tool_availability_check.py
+```
+   第一条应**零命中**（旧计数已全部替换）；第二条应**零命中**（旧限流口径已全部替换，且 `core.py` 内也不例外）；第三条应命中新增的全部 CORE 工具条目。
+
+#### 验证方法
+- 上述三条自查命令的结果符合第 7 条的预期（第一条零命中、第二条零命中、第三条覆盖全部新增工具）。
+- 两份 README 的 CORE 工具表**逐行同名同参**（可把两段表格贴进 diff 工具核对）；两份 README 中出现的工具总数、数据源数数值完全相同。
+- `AGENTS.md` 中 CORE 行的工具清单与 `list_tools()` 实际返回的 `core_*` 工具集合**逐一致**（数量与名称都对得上）。
+- `rg --no-ignore -n "21 tools|21 个工具" .` 在仓库范围内（排除 `project-docs/`）零命中。
+
+#### 风险提示
+- **两份 README 的最容易漏点仍是"不显眼的计数"**：历史上 v2.2.0 步骤 17、v2.3.0 步骤 23、v3.3.0 步骤 55 三次都栽在"只改了显眼表格、漏了正文里的数字"。必须用第 7 条的全文检索穷尽检查，而不是只改看起来相关的那几行。
+- **限流口径存在三个互不一致的官方来源**（token 档位表、`core.ac.uk/services/api` 页面的"每 10 秒 5 次"、以及实测响应头）。本轮统一采用 **token 档位 + 响应头实测** 这一组，理由是它是唯一能由代码在运行时读到的口径（`x-ratelimit-*` 响应头）。文档改写时不要引入第三套说法。
+- `AGENTS.md` 当前把"21 tools"也写进了首段与表格两处，且表格里 CORE 行还有 `max_results ≤ 25` 的旧上限（步骤 71 已改为 100）——两处都必须改，只改一处会造成新的不一致。
+- **`_verify/tool_availability_check.py` 的结果不是门禁**：它依赖真实网络与真实 key，个别源失败属正常（历史回归中 CORE 就曾受限流波动）。文档同步的通过判据是"条目与工具集合一致"，不是"脚本全绿"。
+- 若步骤 75 判定"不纳入第 9 项"，README/AGENTS 的 CORE 小节中**不要留下**该工具的任何痕迹（含"暂不支持"之类的注释），否则会形成"文档承诺了但代码没有"的反向不一致。
+
+---
+
+### 步骤 77：版本号 `3.5.0` + `buildlog.md` 记录 + 整体回归验证（v3.5.0 交付检查点）
+
+#### 目标说明
+收尾步骤，与 `goal.md` QA-R021"开始更新计划书"之后无待定事项相衔接。本步骤把版本号提升、内部日志记录、全量回归三件事一次做完，构成 v3.5.0 的交付判据。
+
+**版本号标注**：`3.5.0` 由 `goal.md` 记为"默认值，用户尚未逐字确认"。执行前若用户另有指定，只需替换两处字面值（见下），其余步骤不受影响——比照 v3.2.0 步骤 53 的既有处理方式。
+
+#### 具体操作
+1. **版本号提升**（仅两处字面值）：
+```powershell
+# pyproject.toml 第 7 行附近
+version = "3.5.0"
+# src/uniarticles/__init__.py 第 20 行附近
+__version__ = "3.5.0"
+```
+   同时确认 `core.py` 的 `USER_AGENT` 已为 `UniArticlesMCP/3.5.0`（步骤 70 已处理）。
+   **本次不发布到 PyPI**：发布属不可逆对外操作，须用户在场明确授权后才可执行（v3.4.0 步骤 68 已确立该硬门禁）。本版本默认只落到本地仓库与文档。
+2. `project-docs/buildlog.md` 追加本轮记录，按既有格式（标题含日期与步骤号）逐条覆盖：
+   - 步骤 69：真实探测结果表（F1～F17 的状态码/字节数/耗时摘要；聚合请求体确证形态；F17 的纳入/不纳入判定）；
+   - 步骤 70：`core.py` 公共骨架重构要点（新增 helper 清单、`raise_for_status` 移除、限流口径更正）；
+   - 步骤 71：`core_work_search_by_query` 增强的前后对照（**必须给出实测的响应体字节数与耗时**，对照历史 676,692 B / 4.8 s → 112,549 B / 2.8 s 量级）；
+   - 步骤 72～75：每个新增工具的端点、参数、真实调用样例（含成功与失败各一例）；第 9 项的纳入/不纳入结论与依据；
+   - 步骤 76：文档同步清单（改动的文件与计数）、三条自查命令的结果；
+   - 步骤 77：版本号、工具总数、回归结果；
+   - 结论区显式写明**工具总数（27 或 28）、CORE 单源工具数（8 或 9）、未发布状态**。
+3. **整体回归验证**（本项目无自动化测试，沿用"启动 server → 枚举工具 → 真实调用"的手动惯例）：
+```powershell
+# 1) 工具清单与计数（以 list_tools() 为准）
+uv run python -c "import asyncio; from uniarticles.server import create_server; s=create_server(); ts=asyncio.run(s.list_tools()); print(len(ts)); print(sorted(t.name for t in ts if t.name.startswith('core_')))"
+# 2) 全量可用性回归（依赖真实网络与 .env 中的 key）
+uv run python _verify/tool_availability_check.py
+```
+   第 1 条须输出 27 或 28，且 `core_` 前缀工具集合恰为本文档列出的 8 或 9 个；
+   第 2 条允许个别源因网络/限流失败（历史回归中 CORE 与 arXiv 都曾波动），但**CORE 系新增工具中"稳定可用"的那几项不得全部失败**——若集体失败，先按 QA-R013 判断是本机网络问题还是实现问题，产出/复用 `_verify/` 脚本交用户复测，不得直接判定实现有误。
+4. 更新 `README`/`AGENTS.md` 中若在步骤 76 之后仍有遗漏的版本号引用（`rg -n "3\.4\.0|3\.5\.0" README.md README_EN.md AGENTS.md pyproject.toml src/uniarticles/__init__.py src/uniarticles/sources/core.py`），确认没有把"上一版本号"错误地留在描述当前状态的句子里（历史版本号出现在 buildlog/`project-plan.md` 的历史记录中是**正常**的，不要改）。
+5. **提交边界**（本仓库的文档角色分工约束）：本步骤的提交**只允许**包含本计划书新增/修改的 `project-docs/project-plan.md`（由 `project-planner-cn` 提交）与 `project-builder-cn` 执行期间的源码/文档改动（由其按自身工作流提交）。执行者不得把 `project-docs/goal.md`、`teach.md` 等其他角色的文件一并暂存或提交。
+
+#### 验证方法
+- `uv run python -c "import uniarticles; print(uniarticles.__version__)"` 输出 `3.5.0`；`pyproject.toml` 的 `version` 同为 `3.5.0`。
+- `list_tools()` 计数与工具集合符合第 3 条第 1 项判据。
+- `buildlog.md` 中本轮条目齐全（步骤 69～77 各一条，含实测数据而非仅结论），且结论区写明工具总数与"未发布"状态。
+- 三条文档自查命令（步骤 76 第 7 条）在收尾后仍为零命中/覆盖完整。
+- `git status --short` 中不出现 `project-docs/goal.md`、`project-docs/teach.md` 的暂存项。
+- `dist/` 中不含 `3.5.0` 产物（本步骤不构建、不发布）。
+
+#### 风险提示
+- **不要把"版本号已提升"当成"已发布"**：PyPI 上 `3.5.0` 在本步骤结束时应当**不存在**；任何上传动作都须用户在场明确授权（同 v3.4.0 的门禁）。
+- **回归失败不要急着改代码**：本项目历史上多次出现"agent 本机网络不通 → 误判端点失败"（dblp、arXiv、CORE 均有先例），步骤 3 已明确对应流程。任何因网络原因的重试都不得写入 `_err` 文案充当"修复"。
+- 若步骤 75 判定不纳入第 9 项，则 `buildlog.md`、README、`AGENTS.md`、回归脚本四处都必须按 **27** 口径一致，任何一处残留 28 都会形成新的不一致。
+- `pyproject.toml` 的 sdist `exclude` 中仍有已删除的 `/CLAUDE.md`（仓库内已无该文件）之类的历史条目，属无害冗余，**不属本步骤门禁**，可选清理（若清理须单独说明，不要顺手改动其他无关配置）。
+- `project-docs/teach.md` 已滞后多轮，本轮**不更新**；如用户后续要求同步，须作为独立事项处理，不要夹带进本版本。
+- 本步骤完成后，v3.5.0 的"待办"只剩"是否发布到 PyPI"一项，须在 buildlog 结论区显式列出，避免下一位执行者误以为本版本已完结发布。
+
+---
+
+- （v3.5.0，2026-09-19）步骤 69～77 基于 `project-docs/goal.md` QA-R021（commit `3eddd1e`，含《附录：CORE API v3 能力盘点》前置调研 + 三轮问答 + 第三个环境复测）追加。**本轮性质：单数据源（CORE）能力扩展 = 1 个既有工具增强 + 8 个新增工具**，其中 `core_output_search_by_query`（outputs 关键词检索）为**条件纳入**，带击杀条件（见步骤 75），因此工具总数的合法终态有两个：**27**（不含该项）或 **28**（含该项）。数据源集合保持 9 个不变，全部工具仍无条件注册，这一点与 v3.2.0–v3.4.0 三轮删源方向相反，但依据是"新增维度不与任何现有源重叠"（facet 分布、机构库画像在现有 21 个工具中完全没有对应物），属**新查询维度**而非"又一个关键词检索源"；该判断依据完整记录在"v3.5.0 范围补充"小节与 `goal.md` QA-R021 提炼结论中。
+- **本轮最大的未验证点是聚合端点的请求体**：`POST /v3/search/works/aggregate` 的请求体 schema 从未被真实请求覆盖（现有 `_verify/core_api_probe.py` 只覆盖连通性与复测项），故把真实探测列为强制前置步骤 69（产出**新增**的 `_verify/core_api_field_probe.py`，不修改原 `core_api_probe.py`），并要求步骤 73 的归一化方案以探测结果为准；若聚合端点不可用，步骤 73 整体回退为 8 项范围并在 buildlog 如实记录。**严禁**用猜测的请求体硬上线。
+- **步骤 70 的骨架重构是本轮唯一的"共享代码"步骤**，与 v3.0.0 步骤 34 的定位类似：先把限流头解析、标识符规则、错误分支、归一化函数集中处理，再让步骤 71～75 只写"参数校验 + 调用 + 归一化"。限流口径更正（"无 key 约 5 次请求后约 10 分钟锁死" → 官方现行 token 制 + 实测响应头）是 QA-R021 明确要求的**修既有缺陷**项，不是本轮新增能力，两条实施路径（`core.py` 与 `AGENTS.md`）须一并完成，不得只改代码不改文档。
+- **"文件内容 / 下载"是硬边界**：`/v3/works/{id}/download`、`/v3/works/tei/{id}`、`/v3/outputs/{id}/download|raw|history` 全部不接入，用户已在 QA-R021 第 2 问明确否决"有限破例"与"允许下载 PDF"两档。C 档 9 项中没有任何一项触碰该边界；步骤 71 的 `exclude:["fullText"]` 只是不再**下载**一个本来就要被 `_normalize()` 丢弃的字段，与"不返回文件内容"不矛盾。
+- **版本号 `3.5.0` 是默认值而非既定值**：`goal.md` 明确标注用户尚未逐字确认（v3.4.0 已发布，本轮为新 minor）。执行前若用户另有指定，只需替换 `pyproject.toml` 与 `src/uniarticles/__init__.py` 两处字面值，其余步骤不受影响。
+- **本轮不发布 PyPI**：版本号提升与内部日志、回归验证完成后，v3.5.0 的剩余待办只有"是否发布"一项，须由用户在场明确授权（v3.4.0 步骤 68 已确立"发布属不可逆对外操作"的硬门禁）。
+- **文档角色边界在本轮被特别强调**（步骤 77 第 5 条）：`project-docs/goal.md` 的范围章节按用户指示仍由 goal 定义角色维护，本轮由 `project-plan.md` 承载范围条目（`goal.md` QA-R021 已记录这一分工）；`project-planner-cn` 的提交只允许包含 `project-docs/project-plan.md`，不得暂存 `goal.md`、`teach.md`、`buildlog.md`（后者由 `project-builder-cn` 在构建期追加）。
+- 步骤 1～68（v2.0～v3.4.0 构建，含已发布的 v3.4.0）已全部执行完毕；步骤 69～77 待 `project-builder-cn` 执行。
 
 ---
 
