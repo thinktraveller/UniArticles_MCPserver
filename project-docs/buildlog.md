@@ -1305,3 +1305,36 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - ✅ v3.2.0 构建侧无待执行步骤。
 
 ---
+
+## v3.3.0 构建记录
+
+> 本轮来源：`project-docs/goal.md` QA-R017（用户"当前文献源有些太多了"的范围收缩决策）+ 用户在构建阶段的三条追加授权——① 确认版本号 `3.3.0`；② 启用候选步骤 59/60（三处默认排序修复）；③ 删除 `CLAUDE.md`（原步骤 56 的同步对象之一，该文件已确认不再使用）。计划书步骤 54～58 见 `project-plan.md`，候选步骤 59/60 原以"默认不纳入"预置，本轮经用户确认后启用。
+
+### 步骤 54 完成：删除 `biorxiv.py` / `dblp.py` / `zenodo.py` 及注册引用（2026-09-18 16:50）
+
+**执行的任务**
+- 删除源模块 `src/uniarticles/sources/biorxiv.py`（工具 `biorxiv_paper_list_by_date_range`）、`src/uniarticles/sources/dblp.py`（工具 `dblp_publication_search_by_query`）、`src/uniarticles/sources/zenodo.py`（工具 `zenodo_record_search_by_query`），合计 3 个源文件。
+- `src/uniarticles/sources/__init__.py`：删除 3 行 import（`register_zenodo_source` / `register_dblp_source` / `register_biorxiv_source`）与 3 行注册调用；连带删除因 `biorxiv` 删除而整块变空的「v3.0.0 新增：语义特殊型（非关键词检索）」分组注释，不遗留空分组块。「通用检索型」分组删去 Zenodo/dblp 两行后仍余 7 个源，分组标题保留。
+
+**关键变更**
+- 数据源规模 14 → **11**，默认注册工具 26 → **23**（配置 `SEMANTIC_SCHOLAR_API_KEY` 时 28 → 25）。
+- 被删除的三个工具名：`biorxiv_paper_list_by_date_range`、`dblp_publication_search_by_query`、`zenodo_record_search_by_query`——下游若硬编码调用将静默失效（破坏性变更，无过渡期）。
+
+**三个源的排除性质（分属三类，不得笼统写成"不可用"）**
+- `biorxiv.py`：**上游结构性限制**——bioRxiv/medRxiv API 本身不提供关键词检索，只能按日期区间/游标浏览，结构上无法定向检索已知文献。
+- `dblp.py`：**可连接性不达标**——本机 0/4 调用失败（HTTP 429 + 连接重置 + 非 JSON 响应），与 `_verify/` 规则记录的 dblp.org 间歇性不可达一致。
+- `zenodo.py`：**检索形态重复**——其差异化价值（数据集/软件等非论文资源）已被代码硬过滤为 `type=publication`，剩余能力与 Crossref/OpenAlex/DOAJ 重叠，且在客户端工具选择中构成干扰。
+- 三者均**非技术不可行、非权限受限**，与 QA-R003（权限受限）、QA-R012（技术不可行）、QA-R016（产品价值收窄）的性质区分开记录。
+
+**验证（真实枚举，非 mock）**
+- `.venv\Scripts\python.exe` 调用 `uniarticles.create_server()` → `list_tools()`：工具总数 **23**，名单中无 `biorxiv_*`/`dblp_*`/`zenodo_*`。
+- 逐源核对（以 `list_tools()` 实际返回值为准，未使用 `rg -c "@server.tool"`，因 `semantic_scholar.py` 该字符串有 1 处出现在注释中会虚高计数）：scopus 6、sciencedirect 2、arxiv 3、pubmed 4、openalex 2、crossref 2、europepmc 1、doaj 1、openaire 1、core 1、semantic_scholar 0（未配置 key，条件注册）= 23，与计划书预期一致。
+- `rg "biorxiv|dblp|zenodo" src/` 零命中，确认无残留 import 或调用。
+
+**遇到的问题及解决方案**
+- 无。唯一需要注意的是计划书中提到的两个衍生判断已遵守：`_verify/dblp_connectivity_test.py` 与 `_verify/dblp_field_probe.py` 保留不删（诊断 dblp.org 站点分层可达性，与是否注册该源无关，且为 `AGENTS.md` 常设 `_verify/` 规则的范例）。
+
+**下一步计划**
+- 步骤 55：`README.md` / `README_ZH.md` 全量同步（计数下修 + 三个源小节删除）。
+
+---
