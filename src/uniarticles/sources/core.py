@@ -346,3 +346,79 @@ def register(server: FastMCP) -> None:
         bounded = max(1, min(max_results, 100))
         bounded_offset = max(0, offset)
         return await _search(query=normalized_query, max_results=bounded, offset=bounded_offset)
+
+    @server.tool()
+    async def core_work_detail_by_identifier(identifier: str) -> dict:
+        """Fetch the full CORE record of one work by bare DOI or numeric CORE ID.
+
+        Use the bare DOI form (e.g. `10.1038/nature12373`) — the `doi:` prefix is
+        not a valid path segment upstream and returns 404. Both identifier forms
+        were verified against the real API in buildlog step 69 (F7).
+
+        The detail record carries `dataProviders` / `outputs` / `identifiers` that
+        keyword search results do not include. `outputs` here are URLs only; call
+        `core_work_outputs_by_id` to expand them. Returns a single item.
+        """
+        candidate = identifier.strip()
+        if not candidate:
+            return _err(query=identifier, message="identifier must not be empty")
+        result = await _request("GET", f"/works/{candidate}", query=candidate)
+        if not result["ok"]:
+            return result
+        payload = result["payload"]
+        if not isinstance(payload, dict):
+            return _err(query=candidate, message="CORE 返回了非预期的详情结构（不是单个对象）。")
+        return _ok_one(query=candidate, item=_normalize_work(payload))
+
+    @server.tool()
+    async def core_work_outputs_by_id(identifier: str) -> dict:
+        """List the per-repository copies (`outputs`) CORE harvested for one work.
+
+        `identifier` MUST be a numeric CORE ID (e.g. `171513974`); this sub-resource
+        rejects DOIs with a 404 (verified in buildlog step 69's F8/F11). If you only
+        have a DOI, call `core_work_detail_by_identifier` first and take the numeric
+        id from its `core_id` / `identifiers` fields.
+
+        Each item is a de-duplication *source record*, not the paper text: it carries
+        `download_url` / `license` / `fulltext_status` / `data_provider`, which is how
+        you tell how many repository copies exist and under what licence.
+        """
+        candidate = identifier.strip()
+        if not candidate:
+            return _err(query=identifier, message="identifier must not be empty")
+        core_id = _require_core_id(candidate, tool="core_work_outputs_by_id")
+        if core_id is None:
+            return _err(
+                query=candidate,
+                message=(
+                    f"该端点只接受数字 CORE ID，收到 {candidate!r}。"
+                    "请先用 core_work_detail_by_identifier 按 DOI 取详情，"
+                    "再从返回的 core_id / identifiers 字段取得数字 ID 后重试。"
+                ),
+            )
+        result = await _request("GET", f"/works/{core_id}/outputs", query=core_id)
+        if not result["ok"]:
+            return result
+        items = [_normalize_output(o) for o in _as_list(result["payload"]) if isinstance(o, dict)]
+        return _ok(query=core_id, items=items)
+
+    @server.tool()
+    async def core_work_stats_by_id(identifier: str) -> dict:
+        """Fetch the lifecycle timestamps of one CORE work (deposited / published /
+        updated / accepted).
+
+        `identifier` accepts either a bare DOI or a numeric CORE ID — unlike
+        `core_work_outputs_by_id`, this endpoint does not require a numeric id
+        (both verified in buildlog step 69's F9/F9b). Returns a single item with
+        only those timestamp fields, because that is all the upstream returns.
+        """
+        candidate = identifier.strip()
+        if not candidate:
+            return _err(query=identifier, message="identifier must not be empty")
+        result = await _request("GET", f"/works/{candidate}/stats", query=candidate)
+        if not result["ok"]:
+            return result
+        payload = result["payload"]
+        if not isinstance(payload, dict):
+            return _err(query=candidate, message="CORE 返回了非预期的时间戳结构。")
+        return _ok_one(query=candidate, item=_normalize_work_stats(payload))

@@ -2444,3 +2444,46 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 72：新增 works 维度 3 个工具 `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_stats_by_id`（工具总数 21 → 24）。
+
+## [2026-09-19 00:34] 步骤 72 完成：新增 works 维度 3 个工具（v3.5.0，QA-R021 第 2～4 项）
+
+### 执行的任务
+- 在 `core.py` 的 `register()` 内新增三个工具：`core_work_detail_by_identifier`（作品完整题录）、`core_work_outputs_by_id`（各机构库版本实例）、`core_work_stats_by_id`（生命周期时间戳）。
+- 三个工具均复用步骤 70 的 `_request` / `_ok_one` / `_err` / `_as_list` / `_require_core_id` 与归一化函数，工具体只剩"校验 + 调用 + 归一化"。
+- 至此 `_require_core_id()` 有了真实调用点（步骤 70 中属骨架，本步骤启用），该 helper 不再是死代码。
+
+### 关键变更
+| 工具 | 接受的标识符 | 端点 | 返回 |
+|---|---|---|---|
+| `core_work_detail_by_identifier` | **裸 DOI 或数字 ID** | `GET /works/{identifier}` | `_ok_one` + `_normalize_work()` |
+| `core_work_outputs_by_id` | **仅数字 CORE ID** | `GET /works/{id}/outputs` | `_ok` + `_normalize_output()` 列表 |
+| `core_work_stats_by_id` | **裸 DOI 或数字 ID** | `GET /works/{id}/stats` | `_ok_one` + `_normalize_work_stats()` |
+
+三个 docstring 都**显式写明接受的标识符类型**（这是本步骤最容易踩的点）：`core_work_detail_by_identifier` 注明裸 DOI 必须不带 `doi:` 前缀；`core_work_outputs_by_id` 注明只收数字 ID 并给出"先取详情、再从 `core_id` / `identifiers` 拿数字 ID"的两步路径；`core_work_stats_by_id` 注明它**不需要**数字 ID（与本步骤另外两个工具形成对照）。
+
+### 实测数据（本机，2026-09-19 00:31～00:34）
+
+| 调用 | 结果 |
+|---|---|
+| `core_work_detail_by_identifier("10.1038/nature12373")` | `ok=True`，`count=1`，题录字段完整（`title` / `authors` / `doi` / `dataProviders` / `outputs` / `identifiers` …） |
+| `core_work_detail_by_identifier("171513974")` | `ok=True`，`count=1` |
+| `core_work_detail_by_identifier("10.1000/does-not-exist-xyz")` | `ok=False`，文案为**兜底版**"CORE 未找到该记录（HTTP 404）…"，未出现空 message |
+| `core_work_outputs_by_id("171513974")` | `ok=True`，`count=1`；条目键 = `abstract` / `authors` / `data_provider` / `deposited_date` / `document_type` / `doi` / `download_url` / `fulltext_status` / `identifiers` / `language` / `license` / `output_id` / `published_date` / `publisher` / `repositories` / `sdg` / `source_fulltext_urls` / `title` |
+| `core_work_outputs_by_id("10.1038/nature12373")` | `ok=False`，文案含"只接受数字 CORE ID"并指向 `core_work_detail_by_identifier` |
+| `core_work_stats_by_id("10.1038/nature12373")` / `("171513974")` | 均 `ok=True`，`count=1`，条目恰为 5 个键 `core_id` / `deposited_date` / `published_date` / `updated_date` / `accepted_date` |
+| 端到端链路 | `core_work_detail_by_identifier("171513974")` → `dataProviders[0].id = 1630` → `GET /data-providers/1630` 返回 `Intellectum (Universidad de La Sabana)` / `REPOSITORY` |
+
+**顺带确证的一处真实字段形态**：works 详情的 `identifiers` 实测是**对象数组**（`[{"identifier": "641684400", "type": "core_id"}, {"identifier": "10.1007/…", "type": "doi"}, {"identifier": "oai:…", "type": "oai_id"}, …]`），不是 `{"doi": …}` 字典。步骤 70 的 `_normalize_work` 以"原样透传 + 类型保护"处理，`_normalize_output` 则按 outputs 侧实测的**字典**形态取值——两个端点的同名键结构确实不同，此处不做统一。
+
+### 遇到的问题及解决方案
+- **首轮验证出现 3 次 60 s `ReadTimeout`**（`detail(DOI)`、`detail(unknown DOI)`、`stats(id)`），而同一批里的另外 3 项成功。按 QA-R013 流程**逐项重试**：三项在第二次全部成功（2.97～7.61 s）。结论：**瞬时网络读超时，非实现缺陷**，与步骤 69 F12/F4 的现象同源（本机到 `api.core.ac.uk` 的国际链路存在间歇性慢读）。未因此修改实现，也未添加重试逻辑（计划书步骤 75 明确禁止重试、全项目其余工具同样无重试）。
+- 该现象的唯一实现层影响是"60 s 读超时会被偶发触发"，用户侧看到的是 `CORE 请求异常：ReadTimeout:`（异常 `str()` 为空，故尾随冒号后无内容）。保持现状：`_err` 结构完整、`query` 与 `source` 均正确，重试即可成功。
+
+### 验证
+- `create_server()` → `list_tools()` = **24 个工具**（21 + 3）；`core_` 前缀工具集合恰为 `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_search_by_query` / `core_work_stats_by_id`。
+- 全部三个工具的响应键集合与其余工具完全一致（`ok` / `source` / `query` / `count` / `items` / `error`），`source` 恒为 `"core"`。
+- `items` 中 `fullText` / `full_text` **均不存在**（硬边界回归检查通过）。
+- `core_work_outputs_by_id` 的 DOI 预校验按预期短路，**未发出上游请求**（错误文案在毫秒级返回）。
+
+### 下一步计划
+- ⏭️ 步骤 73：新增 `core_work_aggregate_by_query`（facet 分布）。**请求体已由步骤 69 的 F5/F6 确证**为 `{"q", "aggregations": [<camelCase 维度名>]}`，聚合端点在本机可用，**不触发回退分支**。
