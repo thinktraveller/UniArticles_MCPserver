@@ -1,15 +1,31 @@
+import re
+from datetime import datetime, timezone
+
 import httpx
 from mcp.server.fastmcp import FastMCP
 
 from ..config import settings
 
 
-BASE_URL = "https://api.core.ac.uk/v3/search/works"
-USER_AGENT = "UniArticlesMCP/3.0.0 (https://github.com/thinktraveller/UniArticles_MCPserver)"
+# v3.5.0: 由"检索端点整条 URL"改为"API 基址"，各端点按 f"{BASE_URL}/…" 拼装，
+# 避免每个工具各自硬编码长字符串（原常量值 https://api.core.ac.uk/v3/search/works）。
+BASE_URL = "https://api.core.ac.uk/v3"
+USER_AGENT = "UniArticlesMCP/3.5.0 (https://github.com/thinktraveller/UniArticles_MCPserver)"
+
+# 单次请求超时。CORE 在命中大响应体时并不快：limit=100 的 works 检索实测 435.5 KB、
+# 耗时 28.75～44.82 s（见 buildlog 步骤 69 的 F4 与复核），固定 30 s 会在本机网络下
+# 间歇性超时。60 s 兼顾"慢网络下能拿到大结果"与"上游卡死时仍能快速失败"。
+REQUEST_TIMEOUT = 60.0
 
 
 def _ok(query: str, items: list[dict]) -> dict:
+    """标准成功响应：items 恒为列表（跨全部数据源统一形状）。"""
     return {"ok": True, "source": "core", "query": query, "count": len(items), "items": items, "error": None}
+
+
+def _ok_one(query: str, item: dict) -> dict:
+    """单条记录类工具（详情 / stats）专用：语义由调用方写入工具 docstring。"""
+    return _ok(query=query, items=[item])
 
 
 def _err(query: str, message: str) -> dict:
@@ -23,11 +39,167 @@ def _headers() -> dict[str, str]:
     return headers
 
 
-def _normalize(work: dict) -> dict:
-    authors = [a.get("name") for a in work.get("authors", []) or [] if isinstance(a, dict) and a.get("name")]
+# ------------------------------------------------------------------ 标识符规则
+
+_CORE_ID_RE = re.compile(r"^\d+$")
+
+
+def _is_core_id(identifier: str) -> bool:
+    return bool(_CORE_ID_RE.match(identifier.strip()))
+
+
+def _require_core_id(identifier: str, *, tool: str) -> str | None:
+    """返回规范化后的数字 CORE ID；若调用方传了 DOI 等非数字标识符则返回 None。
+
+    CORE 的 works 子资源（/outputs）只接受数字 CORE ID——实测传裸 DOI 会 404
+    （见 buildlog 步骤 69 的 F8 / F11），因此调用方需要在工具层给出明确提示，
+    而不是把上游 404 原样抛给 LLM。
+    """
+    candidate = identifier.strip()
+    return candidate if _is_core_id(candidate) else None
+
+
+def _as_list(payload) -> list:
+    """把多种"列表载体"形态统一取出列表，取不到就返回空列表。
+
+    CORE 的各端点并不统一：/works/{id}/outputs 返回**裸列表**，
+    而 /data-providers/{id}/outputs 与各 search 端点返回 {"results": [...]} 分页对象
+    （见 buildlog 步骤 69 的 F8 与 F15）。两种形态都必须支持。
+    """
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        results = payload.get("results")
+        if isinstance(results, list):
+            return results
+    return []
+
+
+# ------------------------------------------------------------------ HTTP 层
+
+
+def _rate_limit_message(response: httpx.Response) -> str:
+    """把 CORE 的限流响应头翻译成可执行的中文提示。
+
+    X-RateLimit-Retry-After 实测是 ISO 时间戳（如 2026-09-18T15:35:09+0000），
+    不是秒数；解析失败时原样回显，绝不抛异常。官方档位：未认证 100 tokens/天、
+    10 次/分钟且不提供 fullText；注册个人 1,000 tokens/天、25 次/分钟。
+    """
+    raw = response.headers.get("x-ratelimit-retry-after") or response.headers.get("Retry-After")
+    limit = response.headers.get("x-ratelimit-limit")
+    remaining = response.headers.get("x-ratelimit-remaining")
+    when = raw or "未知"
+    if raw:
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            seconds = (parsed - datetime.now(parsed.tzinfo or timezone.utc)).total_seconds()
+            if seconds > 0:
+                when = f"{raw}（约 {int(seconds)} 秒后）"
+        except ValueError:
+            pass
+    hint = ""
+    if not settings.core_api_key:
+        hint = " 配置 CORE_API_KEY 可获得更高额度（未认证档：100 tokens/天、10 次/分钟，且不提供 fullText）。"
+    return (
+        f"CORE 触发限流（HTTP 429）。可重试时间：{when}；"
+        f"额度：limit={limit or '未知'} / remaining={remaining or '未知'}。{hint}"
+    ).strip()
+
+
+def _error_for(response: httpx.Response, *, query: str) -> dict:
+    """把非 200 响应转成统一 _err 结构。三类真实失败分别给可操作文案。"""
+    if response.status_code == 429:
+        return _err(query=query, message=_rate_limit_message(response))
+    if response.status_code == 404:
+        return _err(
+            query=query,
+            message=(
+                "CORE 未找到该记录（HTTP 404）。请确认标识符存在且端点接受该标识符类型；"
+                f"{query!r} 对应的记录可能未收录。"
+            ),
+        )
+    try:
+        detail = response.json()
+    except ValueError:
+        detail = (response.text or "").strip()[:200]
+    message = detail.get("message") if isinstance(detail, dict) else detail
+    extra = ""
+    if response.status_code >= 500:
+        # /v3/search/outputs 历史上对部分查询表达式返回过 500（上游 Azure Search
+        # 表达式错误），见 buildlog 步骤 69 与 goal.md QA-R021。
+        extra = '该端点对部分查询表达式不稳定，可改用 title:"..." / doi:"..." 限定写法。'
+    return _err(
+        query=query,
+        message=f"CORE 请求失败（HTTP {response.status_code}）：{message or '上游未返回错误说明'}。{extra}".strip(),
+    )
+
+
+async def _request(
+    method: str,
+    path: str,
+    *,
+    query: str,
+    params: dict | None = None,
+    json_body: dict | None = None,
+) -> dict:
+    """所有 CORE 工具的唯一出口：成功返回 {"ok": True, "payload": <原始 JSON>}，失败返回 _err 结构。
+
+    把 follow_redirects（CORE 偶发 301）、超时、headers、错误转换集中处理；
+    调用方只需判定 result["ok"] 后取 result["payload"]。
+    """
+    url = f"{BASE_URL}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, headers=_headers(), follow_redirects=True) as client:
+            response = await client.request(method, url, params=params, json=json_body)
+        if response.status_code != 200:
+            return _error_for(response, query=query)
+        return {"ok": True, "payload": response.json()}
+    except Exception as exc:  # noqa: BLE001 - 工具层必须把任何异常转成 _err，不能让它冒泡
+        return _err(query=query, message=f"CORE 请求异常：{type(exc).__name__}: {exc}")
+
+
+# ------------------------------------------------------------------ 归一化层
+
+
+def _author_names(authors) -> list[str]:
+    """作者列表的元素形态在不同端点间不一致（dict / str 都出现过），两种都要兼容。"""
+    names = []
+    for author in authors or []:
+        if isinstance(author, dict):
+            name = author.get("name")
+            if name:
+                names.append(name)
+        elif isinstance(author, str) and author:
+            names.append(author)
+    return names
+
+
+def _normalize_work(work: dict) -> dict:
+    """作品（works）维度的题录归一化。
+
+    字段名取自 buildlog 步骤 69 的 F1/F7 实测结构。既有 8 个字段
+    （title / authors / abstract / doi / cited_by_count / download_url /
+    arxiv_id / pubmed_id）是既有调用方的可见契约，不得删除；其余为本次按实测
+    结构增补（core_id / document_type / field_of_study / journals / data_providers …）。
+
+    **硬边界**：绝不把 `fullText` 写入返回值——即便上游内联返回了正文也必须丢弃。
+    """
+    data_providers = []
+    for provider in work.get("dataProviders") or []:
+        if isinstance(provider, dict):
+            data_providers.append(
+                {"id": provider.get("id"), "name": provider.get("name"), "url": provider.get("url")}
+            )
+    journals = []
+    for journal in work.get("journals") or []:
+        if isinstance(journal, dict):
+            journals.append({"title": journal.get("title"), "issn": journal.get("issn")})
+        elif isinstance(journal, str) and journal:
+            journals.append({"title": journal, "issn": None})
     return {
+        "core_id": work.get("id"),
         "title": work.get("title"),
-        "authors": authors,
+        "authors": _author_names(work.get("authors")),
         "abstract": work.get("abstract"),
         "doi": work.get("doi"),
         "cited_by_count": work.get("citationCount"),
@@ -36,28 +208,109 @@ def _normalize(work: dict) -> dict:
         "download_url": work.get("downloadUrl"),
         "arxiv_id": work.get("arxivId"),
         "pubmed_id": work.get("pubmedId"),
+        "document_type": work.get("documentType"),
+        "field_of_study": work.get("fieldOfStudy"),
+        "language": work.get("language"),
+        "publisher": work.get("publisher"),
+        "published_date": work.get("publishedDate"),
+        "deposited_date": work.get("depositedDate"),
+        "year_published": work.get("yearPublished"),
+        "journals": journals,
+        "data_providers": data_providers,
+        "outputs": [url for url in work.get("outputs") or [] if isinstance(url, str)],
+        "identifiers": work.get("identifiers") if isinstance(work.get("identifiers"), dict) else {},
     }
+
+
+def _normalize_output(output: dict) -> dict:
+    """原始采集记录（outputs）维度的归一化，字段名取自步骤 69 的 F8/F15/F16/F17 实测结构。"""
+    data_provider = output.get("dataProvider")
+    provider = None
+    if isinstance(data_provider, dict):
+        provider = {
+            "id": data_provider.get("id"),
+            "name": data_provider.get("name"),
+            "url": data_provider.get("url"),
+        }
+    identifiers = output.get("identifiers") if isinstance(output.get("identifiers"), dict) else {}
+    return {
+        "output_id": output.get("id"),
+        "title": output.get("title"),
+        "authors": _author_names(output.get("authors")),
+        "abstract": output.get("abstract"),
+        "doi": output.get("doi") or identifiers.get("doi"),
+        "download_url": output.get("downloadUrl"),
+        "document_type": output.get("documentType"),
+        "language": output.get("language"),
+        "publisher": output.get("publisher"),
+        "published_date": output.get("publishedDate"),
+        "deposited_date": output.get("depositedDate"),
+        "license": output.get("license"),
+        "fulltext_status": output.get("fulltextStatus"),
+        "repositories": output.get("repositories") if isinstance(output.get("repositories"), list) else [],
+        "sdg": output.get("sdg") if isinstance(output.get("sdg"), list) else [],
+        "source_fulltext_urls": [url for url in output.get("sourceFulltextUrls") or [] if isinstance(url, str)],
+        "data_provider": provider,
+        "identifiers": identifiers,
+    }
+
+
+def _normalize_data_provider(provider: dict) -> dict:
+    """机构库（data providers）维度的归一化，字段名取自步骤 69 的 F12/F13 实测结构。"""
+    location = provider.get("location") if isinstance(provider.get("location"), dict) else {}
+    return {
+        "id": provider.get("id"),
+        "name": provider.get("name"),
+        "type": provider.get("type"),
+        "url": provider.get("homepageUrl") or provider.get("uri"),
+        "homepage_url": provider.get("homepageUrl"),
+        "oai_pmh_url": provider.get("oaiPmhUrl"),
+        "software": provider.get("software"),
+        "source": provider.get("source"),
+        "metadata_format": provider.get("metadataFormat"),
+        "open_doar_id": provider.get("openDoarId"),
+        "ror_id": provider.get("rorId"),
+        "institution_name": provider.get("institutionName"),
+        "country_code": location.get("countryCode") or None,
+        "aliases": [alias for alias in provider.get("aliases") or [] if isinstance(alias, str)],
+    }
+
+
+def _normalize_data_provider_stats(stats: dict) -> dict:
+    """机构库统计（/data-providers/{id}/stats）字段名取自步骤 69 的 F14 实测结构。"""
+    last_seen = stats.get("lastSeen") if isinstance(stats.get("lastSeen"), dict) else {}
+    return {
+        "id": stats.get("id"),
+        "count_metadata": stats.get("countMetadata"),
+        "count_fulltext": stats.get("countFulltext"),
+        "is_active": last_seen.get("isActive"),
+        "set": stats.get("set"),
+    }
+
+
+def _normalize_work_stats(stats: dict) -> dict:
+    """作品生命周期时间戳（/works/{id}/stats）——实测响应体只有 5 个键（步骤 69 的 F9/F9b）。"""
+    return {
+        "core_id": stats.get("id"),
+        "deposited_date": stats.get("depositedDate"),
+        "published_date": stats.get("publishedDate"),
+        "updated_date": stats.get("updatedDate"),
+        "accepted_date": stats.get("acceptedDate"),
+    }
+
+
+# ------------------------------------------------------------------ 工具层
 
 
 async def _search(query: str, max_results: int) -> dict:
     params = {"q": query, "limit": max_results}
-    # CORE occasionally 301-redirects the request; follow redirects so a valid call
-    # is not surfaced as a bare 3xx error.
-    async with httpx.AsyncClient(timeout=30.0, headers=_headers(), follow_redirects=True) as client:
-        response = await client.get(BASE_URL, params=params)
-        if response.status_code == 429:
-            # Surface the rate-limit context (see plan step 37.2): without a key CORE
-            # locks out after ~5 requests for ~10 minutes. Tell the caller when they
-            # can retry and that configuring CORE_API_KEY avoids this.
-            retry_after = response.headers.get("x-ratelimit-retry-after") or response.headers.get("Retry-After")
-            hint = "" if settings.core_api_key else " Configure CORE_API_KEY for a higher rate limit."
-            return _err(
-                query=query,
-                message=f"CORE rate limit reached (HTTP 429). Retry after: {retry_after or 'unknown'}.{hint}",
-            )
-        response.raise_for_status()
-        payload = response.json()
-    items = [_normalize(w) for w in payload.get("results", []) or [] if isinstance(w, dict)]
+    # CORE occasionally 301-redirects the request; _request() follows redirects so a
+    # valid call is not surfaced as a bare 3xx error.
+    result = await _request("GET", "/search/works", query=query, params=params)
+    if not result["ok"]:
+        return result
+    payload = result["payload"]
+    items = [_normalize_work(w) for w in _as_list(payload) if isinstance(w, dict)]
     return _ok(query=query, items=items)
 
 
@@ -68,13 +321,12 @@ def register(server: FastMCP) -> None:
     @server.tool()
     async def core_work_search_by_query(query: str, max_results: int = 10) -> dict:
         """Search CORE (global open-access aggregator) by keyword. Works without an
-        API key (~5 requests before a ~10-minute rate-limit lockout); configuring
-        CORE_API_KEY is strongly recommended for reliable use (see README)."""
+        API key but the anonymous tier is token-metered (100 tokens/day, 10 requests
+        per minute, no fullText); configuring CORE_API_KEY raises it to 1,000
+        tokens/day at 25 requests per minute. Returns metadata and download links only.
+        """
         normalized_query = query.strip()
         if not normalized_query:
             return _err(query=query, message="query must not be empty")
         bounded = max(1, min(max_results, 25))
-        try:
-            return await _search(query=normalized_query, max_results=bounded)
-        except Exception as exc:
-            return _err(query=normalized_query, message=str(exc))
+        return await _search(query=normalized_query, max_results=bounded)

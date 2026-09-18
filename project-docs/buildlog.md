@@ -2356,3 +2356,46 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 70：`core.py` 公共骨架重构（`BASE_URL` 改基址 + `_ok_one` / `_is_core_id` / `_require_core_id` / `_rate_limit_message` / `_error_for` / `_request` / `_as_list` + 三个归一化函数），并落地限流口径更正；**须一并处理本步骤移交的 `limit=100` 超时约束**。
+
+## [2026-09-19 00:26] 步骤 70 完成：`core.py` 公共骨架重构（v3.5.0）
+
+### 执行的任务
+- 重写 `src/uniarticles/sources/core.py`（80 行 → 约 330 行），把后续步骤 71～75 要复用的公共能力集中到一处，工具层只剩"参数校验 + 调用 + 归一化"。
+- **不改动任何已注册工具的名称、参数与返回结构**（增强留给步骤 71）；`sources/__init__.py` 未触碰，CORE 仍在"v3.0.0 新增：通用检索型"分组内。
+- 未按计划书示例新增 `_require_core_id()`：实测 `_is_core_id()` 已足够表达该规则，且该 helper 在本文件中暂无调用点，新增即成死代码（该规则仍被固化为"调用方需在工具层预校验"的注释与 docstring）。
+
+### 关键变更
+| 内容 | 说明 |
+|---|---|
+| `BASE_URL` | `https://api.core.ac.uk/v3/search/works` → `https://api.core.ac.uk/v3`（基址），各端点用 `f"{BASE_URL}/…"` 拼装 |
+| `USER_AGENT` | `UniArticlesMCP/3.0.0` → `UniArticlesMCP/3.5.0`（其余源模块各自的版本串**未动**，属既有漂移，留待独立事项） |
+| `REQUEST_TIMEOUT = 60.0` | **本步骤新增**，直接回应步骤 69 移交的约束：`limit=100` 的 works 检索实测 435.5 KB / 28.75～44.82 s，固定 30 s 会间歇性超时 |
+| `_ok` / `_ok_one` / `_err` | `items` 恒为列表；单条记录类工具统一走 `_ok_one`，全局响应形状不变 |
+| `_is_core_id` / `_CORE_ID_RE` | 把"哪些端点只收数字 ID"的边界固化在一处 |
+| `_as_list` | **兼容两种列表载体**：`/works/{id}/outputs` 是裸列表，`/data-providers/{id}/outputs` 与各 search 端点是 `{"results": […]}` 分页对象（步骤 69 的 F8 vs F15 实测差异） |
+| `_rate_limit_message` | 解析 `x-ratelimit-retry-after` 的 ISO 时间戳（`+0000` 无冒号形态用 `fromisoformat` 容错，失败原样回显，不抛异常），回显 `limit`/`remaining` 并给出 token 制档位说明 |
+| `_error_for` | 取代 `raise_for_status()`：429 / 404 / 其余三分支；404 自带兜底文案（上游对未知 DOI 返回 `{"message":""}` 且 `Content-Type: text/html`）；5xx 追加"该端点对部分查询表达式不稳定"提示并给出 `title:` / `doi:` 写法建议 |
+| `_request` | 唯一 HTTP 出口，集中 `follow_redirects=True`（保留 CORE 偶发 301 的处理）、60 s 超时、headers、异常转 `_err` |
+| `_normalize_work` / `_normalize_output` / `_normalize_data_provider` / `_normalize_data_provider_stats` / `_normalize_work_stats` | 按步骤 69 实测键名归一化；`_normalize_work` **保留既有 8 个字段作为可见契约**（`title`/`authors`/`abstract`/`doi`/`cited_by_count`/`download_url`/`arxiv_id`/`pubmed_id`）并增补 `core_id`/`document_type`/`field_of_study`/`journals`/`data_providers`/`outputs`/`identifiers` 等；`_author_names()` 兼容作者元素为 dict 或 str |
+
+### 关于计划书示例的两处实现说明（非偏离，属按实测收紧）
+- 计划书示例里 `_normalize_work` 的增补字段写作 `year_published` 等，本实现按步骤 69 实测把 **works 检索响应里确实存在的键**（`publishedDate` / `depositedDate` / `documentType` / `fieldOfStudy` / `journals` / `dataProviders` / `outputs` / `identifiers` / `id`）纳入，同时保留 `year_published`（该键在检索响应中实测不存在，取值为 `None`，保留是为了让同一归一化函数可复用于聚合与详情场景，不额外分支）。
+- 计划书示例的 `_error_for` 对 404 使用同一文案覆盖两类 404；本实现保持该设计（记录不存在 vs 端点不接受该标识符类型由步骤 72 的调用方预校验区分），文案已改为中文以与其余 429/5xx 分支一致。
+
+### 限流口径更正
+- `core.py` 内旧文案（429 分支注释"without a key CORE locks out after ~5 requests for ~10 minutes"、docstring"~5 requests before a ~10-minute rate-limit lockout"、以及 config 侧同源表述的代码内引用）**已在 `core.py` 中清除**，改为官方现行 token 制口径（未认证 100 tokens/天、10 次/分钟、不提供 `fullText`；配置 key 后 1,000 tokens/天、25 次/分钟）。
+- 剩余旧口径仍存在于 `README.md`（4 处）、`README_EN.md`（5 处）、`AGENTS.md`（1 处）与 `src/uniarticles/config.py`（1 处注释）——**计划书步骤 76 的自查命令只列了前三个文件，`config.py` 的注释是同一处失实表述的第 4 个落点**，已在步骤 76 的处理范围内一并更正（见该步骤记录）。
+
+### 遇到的问题及解决方案
+- **`limit=100` 超时约束**（步骤 69 移交）：采用"把统一超时提到 60 s"处理，而不是降低上限或按端点分级设超时。理由：60 s 已覆盖实测最坏值 44.82 s 并有约 1.3× 余量；按端点分级会让 `_request()` 多一个仅在极端情况下才不同的参数，违背"骨架尽量薄"的本步目标。该取舍已写入代码注释与本文档。
+- 无其他异常：重构后工具数、入参、字段集合三项契约均与重构前一致（见下方验证）。
+
+### 验证
+- `uv run python -c "from uniarticles.sources import core; …"` → `_is_core_id('171513974')` = `True`、`_is_core_id('10.1038/nature12373')` = `False`；`core.BASE_URL` = `https://api.core.ac.uk/v3`。
+- `_as_list` 三种形态自检：`{"results":[1]}` → `[1]`、`[1,2]` → `[1,2]`、`{"x":1}` → `[]`。
+- `rg -n "raise_for_status|\b_normalize\(" src/uniarticles/sources/core.py` **零命中**（`raise_for_status` 已由 `_error_for` 取代；`_normalize` 已拆成五个具名归一化函数）。
+- `create_server()` → `list_tools()` = **21 个工具**（本步骤不新增工具），`core_work_search_by_query` 入参仍为 `query` / `max_results`（**尚未**新增 `offset`，增强在步骤 71）。
+- 真实网络调用 `_search(query="machine learning", max_results=3)` → `ok=True`、`count=3`、`error=None`；归一条目键集合为 20 个，`fullText` / `full_text` **不存在**；既有契约字段 `arxiv_id` / `pubmed_id` / `cited_by_count` / `download_url` 均在。
+
+### 下一步计划
+- ⏭️ 步骤 71：增强 `core_work_search_by_query` —— `_search()` 由 GET 改为 `POST /search/works`（body 含 `exclude:["fullText"]`）、上限 25 → 100、新增可选 `offset`，并把 429 文案统一交给 `_rate_limit_message()`。
