@@ -1791,3 +1791,45 @@ v3.3.0 交付后复核发现：三处排序修复改了行为，但**决定性�
 - 步骤 64：整体终验（端到端 golden path 真实调用 + 工具枚举 + stdout 洁净性 + 文档边界审计）与完成标记。
 
 ---
+
+## [2026-09-18 19:40] v3.4.0（续）：移除 OpenAlex 数据源 —— 步骤 64：整体终验 + 完成标记
+
+### 端到端验证（真实 stdio 传输，非模拟）
+以 MCP 客户端的方式启动真实服务器进程 `.venv\Scripts\python.exe -m uniarticles`，走完整 JSON-RPC 流程（临时脚本 `_verify/step64_stdio_e2e.py`，验证通过后已按规范删除）：
+
+| 检查项 | 实测结果 |
+|---|---|
+| `initialize` 握手 | ✅ 成功（`server=uniarticles-mcp`） |
+| `tools/list` | ✅ **21 个工具**，`openalex` 相关工具数 = 0 |
+| `tools/call crossref_work_search_by_query` | ✅ `ok=true`，`count=2` |
+| `tools/call pubmed_paper_search_by_query` | ✅ `ok=true`，`count=2` |
+| 未知工具调用 | ✅ 返回规范错误帧（`isError: true` / `Unknown tool: no_such_tool`），服务不崩溃 |
+| **stdout 洁净性** | ✅ **0 条非 JSON 行**（stdout 是 MCP stdio 的 JSON-RPC 通道） |
+| 脚本汇总 | `RESULT: PASS` |
+
+### 静态终检
+- `_verify/tool_availability_check.py` 全工具真实调用：**21 called / 21 ok / 0 failed**（步骤 62 已记录）。
+- 仓库级检索（`--no-ignore`，排除 `reference-projects/` 与 `.venv/`）：`openalex` 仅剩 3 类**有意保留的历史说明**——`AGENTS.md:7`、`README.md:260`（"该源已在 v3.4.0 中移除"的沿革叙述）、`project-docs/buildlog.md` 与 `project-docs/project-plan.md` 中的历史条目（按"不改写历史"惯例保留）。源码、`_verify/` 脚本、工具清单中的引用均已归零。
+- `__version__` = `3.4.0`，`pyproject.toml` = `3.4.0`（本轮为已定版本的并入，不另 bump）。
+
+### 文档边界审计
+- `git status --short` 干净；`project-docs/` 下本 agent 仅改动 `buildlog.md`。
+- `goal.md`（mtime 19:29，属 QA-R019 决策记录，非本 agent 改动）、`project-plan.md`（15:19）、`teach.md`（2026-08-07）均未被触碰。
+- 临时验证脚本 `_verify/step64_stdio_e2e.py` 已删除，未进入任何提交。
+
+## [2026-09-18 19:40] 🎉 项目构建完成
+
+### 完成情况
+- v3.4.0 两轮范围收缩（QA-R018 移除 Semantic Scholar、QA-R019 移除 OpenAlex）全部落地：源码、README ×2、AGENTS.md、`_verify/` 脚本均已同步，工具数 **23 → 21**、数据源 **10 → 9**。
+- 端到端验证通过：真实 stdio 服务器启动 + 工具枚举 + 真实工具调用 + 未知工具错误帧 + stdout 零污染。
+- 本轮提交：`6ac1aef`（步骤 61 源码删源）→ `de237ee`（步骤 62 README + 可用性复测）→ `67e2815`（步骤 63 AGENTS.md）→ 本步骤（步骤 64 终验）。
+
+### 遗留事项（不属构建阻塞）
+- ⚠️ `project-docs/project-plan.md` 中**没有 v3.4.0 对应步骤**（QA-R018/QA-R019 两轮均未进入计划书）。本轮经用户授权以 `goal.md` QA-R019 的影响范围作为步骤依据执行；建议后续由 `project-planner-cn` 把这两轮追加为正式步骤（编号从 61 起，`project-plan.md` 候选 59/60 已被排序修复预置占用）。
+- ⏭️ v3.4.0 **尚未发布到 PyPI**。发布属需用户确认的操作：先清空 `dist/`，再 `uv build` + `uv publish`（命令由用户自行执行）。
+- ⏭️ 候选步骤 59/60（三处默认排序修复）仍为"未经用户确认不得执行"状态，本轮未触碰。
+
+### 下一步计划
+- ✅ 构建已全部完成，无待执行步骤。
+
+---
