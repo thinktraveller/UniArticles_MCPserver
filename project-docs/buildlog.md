@@ -2615,3 +2615,77 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 76：文档同步与既有口径更正 —— `README.md` / `README_EN.md` / `AGENTS.md` 的工具计数由 21 改为 **29**、CORE 小节由 1 行扩为 9 行、限流口径改为 token 制（含 `src/uniarticles/config.py` 中同一处失实表述的注释），并同步 `_verify/tool_availability_check.py`。
+
+## [2026-09-19 00:45] 步骤 76 完成：文档同步与既有口径更正（v3.5.0）
+
+### 计数基准（先定数，再改文档）
+`create_server()` → `list_tools()` 实测 **29 个工具**，`core_` 前缀 **9 个**。本步骤所有计数改写均以该值为唯一依据，未在文档之间互相推算。
+
+### 改动清单
+
+**`README.md`（中文上位）**
+| 位置 | 改动 |
+|---|---|
+| §总览 | `截至 v3.4.0 … 9 个数据源、21 个工具` → `截至 v3.5.0 … 9 个数据源、29 个工具` |
+| §当前支持的文献数据源 引言 | `共提供 21 个工具` → `29 个工具` |
+| 数据源表 CORE 行 | 补"9 个数据源中唯一提供分布统计与机构库画像的源"；Key 列改为"使用 CORE 系工具时**强烈建议**配置" |
+| §API 密钥说明 表 | `CORE_API_KEY \| CORE（1 个工具）` → `CORE（9 个工具）`；限流口径整段替换为 token 制 |
+| 同章节 注意段 | `全部 21 个工具` → `全部 29 个工具` |
+| 方法一/方法二 CORE 说明（2 处） | 限流口径替换为 token 制 |
+| `.env` 示例块注释 | 同理替换（并按新口径改为 3 行注释） |
+| §工具清单 引言 | `共注册 21 个工具` → `共注册 29 个工具` |
+| §CORE 小节 | 由 1 行表格扩为 **9 行完整工具表** + `work`/`output` 语义说明段 + 无条件注册说明 |
+| 推荐提示词第 6 步 | 补 CORE 的分布统计与机构库画像能力（`core_work_aggregate_by_query` / `core_data_provider_*` / `core_work_outputs_by_id`） |
+
+**`README_EN.md`（英文）**：与中文侧**逐项对齐**——同样的 9 处计数/口径位置、同样扩为 9 行的 CORE 工具表、同样的 `work`/`output` 说明与提示词补充。
+
+**`AGENTS.md`**
+| 位置 | 改动 |
+|---|---|
+| §Project overview 首句 | `As of v3.4.0 (released to PyPI on 2026-09-18) … 9 data sources / 21 tools` → `As of v3.5.0 (built locally, not yet released to PyPI; v3.4.0 went out on 2026-09-18) … 9 data sources / 29 tools` |
+| 同段 | 新增一句说明本轮仅扩展 CORE（1 → 9）且属"新查询维度"、不与既有源重叠 |
+| §Commands 的 `.env` 示例 | `CORE_API_KEY` 行注释由"works without it, but heavily rate-limited"改为 token 制口径 |
+| §Data sources 表 CORE 行 | 由 `1 — search … max_results ≤ 25` 改为 **9 个工具逐项列出**（工具名 + 端点语义 + 上限），并写清 facet 分布 / 机构库画像的唯一性与 `work` vs `output` 区别 |
+
+**`src/uniarticles/config.py`**：`core_api_key` 上方注释中的"~5 requests before a 10-minute lockout"改为 token 制口径（**这是步骤 76 计划书自查命令未列出、但属同一处失实表述的第 4 个落点**，理由见步骤 70 记录）。
+
+**`_verify/tool_availability_check.py`**
+| 改动 | 说明 |
+|---|---|
+| 模块 docstring | `call all 21 tools` → `call all 29 tools` |
+| `lookup_phase` 新增 7 个 CORE 条目 | `core_work_detail_by_identifier("10.1038/nature12373")` / `core_work_outputs_by_id("171513974")` / `core_work_stats_by_id("171513974")` / `core_work_aggregate_by_query(GENERAL_QUERY, top_n=5)` / `core_data_provider_search_by_query("university", max_results=3)` / `core_data_provider_detail_by_id("1630")` / `core_output_detail_by_id("29197653")`，全部选用低成本、稳定命中的形态 |
+| **有意不纳入** `core_output_search_by_query` | 该端点的上游偶发 5xx 属**已知上游行为**；把它写进回归脚本会让"非真回归"的失败污染脚本信号（计划书第 4 条：回归脚本的失败必须意味着真回归）。已在脚本注释中显式说明这一取舍 |
+| `core_work_aggregate_by_query` **纳入** | 计划书第 4 条要求"以 F5/F6 结论为准"：聚合端点在真实探测中可用，故纳入 |
+
+### 自查命令结果（计划书步骤 76 第 7 条，逐条贴回）
+
+```text
+$ rg -n "21 个工具|21 tools|共注册 21|9 个数据源、21" README.md README_EN.md AGENTS.md
+（零命中，退出码 1）
+
+$ rg -n "5 次请求|10 分钟|five requests|10-minute|~5 requests" README.md README_EN.md AGENTS.md src/uniarticles/sources/core.py
+（零命中，退出码 1）
+
+$ rg --no-ignore -n "core_work_search_by_query|core_work_detail_by_identifier|…" _verify/tool_availability_check.py
+107:  ("core", "core_work_search_by_query", "max_results"),        ← 既有矩阵条目
+147:  ("core_work_search_by_query", {…"max_results": 3}),           ← 既有 Phase-1 条目
+207-213: 新增的 7 个 CORE 工具条目（逐个命中）
+```
+
+补充自查：`rg --no-ignore -n "21 tools|21 个工具" .`（排除 `project-docs/`、`.venv/`、`dist/`、`reference-projects/`、`docs/`）**零命中**；`src/uniarticles/config.py` 中的旧限流表述**零命中**。
+
+### 验证
+- 两份 README 的 CORE 工具表**逐行同名同序**（脚本比对：9 行、名称集合与顺序完全一致、无重复）；两份 README 中出现的工具总数、数据源数数值完全相同。
+- `AGENTS.md` 的 CORE 行工具清单与 `list_tools()` 实际返回的 `core_*` 集合**逐一致**（9 个，名称与数量均对得上）。
+- 三份文档的代码围栏计数均为偶数（README 16 / README_EN 16 / AGENTS 4），Markdown 结构未被破坏。
+- `_verify/tool_availability_check.py` 通过 `py_compile` 语法检查。
+
+### 关于 `AGENTS.md` 的提交边界（需用户知悉）
+- 实测 `.gitignore` 第 54 行有 `AGENTS.md`，且该文件**未被 git 跟踪**（`git ls-files` 无此项、`git status --ignored` 显示 `!! AGENTS.md`）。该忽略规则是**用户本轮之前的既有改动**，按项目规则不得触碰。
+- 因此本步骤**按计划书更新了 `AGENTS.md` 的事实性描述**（计数、CORE 工具清单、限流口径），但**不暂存、不提交**该文件——与 v3.3.0 步骤 56「维护内容但不得 `git add`」的既有处理一致。用户若希望它重新入库，需先自行调整 `.gitignore`。
+
+### 遇到的一个工具限制（如实记录）
+- `apply_patch` 对 `AGENTS.md` 第 7 行（1673 字符的超长单行，整段项目概述）**无法匹配**，无论整行还是其中一段子串。已核对该行确为 LF 行尾、目标子串存在且唯一，故判定为补丁工具对超长行的匹配限制。处置：对该文件的 4 处改动改用**精确子串替换的机械文本重写**完成，并逐条 `assert` 匹配次数为 1、改后复核 `git diff`/文件内容。这是**本项目首次遇到的该工具限制**，后续再遇超长单行文档可沿用同一处置。
+
+### 下一步计划
+- ⏭️ 步骤 77：版本号提升至 `3.5.0`（`pyproject.toml` + `src/uniarticles/__init__.py`）+ 全量回归验证 + v3.5.0 交付检查点。**不构建、不发布 PyPI**。

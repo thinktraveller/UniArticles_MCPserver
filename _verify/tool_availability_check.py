@@ -5,7 +5,7 @@ APIs, because the question being answered is "is this tool usable right now"
 rather than "is the code self-consistent".
 
 Two modes:
-  default     — call all 21 tools once, print an OK/FAIL table.
+  default     — call all 29 tools once, print an OK/FAIL table.
   --matrix    — additionally probe domain coverage: run a humanities, a
                 biomedical, and a Chinese-language query against every keyword
                 source, to ground the "which source certainly won't match"
@@ -198,6 +198,19 @@ async def main() -> int:
         ("pubmed_related_article_search_by_pmid", {"pmid": "32634418", "max_results": 3}),
         ("pubmed_pmc_linkage_lookup_by_pmid", {"pmid": "32634418"}),
         ("crossref_work_detail_by_doi", {"doi": crossref_doi}),
+        # v3.5.0: the CORE tools. All entries use the two documented stable ids
+        # (DOI 10.1038/nature12373 for work lookups; 171513974 / 1630 / 29197653
+        # for works-outputs, data-provider and output lookups) plus a tiny aggregate.
+        # core_output_search_by_query is deliberately NOT listed here: upstream has
+        # historically returned HTTP 500 for some query expressions, and a regression
+        # script must only fail for a real regression.
+        ("core_work_detail_by_identifier", {"identifier": "10.1038/nature12373"}),
+        ("core_work_outputs_by_id", {"identifier": "171513974"}),
+        ("core_work_stats_by_id", {"identifier": "171513974"}),
+        ("core_work_aggregate_by_query", {"query": GENERAL_QUERY, "top_n": 5}),
+        ("core_data_provider_search_by_query", {"query": "university", "max_results": 3}),
+        ("core_data_provider_detail_by_id", {"provider_id": "1630"}),
+        ("core_output_detail_by_id", {"output_id": "29197653"}),
     ]
 
     for name, args in lookup_phase:

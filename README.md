@@ -9,7 +9,7 @@
 
 ## 总览
 
-亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。截至 v3.4.0，它把 **9 个数据源、21 个工具**——Scopus、ScienceDirect、arXiv、PubMed、Crossref、Europe PMC、DOAJ、OpenAIRE、CORE——统一到同一套标准化接口下，供 LLM 客户端（Codex Desktop、Cherry Studio、Claude Desktop 等）调用。
+亿文通（UniArticles）是一个实现了模型上下文协议 (MCP) 的统一学术文献检索服务器。截至 v3.5.0，它把 **9 个数据源、29 个工具**——Scopus、ScienceDirect、arXiv、PubMed、Crossref、Europe PMC、DOAJ、OpenAIRE、CORE——统一到同一套标准化接口下，供 LLM 客户端（Codex Desktop、Cherry Studio、Claude Desktop 等）调用。
 
 ## 功能特性
 
@@ -19,7 +19,7 @@
 
 ## 当前支持的文献数据源
 
-亿文通将以下 **9 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构，且全部默认启用，共提供 **21 个工具**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
+亿文通将以下 **9 个数据源**统一到同一套 MCP 接口下，全部返回相同的归一化 JSON 结构，且全部默认启用，共提供 **29 个工具**。除 arXiv 通过官方 `arxiv` Python 包封装外，其余每个数据源都是通过 `httpx` 直连该服务商的官方 REST API。
 
 | 数据源 | 覆盖范围 | 接入方式 | API Key |
 |---|---|---|---|
@@ -31,7 +31,7 @@
 | **Europe PMC** | EBI 的生命科学文献聚合库（区别于 NCBI PubMed），含 PMC 全文。 | Europe PMC REST API（`ebi.ac.uk/europepmc`），经 `httpx` 直连 | 无需 |
 | **DOAJ** | 开放获取期刊目录（Directory of Open Access Journals）中的同行评审文章。 | DOAJ REST API（`doaj.org/api`），经 `httpx` 直连 | 无需 |
 | **OpenAIRE** | 欧洲开放科学研究成果聚合库。 | OpenAIRE REST API（`api.openaire.eu`），经 `httpx` 直连 | 无需 |
-| **CORE** | 汇聚全球仓储与期刊的开放获取论文聚合库。 | CORE v3 REST API（`api.core.ac.uk`），经 `httpx` 直连 | 可选 —— `CORE_API_KEY`（建议配置，无 Key 限流严格） |
+| **CORE** | 汇聚全球仓储与期刊的开放获取论文聚合库；9 个数据源中唯一提供分布统计（年 / 出版社 / 学科等 facet）与机构库画像的源。 | CORE v3 REST API（`api.core.ac.uk`），经 `httpx` 直连 | 可选 —— `CORE_API_KEY`（使用 CORE 系工具时**强烈建议**配置，无 Key 为 token 计费的低额度档） |
 
 ## ⚠️ API 密钥说明
 
@@ -40,12 +40,12 @@
 | 密钥 | 用于 | 申请方式 |
 | --- | --- | --- |
 | `ELSEVIER_API_KEY` | Scopus + ScienceDirect（8 个工具） | 在 [Elsevier Developer Portal](https://dev.elsevier.com/) 注册免费个人账号后创建 API Key。**基础级、非商业性质的 Key 即可满足本服务器全部 Elsevier 相关工具，不需要机构订阅，也不需要 Insttoken**（已用真实的非商业 Key 逐一实测验证）。Scopus 是 Elsevier 旗下数据库，因此在密钥作用域允许的前提下，同一把 Key 也可用于其他 Elsevier API 服务。 |
-| `CORE_API_KEY` | CORE（1 个工具） | 前往 [core.ac.uk/services/api#form](https://core.ac.uk/services/api#form) 申请。**可选**——不配置也能用，但限流严格（约 5 次请求后锁定约 10 分钟）。 |
+| `CORE_API_KEY` | CORE（9 个工具） | 前往 [core.ac.uk/services/api#form](https://core.ac.uk/services/api#form) 申请。**可选**——不配置也能用，但额度低得多：未认证档为 **100 tokens/天、10 次/分钟**，且官方不提供 `fullText`；配置后为 **1,000 tokens/天、25 次/分钟**。使用 CORE 系工具时强烈建议配置。 |
 | `NCBI_API_KEY` | PubMed（4 个工具） | 先在 [ncbi.nlm.nih.gov](https://www.ncbi.nlm.nih.gov/) 登录 NCBI 账号，再到 [NCBI 账号设置页](https://account.ncbi.nlm.nih.gov/settings/) 申请。**可选**——不配置也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒。 |
 
 **完全不需要 API Key 的数据源**：arXiv、Crossref、Europe PMC、DOAJ、OpenAIRE。
 
-**注意**：即使一个 Key 都不配置，服务器仍会注册并暴露全部 21 个工具——只有对需要 Key 的数据源的调用会失败，而且是以清晰的错误信息失败，不会从工具列表中悄悄消失。
+**注意**：即使一个 Key 都不配置，服务器仍会注册并暴露全部 29 个工具——只有对需要 Key 的数据源的调用会失败，而且是以清晰的错误信息失败，不会从工具列表中悄悄消失。
 
 ## 安装与使用
 
@@ -79,7 +79,7 @@
 > -  `ELSEVIER_API_KEY` —— Elsevier相关的服务必须提供  Key 才可使用（[在此申请](https://dev.elsevier.com/)）。
 >
 > - `NCBI_API_KEY` —— PubMed 无此 Key 也能用；配置后仅将限速从 3 请求/秒提升到 10 请求/秒（[在此申请](https://account.ncbi.nlm.nih.gov/settings/)）。
-> - `CORE_API_KEY` —— CORE 无此 Key 也能用，但限流严格（约 5 次请求后锁定约 10 分钟），建议配置（[在此申请](https://core.ac.uk/services/api#form)）。
+> - `CORE_API_KEY` —— CORE 无此 Key 也能用，但额度低得多（未认证档 100 tokens/天、10 次/分钟，且不提供 `fullText`；配置后 1,000 tokens/天、25 次/分钟），使用 CORE 系工具时强烈建议配置（[在此申请](https://core.ac.uk/services/api#form)）。
 
 如果您不希望每次重启时强制刷新缓存包，则改为添加以下内容：（但这会导致包更新时您需要对包进行手动更新）
 
@@ -144,8 +144,9 @@ NCBI_API_KEY=your_ncbi_api_key
 # 可选。NCBI Entrez 无此 Key 也可用；配置后仅将 PubMed 限速从 3 请求/秒
 # 提升到 10 请求/秒。免费申请：先登录 https://www.ncbi.nlm.nih.gov/
 # 再前往 https://account.ncbi.nlm.nih.gov/settings/
-# 可选。CORE 无此 Key 也可用，但限流严格（约 5 次请求后锁定约 10 分钟），
-# 建议配置。免费申请：https://core.ac.uk/services/api#form
+# 可选。CORE 无此 Key 也可用，但额度低得多（未认证档 100 tokens/天、
+# 10 次/分钟，且不提供 fullText；配置后 1,000 tokens/天、25 次/分钟）。
+# 使用 CORE 系工具时强烈建议配置。免费申请：https://core.ac.uk/services/api#form
 CORE_API_KEY=your_core_api_key
 ```
 
@@ -177,7 +178,7 @@ python -m uniarticles      # 使用 pip 安装时
 
 ## 可用工具列表
 
-以下工具按数据源分组，每个数据源一张表格。**共注册 21 个工具**，只要对应数据源的 Key（如有要求）已配置即可全部使用。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
+以下工具按数据源分组，每个数据源一张表格。**共注册 29 个工具**，只要对应数据源的 Key（如有要求）已配置即可全部使用。每个工具都返回相同的归一化 JSON 结构（`ok`、`source`、`query`、`count`、`items`、`error`）。
 
 ### Scopus
 
@@ -245,9 +246,23 @@ python -m uniarticles      # 使用 pip 安装时
 
 ### CORE
 
+CORE 在本版本由 1 个工具扩展为 **9 个**（<!-- CORE 工具数：9 -->其余 8 个数据源共 20 个工具，合计 29）。它是本服务器唯一同时提供"**分布统计**"（年 / 出版社 / 学科等 facet）与"**机构库画像**"（某篇论文被哪些机构库采集）的数据源，其余 8 个源都只有"检索列表"或"按标识符取单条"。
+
+**`work` 与 `output` 的区别**（选工具前先看这一句）：`work` 是 CORE **去重后的作品级记录**（同一篇论文只有一条）；`output` 是**未经去重的原始采集信号**（同一篇论文在几个机构库被采集就有几条）。要论文本身用 works 系工具，要看某个采集副本的许可/仓库信息才用 outputs 系工具。
+
 | 工具名 | 参数 | 说明 |
 |---|---|---|
-| `core_work_search_by_query` | `query`、`max_results`=10 | 按关键词检索 CORE（全球开放获取聚合库）。无 Key 亦可用但限流严格（约 5 次请求后锁定约 10 分钟），**建议配置 `CORE_API_KEY`** 以获得完整体验。 |
+| `core_work_search_by_query` | `query`、`max_results`=10（上限 100）、`offset`=0 | 按关键词检索 CORE 作品。`query` 支持 CORE 自身语法（`title:"…"`、`doi:"…"`、布尔与短语）；请求层已剔除 `fullText`，只返回题录与下载链接。 |
+| `core_work_detail_by_identifier` | `identifier` | 按**裸 DOI**（如 `10.1038/nature12373`）或数字 CORE ID 取作品详情。注意 DOI 不要加 `doi:` 前缀（上游对前缀写法返回 404）；详情比检索结果多出 `data_providers` / `outputs` / `identifiers` 等字段。 |
+| `core_work_outputs_by_id` | `identifier` | 取某作品在**各机构库中的版本实例**列表（未去重的采集副本），各项含 `download_url` / `license` / `fulltext_status` / `data_provider`。**只接受数字 CORE ID**——传 DOI 会 404，需先用 `core_work_detail_by_identifier` 取得数字 ID。 |
+| `core_work_stats_by_id` | `identifier` | 取作品的生命周期时间戳（`deposited_date` / `published_date` / `updated_date` / `accepted_date`）。裸 DOI 与数字 ID 均可。 |
+| `core_work_aggregate_by_query` | `query`、`fields`、`top_n`=10（上限 50） | 按关键词统计 CORE 文献的**分布**（年 / 作者 / 出版社 / 学科等）。返回的不是文献列表，而是每个维度一项（`field` / `total_buckets` / `top[{value, count}]`），`top` 按出现次数降序。`fields` 留空则由 CORE 决定返回哪些维度；显式传入用 camelCase 维度名（如 `["yearPublished","publisher"]`），不传时上游返回的默认维度名是 snake_case，两者都原样透出。每个维度上游最多返回 100 个取值。 |
+| `core_data_provider_search_by_query` | `query`、`max_results`=10（上限 200） | 按关键词检索 CORE 的机构库 / 期刊源（data providers，不是论文）。返回 `id` / `name` / `type` / `url` / `software` / `country_code` 等。 |
+| `core_data_provider_detail_by_id` | `provider_id`、`include_stats`=false、`include_outputs`=false | 按数字 ID 取机构库详情。两个可选开关各追加一次上游请求：`include_stats` 附带收录量统计，`include_outputs` 附带其下最多 25 条 outputs。子资源失败时主结果仍成功，失败原因写在该子键里（`{"ok": false, "error": "…"}`），不会丢掉已取到的详情。 |
+| `core_output_detail_by_id` | `output_id` | 按数字 ID 取**原始采集记录**详情（`license` / `repositories` / `sdg` / `fulltext_status` / `source_fulltext_urls` 等）。需要作品级信息时请改用 works 系工具。 |
+| `core_output_search_by_query` | `query`、`max_results`=10（上限 100） | 按关键词检索原始采集记录（outputs，未去重）。建议使用 `title:"…"` / `doi:"…"` 等字段限定写法——该端点历史上对部分查询表达式返回过上游 500（非本服务器行为），服务器**不会**自动重试，5xx 会原样返回并附上改用建议。 |
+
+> 全部 CORE 工具均**无条件注册**（无 Key 也能调用，只是额度更低）。触发限流时错误信息会给出可重试时间与当前额度，并提示配置 `CORE_API_KEY`。
 
 ## 可参考agent提示词
 
@@ -291,6 +306,10 @@ python -m uniarticles      # 使用 pip 安装时
 5. arXiv（仅限预印本学科）—— 定位已知文献用 ti:"完整标题"；主题检索用 all:词。
 6. DOAJ、CORE、OpenAIRE —— 仅开放获取。DOAJ 的相关度排序偏弱，
    用标题式查询会返回明显离题的结果，因此每一条都必须先核对标题再写进结果。
+   CORE 除了检索，还能给出**分布统计**（core_work_aggregate_by_query，比如这批
+   文献都发在哪些年/出版社）与**机构库画像**（core_data_provider_* / 
+   core_work_outputs_by_id，比如某篇论文被哪些机构库采集）；需要这类信息时
+   直接调用对应工具，不要用其它源的结果自行拼凑。
 7. ScienceDirect —— 只能按标识符查询（DOI/PII），它没有检索工具，不要试图检索。
 每个源取 5–10 条。同一主题在多个源各查一遍是预期用法，而不是「失败后降级」。
 任何源报错就跳过，并记录下来。

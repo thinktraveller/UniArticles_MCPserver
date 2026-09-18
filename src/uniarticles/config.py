@@ -38,8 +38,9 @@ class Settings:
     elsevier_api_key: str | None = field(default_factory=_resolve_elsevier_api_key)
     elsevier_insttoken: str | None = os.getenv("ELSEVIER_INSTTOKEN")
     # v3.0.0 optional key (brand-new variable, no legacy-name migration needed).
-    # CORE registers unconditionally: without a key its tool still works but is
-    # severely rate-limited (~5 requests before a 10-minute lockout).
+    # CORE registers unconditionally: without a key its tools still work, but the
+    # anonymous tier is token-metered (100 tokens/day, 10 req/min, no fullText;
+    # with a key: 1,000 tokens/day at 25 req/min). See buildlog v3.5.0 step 70.
     core_api_key: str | None = field(default_factory=lambda: os.getenv("CORE_API_KEY"))
     # v3.1.0 optional key. NCBI Entrez works fine WITHOUT a key; a key only raises the
     # official rate limit from 3 to 10 requests/sec, so every pubmed tool registers
