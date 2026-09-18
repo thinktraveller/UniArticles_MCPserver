@@ -600,3 +600,37 @@ def register(server: FastMCP) -> None:
         if not isinstance(payload, dict):
             return _err(query=candidate, message="CORE 返回了非预期的 output 结构。")
         return _ok_one(query=candidate, item=_normalize_output(payload))
+
+    @server.tool()
+    async def core_output_search_by_query(query: str, max_results: int = 10) -> dict:
+        """Search CORE's raw harvesting records (`outputs`, not de-duplicated).
+
+        Difference from `core_work_search_by_query`: a `work` is CORE's merged
+        record for a paper (one per paper), while an `output` is the per-repository
+        signal CORE harvested (the same paper can appear several times, once per
+        repository). Use this tool to find a specific repository's copy of a paper
+        and inspect its `license` / `fulltext_status` / `repositories`; use the works
+        tools for the paper itself.
+
+        `query` accepts CORE's own syntax. Field-qualified forms such as
+        `title:"..."` and `doi:"..."` are recommended: this endpoint has
+        historically returned HTTP 500 (an upstream Azure Search expression error)
+        for some query expressions — an upstream behaviour, not something this
+        server retries around, so a 500 surfaces as-is with a hint to try a
+        field-qualified form.
+
+        `max_results` is capped at 100 and the upstream response inlines `fullText`
+        for every hit; the returned items keep metadata and links only.
+        """
+        normalized_query = query.strip()
+        if not normalized_query:
+            return _err(query=query, message="query must not be empty")
+        bounded = max(1, min(max_results, 100))
+        result = await _request(
+            "GET", "/search/outputs", query=normalized_query,
+            params={"q": normalized_query, "limit": bounded},
+        )
+        if not result["ok"]:
+            return result
+        items = [_normalize_output(o) for o in _as_list(result["payload"]) if isinstance(o, dict)]
+        return _ok(query=normalized_query, items=items)

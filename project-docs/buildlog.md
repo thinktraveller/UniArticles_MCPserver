@@ -2568,3 +2568,50 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 75：新增 `core_output_search_by_query`。步骤 69 的 F17a/F17b/F17c 三组合**全部 200**，击杀条件已通过，故本步骤**注册该工具**，工具总数 28 → 29。
+
+## [2026-09-19 00:42] 步骤 75 完成：新增 `core_output_search_by_query`（v3.5.0，QA-R021 第 9 项，条件纳入**已通过**）
+
+### 击杀条件判定（本步骤的第 1 步，先判后写）
+依据步骤 69 的 F17 首次运行完整结果：
+
+| 组合 | 查询 | 状态 |
+|---|---|---|
+| F17a | `q=machine learning`（普通关键词） | **200** |
+| F17b | `q=title:"machine learning"`（字段限定） | **200** |
+| F17c | `q=doi:"10.1007/s10994-024-06619-7"`（DOI 精确命中） | **200** |
+
+三种组合全部 200 → 按计划书**判定为"可纳入"**，本步骤注册该工具，本版本工具总数按 **29** 计。判定基于首次运行的完整结果，**未做任何"重试到出现 200 为止"的选择性采信**（计划书明确的硬约束）。
+
+### 执行的任务
+- 新增 `core_output_search_by_query`：`GET /v3/search/outputs`，`q` + `limit`（上限 100），复用 `_normalize_output()`（该函数自步骤 70 起已按 F8/F15/F16/F17 实测结构写好）。
+- docstring 写清三件事：① 与 `core_work_search_by_query` 的粒度差异（去重作品 vs 各机构库原始采集信号），且两个工具的 docstring **互相点明差异**；② 该端点历史上对部分查询表达式返回过 500（属上游行为），建议用 `title:"…"` / `doi:"…"` 限定写法；③ 上限 100 且返回体已剔除 `fullText`。
+- 5xx 文案的可操作性由步骤 70 的 `_error_for()` 提供（≥500 时追加"该端点对部分查询表达式不稳定，可改用 title:/doi: 限定写法"），本步骤无需重复实现。
+
+### 关键设计决策
+| 决策 | 理由 |
+|---|---|
+| 实现内**不含任何重试** | 计划书明确禁止自动重试（放大 token 消耗、掩盖真实失败）；与全项目其余工具口径一致 |
+| 条件纳入**不实现为条件注册** | 该条件决定"是否进入本版本代码"，一旦纳入即**无条件注册**——工具集必须对每个客户端一致（`goal.md` 与 `AGENTS.md` 的架构约束） |
+| 不暴露 `offset` | 计划书只要求 `max_results`；`core_work_search_by_query` 的 `offset` 是"修既有缺陷"的定制项，本工具无对应授权，保持最小参数面 |
+
+### 实测数据（本机，2026-09-19 00:41～00:42）
+
+| 调用 | 结果 |
+|---|---|
+| `core_output_search_by_query("machine learning", max_results=2)` | `ok=True`，`count=2` |
+| `core_output_search_by_query('doi:"10.1007/s10994-024-06619-7"', max_results=2)` | `ok=True`，**精确命中 1 条**；`title="Learning curves for decision making in supervised machine learning: a survey"`，`license="openAccess"` |
+| `core_output_search_by_query('title:"machine learning"', max_results=2)` | `ok=True`，`count=2` |
+| `core_output_search_by_query("   ")` | `ok=False`，`error="query must not be empty"` |
+| `max_results=999` | 夹到 **100** 条 |
+| 边界回归 | `items` 中无 `fullText` / `full_text` |
+
+### 遇到的问题及解决方案
+- **`uv run` 阶段因 PyPI 不可达而失败**（`Failed to fetch https://pypi.org/simple/python-dotenv/ … operation timed out`，uv 重试 3 次后退出）。与工具代码无关，属本机网络同时段对 PyPI 的连通问题。处置：改用项目虚拟环境解释器 `.venv\Scripts\python.exe` 直接执行（依赖已装好，无需解析），验证全部正常。**该处置仅影响本次验证方式，不影响交付物**；后续步骤如需再验证，同样优先使用 `.venv` 内的解释器，避免把网络抖动误判为构建失败。
+
+### 验证
+- `create_server()` → `list_tools()` = **29 个工具**；`core_` 前缀工具 **9 个**：`core_data_provider_detail_by_id` / `core_data_provider_search_by_query` / `core_output_detail_by_id` / `core_output_search_by_query` / `core_work_aggregate_by_query` / `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_search_by_query` / `core_work_stats_by_id`。
+- 工具的出现与判定一致（通过 → 已注册）；响应键集合仍为六项，`source` 恒为 `"core"`。
+- 三个查询组合在本步骤的真实调用中**再次全部 200**（含 DOI 精确命中），与步骤 69 的击杀条件判据相互印证。
+
+### 下一步计划
+- ⏭️ 步骤 76：文档同步与既有口径更正 —— `README.md` / `README_EN.md` / `AGENTS.md` 的工具计数由 21 改为 **29**、CORE 小节由 1 行扩为 9 行、限流口径改为 token 制（含 `src/uniarticles/config.py` 中同一处失实表述的注释），并同步 `_verify/tool_availability_check.py`。
