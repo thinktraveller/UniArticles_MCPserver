@@ -2281,7 +2281,9 @@ def register_all_sources(server: FastMCP) -> None:
 
 ---
 
-### 候选步骤 59 / 60：三处默认排序修复（**默认不纳入本版本，未经用户确认不得执行**）
+### 步骤 59 / 60（原候选，已由用户确认并执行于 v3.3.0）：三处默认排序修复
+
+> **执行状态（补记）**：用户在 v3.3.0 澄清中回答"2、修复"，本节候选随即启用并执行完毕——步骤 59 产出 `_verify/sort_probe.py`（提交 `f199fc1`），步骤 60 完成三处排序修复（提交 `7c66c7e`），并追加一次工具描述补全（提交 `7f18783`）。**执行中修正了本节的两处判断**：① arXiv"裸标题查不到已知论文"的决定性因素是**缺少 `ti:` 字段前缀**，而非排序——加 `ti:"..."` 后即便配合相关性排序亦能命中，只改 `SortCriterion` 不会命中（此为对 v3.3.0 计划阶段结论的更正）；② 因此 `arxiv.py` 仅把关键词检索的排序改为 `Relevance`、分类浏览保持 `SubmittedDate`（二者共用一个私有函数，一刀切会让"按分类列最新"的语义失效）；"把裸标题自动包装成 `ti:`"这一设想被明确否决，因其会破坏既有的 `au:` / `abs:` 查询习惯。下面**候选文本原样保留，不改写**（当时的"默认不纳入"前提已被用户后续确认取代）。
 
 `goal.md` QA-R017 明确记录："三处排序修复……用户本轮未表态，默认不纳入，留待后续按 project-plan.md 增量追加步骤的方式补入"。此处以候选形式预置，用户一旦确认即可直接启用（步骤编号顺延为 59/60）。
 
@@ -2296,6 +2298,239 @@ def register_all_sources(server: FastMCP) -> None:
 - 改动点（位置已由代码核实）：`src/uniarticles/sources/scopus.py:364` 的 `sort: str = "coverDate"` 默认值；`src/uniarticles/sources/arxiv.py:71` 硬编码的 `sort_by=arxiv.SortCriterion.SubmittedDate`；`src/uniarticles/sources/pubmed.py` 的 ESearch 请求补显式排序参数（该文件当前未传 `sort`）。
 - 文档同步：`README.md:204` / `README_ZH.md:202` 的 Scopus 工具表格中 `sort`="coverDate" 默认值需同步更新；两份 README 与 `AGENTS.md` 中若有排序相关描述一并更新。
 - 性质：这是**默认行为变更，属对已发布工具的破坏性变更**，需在 buildlog 中显著提示（依赖"按日期排序"既有行为的调用方会感知到变化）。
+
+---
+
+### 补记说明（步骤 61～68 的组织方式）
+
+**步骤 61～65 为事后补记，均已执行完毕。** v3.4.0 的两轮删源（QA-R018 移除 Semantic Scholar、QA-R019 移除 OpenAlex）系用户**直接指令**，`goal.md` 已判定本轮"性质均为删除型、范围小而封闭，不需要项目规划专家介入做分阶段设计，可由 project-builder-cn 直接执行"，因此当时未走本计划书。为保持本计划书"完整构建记录"的一贯要求，此处按已实际执行的提交与 `buildlog.md` 条目回填。**编号依据**：步骤 61～64 沿用 project-builder-cn 已在提交信息与 `buildlog.md` 标题中使用的编号（不改写历史、避免与 buildlog 交叉引用矛盾）；步骤 65 那一轮在**时间上最早**（先于 61～64），但因未获编号而以"补记"置于其后，其编号仅为本计划书的文档序号，**不代表执行顺序**。
+
+**步骤 66～68 为本轮新增、尚未执行**，由用户本轮指令直接指定："补充之前的步骤并且增加修复 arXiv 的超时步骤，保持版本号为 3.4.0，修复好后清理 dist 并发布包"。
+
+---
+
+### 步骤 61（补记，已完成）：删除 OpenAlex 数据源与注册引用（v3.4.0，QA-R019）
+
+#### 目标说明
+落实用户指令"既然 openalex 经常出问题，那就把它也移除了"（QA-R019）。OpenAlex 的两个工具（`openalex_work_search_by_query`、`openalex_work_detail_by_doi`）均为**无条件注册**，因此本轮工具数**确实下降**（23→21），这与步骤 65（Semantic Scholar，无 Key 时本就注册 0 个工具、用户可见工具数不变）性质不同，两者不得混写。删除性质为**上游可用性/限流不稳定**（检索与 DOI 解析两条路径均 429，唯一可用的实体 ID 直取形态本项目并未暴露），**非代码缺陷、非权限受限**——不得据此认为 OpenAlex 的接口实现有缺陷。
+
+#### 具体操作
+1. 删除 `src/uniarticles/sources/openalex.py`（含其倒排索引摘要重建逻辑 `abstract_inverted_index`）。
+2. `src/uniarticles/sources/__init__.py`：删除 `from .openalex import register as register_openalex_source` 与 `register_openalex_source(server)`，并清理随之孤立的分组注释（若有，比照步骤 53/54 对孤立注释的处理）。
+3. `_verify/tool_availability_check.py`：删除 4 处 OpenAlex 调用，其中一处是**以 OpenAlex 搜索结果回填 DOI 的依赖链**——该依赖同时导致 `openalex_work_detail_by_doi` 在上游 429 时被"连锁判失败"（脚本层面的失真，非工具本身缺陷）。
+4. 不改动其余 9 个源模块的任何代码，包括各模块内硬编码的 `USER_AGENT` 版本号字符串（沿用 v3.1.0 步骤 51 已确认的惯例：仅在该模块被创建/重写时设为当时版本号）。
+5. 执行结果：提交 `6ac1aef`。
+
+#### 验证方法
+- `create_server()` → `list_tools()`：**9 个数据源 / 21 个工具**，工具名单中无 `openalex_*`。
+- 全仓库静态检索（**必须 `rg --no-ignore`**，`_verify/` 被 `.gitignore` 遮蔽）：`openalex` / `OpenAlex` 在 `src/`、`_verify/` 中零命中，仅历史文档条目保留。
+
+#### 风险提示
+- **不得**用 `rg -c "@server.tool"` 计数（历史上有注释中的同名字符串导致虚高的先例），一律以 `list_tools()` 返回值为准。
+- OpenAlex 移除后，"匿名限流导致某一源不可用"在本项目**已无同类先例**；后续若新增源遇到同类现象，仍按 QA-R013 的 `_verify/` 流程处置，不得据单机单次失败直接删源。
+
+---
+
+### 步骤 62（补记，已完成）：`README.md` / `README_ZH.md` 同步下线 OpenAlex + 全工具可用性复测
+
+#### 目标说明
+文档与代码不得出现"文档写了但代码没有"的不一致（本项目历史上已两次发生计数漏改：v2.2.0 步骤 17、v2.3.0 步骤 23）；同时用一次真实全量复测确认删源未波及其余源。
+
+#### 具体操作
+1. 两份 README 同步：特性列表中的源清单、数据源对比表格行、`### OpenAlex` 独立小节（含 2 个工具行与 429 风险说明）、"工具可用性实测"段落的计数与结论、以及"文献查找"推荐提示词第 2/3 步中的 OpenAlex 引用与 429 处置说明，逐处删除或改写。
+2. 推荐提示词的第三步列表因删去 OpenAlex 出现**编号断档**，重排为连续编号（OpenAlex 原为第 2 项），并复核正文中其余编号引用。
+3. 复测后把实测结论写回两份 README 的可用性段落。
+4. 执行结果：提交 `de237ee`。
+
+#### 验证方法
+- 两份 README 中 `openalex` / `OpenAlex` 零命中（除刻意保留的历史说明）。
+- 推荐提示词第三步编号连续、无跳号。
+- `_verify/tool_availability_check.py` 实跑：该时点 **21 called / 21 ok**。同日 19:45 的独立复跑出现 19/21（两个 arXiv 工具挂起 337.8s / 338.1s 后失败），属 arXiv 上游瞬时超时窗口，见步骤 66 与 `buildlog.md` 2026-09-18 20:08 条目——**两条记录均予保留**，后者不推翻前者。
+
+#### 风险提示
+- 提示词步骤编号重排最易漏改（同一源同时出现在"第三步"列表、表格与正文说明中）。
+- 复测结果受上游瞬时状态影响，**不得**把单轮失败直接定性为源不可用或回滚改动（QA-R013）。
+
+---
+
+### 步骤 63（补记，已完成）：`AGENTS.md` 同步下线 OpenAlex
+
+#### 目标说明
+`AGENTS.md` 是 agent 进入本仓库的第一手上下文，源清单与工具计数必须以代码为准。
+
+#### 具体操作
+1. `AGENTS.md`：项目概述的源清单与工具计数改为 **9 个数据源 / 21 个工具**，并补入 v3.4.0 两轮删源的性质说明；"Data sources and searchable scope" 表删除 OpenAlex 一行。
+2. **不得 `git add` `AGENTS.md`**（用户未授权该文件入库），不得改动 `.gitignore`；该文件当前仍为 git 未跟踪状态。
+3. 执行结果：提交 `67e2815`。
+
+#### 验证方法
+- 全仓库检索 `openalex`（`--no-ignore`）确认仅剩历史文档条目。
+- `git status --short` 中 `AGENTS.md` 仍为未跟踪状态（`?? AGENTS.md`），未被暂存。
+
+#### 风险提示
+- `AGENTS.md` 与 `project-docs/*` 同属"手工维护的上下文文件"，每轮删源都需同步；若后续继续删源，宜将其列为构建步骤的固定检查项。
+
+---
+
+### 步骤 64（补记，已完成）：整体终验 + 完成标记（v3.4.0）
+
+#### 具体操作
+1. 端到端 stdio 验证：以子进程启动 server、发送 `initialize`，断言 stdout 仅 1 行且为合法 JSON-RPC、stderr 无多余输出（stdout 是 MCP stdio 的协议通道）。
+2. 静态终检：`list_tools()` = 21；`pyproject.toml` 与 `src/uniarticles/__init__.py` 版本号均为 `3.4.0`；文档计数零残留。
+3. `buildlog.md` 追加"🎉 项目构建完成"条目并登记遗留事项。
+4. 执行结果：提交 `91a9989`。
+
+#### 验证方法 / 风险提示
+- 判据同步骤 61/62/63。
+- 终验只证明"该时点可用"，**不构成对上游长期稳定性的承诺**——随后 19:42、20:08 两条补正条目即为反例，其中 20:08 那条直接催生了步骤 66。
+
+---
+
+### 步骤 65（补记，已完成，**时间上先于步骤 61～64**）：移除 Semantic Scholar 数据源（v3.4.0，QA-R018）
+
+#### 目标说明
+落实用户指令："移除源码、项目说明和 README.md 中关于 `SEMANTIC_SCHOLAR_API_KEY` 的部分，因为该机构的 API key 申请存在权限问题。" **只能整源移除，不能只去掉 Key 要求**：实测无 Key 时 `paper/search` 连续 4 次全部返回 HTTP 429（响应体自述 "apply for a key"），保留工具等于对外暴露一个永远失败的工具，违反 QA-R012 已确立的"不注册永远不可能成功的工具"原则。删除性质为**外部授权/准入受限（机构无法取得 Key）**，与 QA-R003（可换 Key 的权限受限）、QA-R012（技术不可行）、QA-R016（产品价值收窄）、QA-R017（有效性/可连接性）、QA-R019（上游限流）均不同。
+
+#### 具体操作
+1. 源码：删除 `src/uniarticles/sources/semantic_scholar.py`（95 行）；清理 `sources/__init__.py` 的 import/注册；`config.py` 移除 `semantic_scholar_api_key` 字段；`core.py` 注释中 "unlike Semantic Scholar" 的对照说明改写。
+2. 用户文档：`README.md` / `README_ZH.md`（特性列表、数据源表、工具清单、JSON 示例、`.env` 示例、API Key 说明段、"可用工具"前言、推荐提示词中的 Key 前置条件）、`tutorial/step_by_step_guide_en.md`、`tutorial/step_by_step_guide_zh.md`、`.env.example`；`claude_desktop_config.example.json` 中该行由用户先行删除。
+3. 项目说明：`AGENTS.md` 项目概述、配置示例、以及"条件注册 vs 无条件注册"整段改写为"全部无条件注册"（保留 Semantic Scholar 作为历史反例）、数据源范围表。
+4. 未改动：`project-docs/teach.md`（用户明确"没必要更新"）。
+5. 执行结果：提交 `e21475d`、`b4e88c8`。
+
+#### 验证方法
+- `create_server()` → `list_tools()`：**23 个工具不变**（无 Key 时该源本就注册 0 个工具）。这是本轮最容易被误读的一点：变更的是**数据源数 11→10** 与"配置 Key 后追加 2 个工具、总数 25"这一承诺的消失，**不是**用户可见的工具数。
+- 全仓库 `SEMANTIC_SCHOLAR_API_KEY` 零引用（含 `--no-ignore` 覆盖 `_verify/`）。
+- 附带收益（已验证）：**全项目不再存在条件注册架构**——所有源的 `register()` 均不再读取 `settings`，工具列表在任何配置下恒定。
+
+#### 风险提示
+- buildlog 与文档中不得把"工具数不变"写成"无变化"；也不得把本轮记成"技术不可行"或"权限受限但可换 Key"。
+- 该源若未来重新纳入，需先评估是否恢复条件注册模式（本步骤已留书面反例）。
+
+---
+
+### 步骤 66：为 `arxiv.py` 增加显式超时（**本轮新增，待执行**）
+
+#### 目标说明
+修复交付后复验发现的**真实缺陷**（`buildlog.md` 2026-09-18 20:08 条目）：`arxiv.py` 使用 `arxiv.Client()` 默认配置、**未设置任何超时上限**，上游 `export.arxiv.org` 卡住时工具会挂起 **300+ 秒**（实测 337.8s / 338.1s）才返回错误，而非快速失败。上游卡顿时客户端侧很可能表现为整个工具调用超时，与"为可靠性收缩数据源"的产品取向直接冲突。用户本轮明确要求修复。工具名、参数、返回结构均不变，属内部行为变更。
+
+根因（**已核实，非推测**）：项目 `.venv` 实际安装 `arxiv==2.4.1`（`uv.lock` 锁定值），其 `arxiv/__init__.py:729` 通过 `self._session.get(url, headers=...)` 发请求，`self._session` 是 `requests.Session()`（同文件 `__init__` 第 613 行），而 `requests` 的 `Session.get` 支持 `timeout=`；但 `Client.__init__(self, page_size=100, delay_seconds=3.0, num_retries=3)` **不暴露任何超时参数**，因此必须在客户端外注入。
+
+#### 具体操作
+1. 新增两个模块级常量（置于 `_ARXIV_CATEGORY_RE` 附近）：`_ARXIV_REQUEST_TIMEOUT_SECONDS = 15.0`、`_ARXIV_TOTAL_TIMEOUT_SECONDS = 45.0`。
+2. 新增私有工厂，三处调用点统一改用：
+```python
+def _build_client() -> arxiv.Client:
+    """Build an arxiv client with a real request timeout.
+
+    arxiv.Client exposes only page_size/delay_seconds/num_retries — no timeout
+    — so an upstream stall hangs the call (measured 337.8s / 338.1s on
+    2026-09-18). arxiv 2.4.1 issues requests through an internal
+    requests.Session (arxiv/__init__.py:613, :729), so injecting `timeout=`
+    there bounds each attempt at the socket level. num_retries is lowered to 1
+    so the worst case stays ~2x the per-request timeout instead of ~4x.
+    """
+    client = arxiv.Client(num_retries=1)
+    session = getattr(client, "_session", None)  # private attr: version-sensitive
+    if session is not None:
+        original_get = session.get
+
+        def _get_with_timeout(url, **kwargs):
+            kwargs.setdefault("timeout", _ARXIV_REQUEST_TIMEOUT_SECONDS)
+            return original_get(url, **kwargs)
+
+        session.get = _get_with_timeout
+    return client
+```
+3. 三处调用点（`_run_arxiv_search` 的两个调用方 + `_get_paper_details`）加上**外层兜底**，覆盖"私有属性在未来版本中消失导致注入失效"的情形：
+```python
+try:
+    return await asyncio.wait_for(
+        asyncio.to_thread(
+            _run_arxiv_search, normalized_query, bounded, arxiv.SortCriterion.Relevance
+        ),
+        timeout=_ARXIV_TOTAL_TIMEOUT_SECONDS,
+    )
+except asyncio.TimeoutError:
+    return _err(
+        query=normalized_query,
+        message=(
+            f"arXiv request timed out after {_ARXIV_TOTAL_TIMEOUT_SECONDS:.0f}s; "
+            "upstream export.arxiv.org may be stalling — retry shortly, or run "
+            "_verify/arxiv_connectivity_test.py for a layered diagnosis"
+        ),
+    )
+except Exception as exc:
+    return _err(query=normalized_query, message=str(exc))
+```
+（分类浏览工具沿用 `arxiv.SortCriterion.SubmittedDate`、详情工具沿用 `_get_paper_details`，仅补同样的超时包装。）
+4. 不改注册、不改工具名/参数/返回结构、不新增环境变量（沿用"不做面向未来的预留配置"原则）。
+5. `requests` 属 `arxiv` 的传递依赖，**不需要**新增依赖项，`pyproject.toml` 的 `dependencies` 不变。
+
+#### 验证方法
+1. 正向（真实网络）：`_verify/tool_availability_check.py` 中三个 arXiv 工具全部 `ok`，各次耗时 < 10s（对照：故障窗口内为 337.8s / 338.1s，正常时约 1～2s）。
+2. 负向（**离线、确定性、不依赖外网**）：新增 `_verify/arxiv_timeout_check.py`——本机起一个"只 accept、不响应"的 TCP 监听，把 `arxiv.Client.query_url_format`（`arxiv/__init__.py:574` 的公开类属性）临时指向该地址，断言调用在 `_ARXIV_REQUEST_TIMEOUT_SECONDS + 余量`（建议断言 < 25s）内返回 `ok=False` 且 `error` 含 timeout 关键字；脚本结束前恢复被改写的类属性并关闭监听端口。脚本按 `_verify/` 惯例无第三方依赖、输出自动脱敏、只做只读探测。
+3. 静态：`create_server()` → `list_tools()` 仍为 21；`python -c "import uniarticles"` 无 stdout 输出。
+4. 边界：三个工具在超时路径上必须返回归一化 `_err()`，**不得**让异常穿透到 MCP 层。
+
+#### 风险提示
+- `client._session` 是**私有属性**，依赖它属于脆弱写法：已在 `getattr` 缺失时降级（只保留外层兜底），并要求 buildlog 记录该依赖点与 `arxiv==2.4.1` 版本。未来若放宽/升级 `arxiv` 版本，本步须重测。
+- `asyncio.wait_for` 超时**不会真正终止**已在 `to_thread` 中执行的线程：上游始终不返回时，该线程会继续占用默认线程池槽位（`min(32, cpu+4)`）直到 socket 超时。因此**注入 socket 超时是主手段**（真正让线程退出），外层 `wait_for` 只是版本漂移的兜底，**两者不可只用后者**。
+- 超时值取舍：arXiv 正常响应约 1～2 秒，15 秒已足够宽裕；若保留 `num_retries=3`（默认值），最坏耗时约 4×15s + 3 次 3s 间隔 ≈ 69s，**等于没治**，故必须同时降到 1。
+- 异常捕获须用 `asyncio.TimeoutError`（`requires-python >= 3.10`，3.10 中它与内建 `TimeoutError` 并非同一对象）。
+- **不得**使用 `socket.setdefaulttimeout()` 或改动全局 `requests` 行为：那会波及同进程内其余 8 个源（`httpx`）与所有 `requests` 调用，属跨模块副作用。
+- 这是**行为变更**（原本长时间等待 → 现在快速失败），需在 buildlog 显著标注；对调用方而言，从"超时无响应"变为"明确错误 + 可操作提示"，是方向性改善而非破坏。
+
+---
+
+### 步骤 67：文档同步 arXiv 超时（`README.md` / `README_ZH.md` / `AGENTS.md`）
+
+#### 目标说明
+两份 README 的 arXiv 可用性提示当前写的是"**未设置显式超时**……会先长时间挂起再报错"，步骤 66 落地后该描述即失实，必须同步，否则形成新的"文档与代码不一致"。
+
+#### 具体操作
+1. `README.md:214` / `README_ZH.md:212` 的可用性提示段：**保留** 2026-09-18 的实测事实（337.8s / 338.1s 挂起、约 15 分钟后自愈、同主机另一工具正常返回），把"未设置显式超时"的现状描述改写为"已设 15 秒请求超时 + 45 秒兜底，超时将返回带提示的错误；`_verify/arxiv_connectivity_test.py` 仍可用于区分上游卡顿与本机网络问题"。
+2. `AGENTS.md` 数据源范围表 arXiv 行的 "Caps & caveats" 补入超时参数，并保留"字段前缀对已知文献定位决定成败"的既有结论。
+3. 不修改 `project-docs/teach.md`（用户已明确不更新，当前已滞后多轮，属已知失真）。
+
+#### 验证方法
+- 检索"未设置显式超时" / "no explicit timeout"：两份 README 中零命中。
+- 检索超时数值：两份 README 的 arXiv 小节与 `AGENTS.md` 中出现的秒数与 `arxiv.py` 常量**逐一一致**（防文档与代码数值漂移）。
+- `git status --short` 中 `AGENTS.md` 仍未被暂存。
+
+#### 风险提示
+- 该段落是"历史事件 + 现状成因"的混合叙述，改写时**不得**连历史实测数据一并删除——那是该源风险的真实证据。
+- 若步骤 66 最终调整了超时数值，本步三处（两份 README + `AGENTS.md`）必须同步。
+
+---
+
+### 步骤 68：保持版本号 `3.4.0` + 清理 `dist/` + 构建 + 发布 PyPI（**发布为不可逆对外操作，须用户在场确认后方可执行**）
+
+#### 目标说明
+把 v3.4.0（9 个数据源 / 21 个工具）发布到 PyPI。用户本轮指令："保持版本号为 3.4.0，修复好后清理 dist 并发布包"。
+
+#### 具体操作
+1. **版本号核对（不改动）**：`pyproject.toml` 与 `src/uniarticles/__init__.py` 当前均已是 `3.4.0`；`uv run python -c "import uniarticles; print(uniarticles.__version__)"` 应输出 `3.4.0`。本轮只新增源码修复与文档同步，**不得**再 bump 版本号。
+2. **发布前门禁（阻塞项）：许可证元数据不一致**。`pyproject.toml` 现为 `license = { text = "MIT" }`，且 classifiers 含 `"License :: OSI Approved :: MIT License"`；而 `LICENSE` 文件是 **GNU AGPL-3.0**、`README.md` 第 3～4 行徽章为 AGPL-3.0 + Commercial-Restricted。发布后 PyPI 将对外呈现与仓库许可证**相矛盾**的元数据，且同一版本号无法撤销重发。须先由用户确认目标许可证，再据此对齐 `pyproject.toml`（若确认为 AGPL-3.0：`license = "AGPL-3.0-or-later"` + classifier `License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)`，并移除 MIT classifier）。**本门禁未通过前不得执行第 3～7 步。**
+3. **清理 `dist/`**：当前目录内是上一版残留产物（`uniarticles_mcp-3.2.0-py3-none-any.whl`、`uniarticles_mcp-3.2.0.tar.gz`），**没有任何 3.4.0 产物**——正是 `AGENTS.md` 明确警告过的"陈旧产物被误传至 PyPI"场景。先列出目录确认内容，再删除整个 `dist/` 目录（`Remove-Item -Recurse -Force` 的目标须为仓库内 `<repo>\dist`，删除前用 `Resolve-Path` 核对绝对路径；该目录已在 `.gitignore:11` 中，删除不影响版本控制）。
+4. **构建**：`uv build`。
+5. **产物核对（发布前最后一道门禁）**：确认只生成 `uniarticles_mcp-3.4.0-py3-none-any.whl` 与 `uniarticles_mcp-3.4.0.tar.gz`；列出 wheel 内文件确认 `sources/` 下恰为 9 个源模块（且无 `openalex.py` / `semantic_scholar.py` / `biorxiv.py` / `dblp.py` / `zenodo.py` / `chembl.py` / `hal.py`）；列出 sdist 内容确认**不含** `project-docs/`、`.env`、`docs/`、`CLAUDE.md`（`pyproject.toml` 的 `[tool.hatch.build.targets.sdist] exclude` 已配置，但 `.env` 属凭据泄漏风险最高项，必须实测确认）。
+6. **发布**：`uv publish`。**凭据现状（已核实）**：本机不存在 `~/.pypirc`，环境变量 `UV_PUBLISH_TOKEN` 未设置 → 直接执行会在非交互 shell 中失败或挂起。需用户提供 PyPI API token，并以 `UV_PUBLISH_TOKEN` 环境变量传入（**不得**将 token 写入任何文件、命令回显或日志）。
+7. **发布后核对与记录**：访问 `https://pypi.org/project/uniarticles-mcp/3.4.0/` 或于临时环境 `uv pip install --refresh "uniarticles-mcp==3.4.0"` 确认可安装；`buildlog.md` 追加本步记录（发布结果、产物文件名与大小、许可证结论）；`git status --short` 应保持干净（`dist/`、`sdist/` 均被 `.gitignore` 忽略）。
+8. 本仓库历史从未打过 git tag（`git tag` 为空），故本步**不引入** tag；如需可另议。
+
+#### 验证方法
+- PyPI 上存在 `3.4.0`，且页面呈现的许可证与仓库 `LICENSE` 一致。
+- wheel/sdist 文件清单符合第 5 步判据（无内部文档、无凭据）。
+- 本地 `dist/` 中不存在任何非 3.4.0 产物。
+
+#### 风险提示
+- **PyPI 版本不可回收**：同一版本号上传后不可覆盖（只能 yank，且 yank 不等于删除），故第 2、5 步门禁必须先过；许可证尚未定论时**宁可推迟发布**。
+- 发布属不可逆对外动作，必须在用户明确在场授权后执行；agent 不得在无人确认的情况下自行发布。
+- 若 `uv publish` 中途失败（网络/凭据），先确认 PyPI 上是否已有部分文件上传，再决定是否重试；**不要盲目重复执行**。
+- 构建须用 `uv build`（遵循 `uv.lock` 锁定版本），不要改用全局 `python -m build`，以免产物元数据来自未经锁定验证的环境。
+- 发布后若发现产物内容缺陷，只能 bump 至 `3.4.1` 重发，**不能重发 `3.4.0`**。
+- `pyproject.toml` 的 sdist `exclude` 中仍列有已删除的 `/CLAUDE.md`，属无害冗余，可选清理，不属本步门禁。
 
 ---
 
@@ -2367,3 +2602,14 @@ def register_all_sources(server: FastMCP) -> None:
 - 候选步骤 59/60（三处默认排序修复）**默认不纳入本版本**，依据 QA-R017 明文记录；这是用户回答"部分工具无法直接检索到特定文献"的直接病根，本计划书以候选形式预置并保留充分细节，待用户确认后按既有"增量追加步骤"方式启用。
 - `_verify/dblp_connectivity_test.py` / `_verify/dblp_field_probe.py` 在删源后**保留不删**，属本计划书的衍生决策（`goal.md` 未逐字提及），理由见步骤 54 风险提示（诊断脚本与"是否注册该源"无关、`AGENTS.md` 常设规则以其为标准范例、已按 `git add -f` 入库）。
 - 步骤 1～53（v2.0～v3.2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
+---
+
+- （v3.4.0，2026-09-18）本轮计划书的追加由**性质不同的两部分**组成：
+  - **步骤 61～65：事后补记（全部已完成）**。v3.4.0 的两轮删源（QA-R018 移除 Semantic Scholar、QA-R019 移除 OpenAlex）系用户直接指令，`goal.md` 已判定"不需要项目规划专家介入做分阶段设计，可由 project-builder-cn 直接执行"，故当时未走本计划书。为使计划书保持"完整构建记录"，此处按实际提交与 `buildlog.md` 条目回填。**编号依据**：步骤 61～64 沿用 project-builder-cn 已在提交信息与 `buildlog.md` 标题中使用的编号（不改写历史、避免交叉引用矛盾）；步骤 65 那一轮**时间上最早**（先于 61～64），因未获编号而以"补记"置于其后，其编号仅为本计划书的文档序号，**不代表执行顺序**。此约定须在后续再遇"直接指令型删源未经计划书"时沿用。
+  - **步骤 66～68：本轮新增，尚未执行**，由用户本轮指令"补充之前的步骤并且增加修复 arXiv 的超时步骤，保持版本号为 3.4.0，修复好后清理 dist 并发布包"直接指定。
+- **步骤 66 的缺陷来源与性质**：交付后独立复验（`buildlog.md` 2026-09-18 20:08）实测 arXiv 两个工具挂起 337.8s / 338.1s 后失败，追查出 `arxiv.Client` 不暴露任何超时参数这一真实缺陷。该缺陷**非本轮删源引入**，而是自 v3.0.0 引入 `arxiv` 包封装起既存的可用性问题，故如实标注为"修复既存缺陷"，不得写成删源的连带影响。根因与实现方案已在步骤 66 中逐条给出（含 `arxiv==2.4.1` 的代码行号证据），执行者不得凭印象另选实现（例如用 `socket.setdefaulttimeout()` 或全局改写 `requests` 行为——那会波及同进程内其余 8 个 `httpx` 源）。
+- **版本号维持 `3.4.0`**（用户本轮明确指令）：`pyproject.toml` 与 `src/uniarticles/__init__.py` 已是 `3.4.0`，步骤 66/67 属同一**尚未发布**版本内的修复，不另开 `3.5.0`；已发布的 v3.3.0 不受影响。步骤 68 的"版本号核对"是**只读核对项**，执行时不得顺手 bump。
+- **发布门禁（必须由用户解除，两项）**：① `pyproject.toml` 的 `license = { text = "MIT" }` 与 `LICENSE`（AGPL-3.0）、README 徽章（AGPL-3.0 + Commercial-Restricted）不一致，发布前须由用户确认目标许可证并对齐元数据；② 本机无 PyPI 凭据（`~/.pypirc` 不存在、`UV_PUBLISH_TOKEN` 未设置），需用户提供 token 并以环境变量传入。两项未解决前，步骤 68 的第 3～7 步不得执行——这与"发布属不可逆对外操作"的既有约束共同构成硬门禁，宁可推迟发布也不得先发后改。
+- `project-docs/teach.md` 按用户指示**不更新**（现已滞后多轮，属已知失真，非本轮缺陷）；`AGENTS.md` 仍为 git 未跟踪状态，本轮同步其内容但**不得**将其暂存入库。
+- 步骤 1～60（v2.0～v3.3.0 构建，含已执行的排序修复）已全部执行完毕；v3.3.0 已发布，v3.4.0 **尚未发布**。步骤 66～68 待 `project-builder-cn` 执行。
