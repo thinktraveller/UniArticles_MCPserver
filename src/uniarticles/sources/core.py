@@ -302,11 +302,16 @@ def _normalize_work_stats(stats: dict) -> dict:
 # ------------------------------------------------------------------ 工具层
 
 
-async def _search(query: str, max_results: int) -> dict:
-    params = {"q": query, "limit": max_results}
+async def _search(query: str, max_results: int, offset: int = 0) -> dict:
+    # v3.5.0: switch GET → POST so `exclude:["fullText"]` can be used. CORE inlines the
+    # full text of every hit by default and `_normalize_work()` discards it, so the old
+    # GET path was paying for 6x the payload for nothing (measured: 676,692 B vs
+    # 112,549 B for the same 25 hits). `offset`/`limit=100` were both verified against
+    # the real API in buildlog step 69 (F2/F3/F4).
+    body = {"q": query, "limit": max_results, "offset": offset, "exclude": ["fullText"]}
     # CORE occasionally 301-redirects the request; _request() follows redirects so a
     # valid call is not surfaced as a bare 3xx error.
-    result = await _request("GET", "/search/works", query=query, params=params)
+    result = await _request("POST", "/search/works", query=query, json_body=body)
     if not result["ok"]:
         return result
     payload = result["payload"]
@@ -319,14 +324,25 @@ def register(server: FastMCP) -> None:
     # limit, mirroring the existing Elsevier "register always, surface limits at
     # runtime" model.
     @server.tool()
-    async def core_work_search_by_query(query: str, max_results: int = 10) -> dict:
-        """Search CORE (global open-access aggregator) by keyword. Works without an
-        API key but the anonymous tier is token-metered (100 tokens/day, 10 requests
-        per minute, no fullText); configuring CORE_API_KEY raises it to 1,000
-        tokens/day at 25 requests per minute. Returns metadata and download links only.
+    async def core_work_search_by_query(query: str, max_results: int = 10, offset: int = 0) -> dict:
+        """Search CORE (global open-access aggregator) by keyword, with paging.
+
+        `query` accepts CORE's own query syntax (field qualifiers such as
+        `title:"..."` / `doi:"..."`, boolean operators, phrase matching).
+        `max_results` is capped at 100 (CORE's per-request ceiling) and `offset`
+        pages through the result set; note that a large `max_results` returns a big
+        payload (roughly 435 KB for 100 hits) and can take up to ~45 s on slow
+        networks, so keep the default 10 unless you need more.
+
+        Returns metadata and download links only — the upstream `fullText` field is
+        excluded at the request level and never surfaces. Works without an API key,
+        but the anonymous tier is token-metered (100 tokens/day, 10 requests per
+        minute, no fullText); configuring CORE_API_KEY raises it to 1,000 tokens/day
+        at 25 requests per minute.
         """
         normalized_query = query.strip()
         if not normalized_query:
             return _err(query=query, message="query must not be empty")
-        bounded = max(1, min(max_results, 25))
-        return await _search(query=normalized_query, max_results=bounded)
+        bounded = max(1, min(max_results, 100))
+        bounded_offset = max(0, offset)
+        return await _search(query=normalized_query, max_results=bounded, offset=bounded_offset)

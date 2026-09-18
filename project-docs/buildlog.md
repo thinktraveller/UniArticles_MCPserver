@@ -2399,3 +2399,48 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 71：增强 `core_work_search_by_query` —— `_search()` 由 GET 改为 `POST /search/works`（body 含 `exclude:["fullText"]`）、上限 25 → 100、新增可选 `offset`，并把 429 文案统一交给 `_rate_limit_message()`。
+
+## [2026-09-19 00:29] 步骤 71 完成：增强 `core_work_search_by_query`（v3.5.0，QA-R021 第 1 项）
+
+### 执行的任务
+- `_search()` 由 `GET /search/works` 改为 `POST /search/works`，请求体 `{"q", "limit", "offset", "exclude": ["fullText"]}`（形态已由步骤 69 的 F2/F3/F4 真实确证）。
+- 工具签名新增可选参数 `offset: int = 0`；`max_results` 上限由 **25 放宽到 100**（CORE 单次上限，F4 实测接受）。
+- 重写 docstring：写明 `query` 支持的语法、上限 100 与大 `max_results` 的代价、以及 token 制限流口径；429 文案不再手写，统一由步骤 70 的 `_rate_limit_message()` 产出。
+- **工具名、`source` 值、6 个响应键、既有 8 个字段全部未变** —— 对既有调用方是向后兼容增强，README 不需要"破坏性变更"警示。
+
+### 关键变更
+| 位置 | 变更 |
+|---|---|
+| `_search()` | GET → POST；请求体带 `exclude:["fullText"]`；新增 `offset` 形参并透传 |
+| `core_work_search_by_query` | 签名 `(query, max_results=10, offset=0)`；`bounded = max(1, min(max_results, 100))`；`bounded_offset = max(0, offset)` |
+| 429 分支 | 旧的"~5 requests / ~10 minutes"手写文案与注释彻底删除，改由 `_rate_limit_message()` 统一产出（`response.raise_for_status()` 已在步骤 70 移除，本步骤无残留） |
+| docstring | 英文（与本文件及 `README_EN.md` 的既有语言一致），含"上限 100、100 条约 435 KB、慢网络可达约 45 s，建议保持默认 10"的诚实提示 |
+
+### 实测数据（本机，2026-09-19 00:27～00:29）
+
+| 调用 | 结果 | 耗时 | 结论 |
+|---|---|---|---|
+| `max_results=25` | 25 条，`ok=True` | **3.52 s** | 对照重构前同一查询的 4.8 s / 676 KB（历史数据），POST + exclude 的收益在本机同样成立 |
+| `max_results=100` | **100 条**，`ok=True` | 94.28 s | 旧上限会静默夹到 25，本项是新旧行为的直接判据；耗时随响应体线性放大 |
+| `max_results=2, offset=2` vs `offset=0` | 各 2 条，前 2 条**互不相同** | 3.21 s / 3.00 s | `offset` 分页确实生效 |
+| `max_results=999` | 夹到 **100 条** | 94.28 s | 上限收紧逻辑正确 |
+| `max_results=3, offset=-5` | 3 条，`ok=True` | 3.08 s | `offset` 负数夹到 0 |
+| `query="  "` | `ok=False`，`error="query must not be empty"` | — | 空串前置校验保留（未依赖上游 400，计划书风险提示已覆盖） |
+
+### 关于超时的一个如实记录（重要，供后续步骤参考）
+`max_results=100` 那次耗时 **94.28 s**，超过了步骤 70 设置的 `REQUEST_TIMEOUT = 60.0` 却仍然成功。原因是 **httpx 的 `timeout` 是"逐次连接/读/写操作"的时限，不是整个请求的墙钟上限**：435 KB 的响应体在被逐块读取时，只要没有单次读操作间隔超过 60 s，整个请求就不会被判超时。因此：
+- 60 s 的作用是"上游卡死时快速失败"，而不是"给单次请求设总时长上限"，这与步骤 70 的注释口径需要在语义上区分；
+- `max_results=100` 在本机网络下仍可能耗时 1.5 分钟，docstring 已如实提示"大 `max_results` 返回大载荷且慢"；
+- 计划书步骤 71 对"934 KB 仍可能让 LLM 客户端上下文吃紧"的顾虑，本实现**未**通过降低上限解决，而是通过 docstring 提示 + 默认值保持 10 + 上限 100 的显式声明来管理，符合计划书"上限放宽但请按需设置"的原意。
+
+### 遇到的问题及解决方案
+- 无阻塞问题。上述 94 s 耗时属"设计内可接受"的结果（请求最终成功且未被截断），仅作为行为特征如实记录，不修改实现。
+
+### 验证
+- `list_tools()` 中 `core_work_search_by_query` 的入参为 **`query` / `max_results` / `offset`**（`offset` 带默认值）；**工具总数仍为 21**（本步骤只增强、不新增）。
+- 真实调用逐项对照见上表；全部符合计划书第 1～3 条验证方法。
+- `source` 字段仍为 `"core"`；响应键集合仍为 `ok` / `source` / `query` / `count` / `items` / `error` 六项；`items` 中无 `fullText` / `full_text`。
+- 旧限流文案在 `core.py` 中已零命中（`rg -i "5 requests|10-minute|约 5 次|10 分钟" src/uniarticles/sources/core.py` 唯一命中是新 docstring 中的 `25 requests per minute`，属新口径）。
+
+### 下一步计划
+- ⏭️ 步骤 72：新增 works 维度 3 个工具 `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_stats_by_id`（工具总数 21 → 24）。
