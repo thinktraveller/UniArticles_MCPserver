@@ -1505,3 +1505,63 @@ logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
 - 步骤 58：`buildlog.md` 记录本轮变更 + 整体回归验证（v3.3.0 交付检查点）。
 
 ---
+
+### 步骤 58 完成：v3.3.0 整体回归验证 + 交付检查（2026-09-18 17:27）
+
+**执行的任务**
+- 按计划书要求做整体回归：`create_server()` → `list_tools()` 计数核对；对**保留的 11 个数据源**各抽查至少 1 个工具做**真实网络调用**（非 mock）；另做 MCP stdio 通道洁净性检查。
+- 回归脚本为临时文件 `_verify/step58_regression.py`，**验证通过后已删除**，未入库。
+
+**回归结果**
+
+| 数据源 | 抽查工具 | 结果 |
+| --- | --- | --- |
+| scopus | `scopus_document_search_by_query` | ✅ count=1 |
+| sciencedirect | `sciencedirect_article_retrieve_by_identifier` | ✅ count=1（DOI `10.1016/j.cell.2011.02.013` → "Hallmarks of Cancer: The Next Generation"） |
+| arxiv | `arxiv_paper_search_by_query` | ✅ count=2 |
+| pubmed | `pubmed_paper_search_by_query` | ✅ count=2 |
+| openalex | `openalex_work_search_by_query` | ✅ count=2 |
+| crossref | `crossref_work_search_by_query` | ✅ count=2 |
+| europepmc | `europepmc_paper_search_by_query` | ✅ count=2 |
+| doaj | `doaj_article_search_by_query` | ✅ count=2 |
+| openaire | `openaire_research_product_search_by_query` | ✅ count=2 |
+| core | `core_work_search_by_query` | ✅ count=2 |
+| semantic_scholar | *（条件注册）* | ➖ 未配置 Key 时按设计注册 0 个工具，符合预期 |
+
+**计数核对**
+- 未配置 `SEMANTIC_SCHOLAR_API_KEY`：`list_tools()` = **23** 个工具，`semantic_scholar_*` 零命中。
+- 配置 `SEMANTIC_SCHOLAR_API_KEY=dummy`：= **25** 个工具，新增 `semantic_scholar_paper_search_by_query` / `semantic_scholar_paper_detail_by_doi`。
+- 与计划书预期（11 源 / 23 工具 / 25 含 Key）**完全一致**。
+
+**stdio 通道洁净性检查（stdout 是 JSON-RPC 通道）**
+- 以真实 stdio 子进程启动 `python -m uniarticles`，写入一条 `initialize` JSON-RPC 消息：returncode=0，stdout 非空行数 **1**，且该行是合法 JSON（含 `jsonrpc`/`id`/`result` 三个字段）；**stderr 行数 0**。
+- 结论：无任何非协议内容写入 stdout，符合 `AGENTS.md` 对该通道的约束。
+
+**遇到的问题及解决方案**
+- 首轮回归中 ScienceDirect 报 404，排查后确认是**测试用 DOI 选错**（选了 Nature 期刊论文 `10.1038/s41586-021-03819-2`，该文不在 Elsevier 平台上），并非代码缺陷；换用 Elsevier 自家 DOI 后正常返回。已在回归结论中如实标注，未据此判定该源异常。
+- 临时回归脚本首版 `FastMCP.call_tool()` 返回值解析有误（实际为 `list[TextContent]`），修正后通过。
+
+**本轮共删除的破坏性变更清单（下游硬编码调用会静默失效）**
+- `biorxiv_paper_list_by_date_range`（bioRxiv / medRxiv 浏览）
+- `dblp_publication_search_by_query`（dblp）
+- `zenodo_record_search_by_query`（Zenodo）
+
+**已知文档失真（本轮不改，留给对应角色）**
+- `project-docs/teach.md` 仍滞后于当前源码集（其第 127/132/133 行仍在描述已删除的 Zenodo/dblp/bioRxiv，第 128/134/65 行仍在描述 v3.2.0 已删除的 HAL/ChEMBL 与 `paperscraper.py` 时代的实现）。该文件由 `project-explainer-cn` 维护且明确"可能滞后"，不属本轮范围。
+- `_verify/dblp_connectivity_test.py` / `_verify/dblp_field_probe.py` 按计划书衍生决策**保留**（诊断的是 dblp.org 站点分层可达性，与是否注册该源无关，且是 `AGENTS.md` 中 `_verify/` 常设规则的标准范例）。
+
+## [2026-09-18 17:27] 🎉 v3.3.0 构建完成
+
+### 完成情况
+- 步骤 54～58 全部执行完毕，另按用户授权启用候选步骤 59/60（排序修复）并一并交付。
+- 代码侧：删除 bioRxiv/dblp/Zenodo 三个源（14→11 源、26→23 工具、28→25 含 Key）；修复 Scopus/arXiv/PubMed 三处默认排序。
+- 文档侧：`README.md`/`README_ZH.md`/`AGENTS.md` 全量同步；`CLAUDE.md` 按用户指令删除。
+- 版本号：`pyproject.toml` 与 `src/uniarticles/__init__.py` 同批提升至 `3.3.0`。
+- 端到端回归通过：11 源逐一真实调用成功，stdout 仅含 JSON-RPC。
+
+### 下一步计划
+- ⏭️（可选）`uv build`（先清 `dist/`）+ `uv publish` 发布 v3.3.0——属发布操作，需用户确认后执行，不在本轮自动完成。
+- ⏭️（可选，产品决策）arXiv 已知文献检索的决定性杠杆是 `ti:` 字段前缀而非排序；若希望"粘贴标题即可命中"，需另立步骤设计裸查询的字段包装策略。
+- ✅ v3.3.0 构建侧无待执行步骤。
+
+---
