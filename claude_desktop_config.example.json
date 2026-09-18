@@ -8,10 +8,8 @@
       ],
       "env": {
         "ELSEVIER_API_KEY": "your_elsevier_api_key_here",
-        "ELSEVIER_INSTTOKEN": "your_elsevier_insttoken_here",
         "NCBI_API_KEY": "your_ncbi_api_key_here",
-        "CORE_API_KEY": "your_core_api_key_here",
-        "SEMANTIC_SCHOLAR_API_KEY": "your_semantic_scholar_api_key_here"
+        "CORE_API_KEY": "your_core_api_key_here"
       }
     }
   }
