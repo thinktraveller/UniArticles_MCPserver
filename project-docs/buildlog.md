@@ -1907,3 +1907,37 @@ v3.4.0 已于 19:40 由 project-builder-cn 标记构建完成（9 数据源 / 21
 - ⏭️ 请用户在本机/目标网络运行 `python _verify/arxiv_connectivity_test.py`，把输出反馈回来，以确认 arXiv 在本项目的实际使用环境中是否稳定。
 - ⏭️（待决策）是否为 `arxiv.py` 增加显式超时上限（见上方"顺带发现"）。
 - ⏭️ v3.4.0 尚未发布到 PyPI；发布属需用户确认的操作。
+
+---
+
+## [2026-09-18 20:36] 步骤 66 完成：为 `arxiv.py` 增加显式超时（v3.4.0）
+
+### 执行的任务
+修复上一轮复验发现的**既存可用性缺陷**（非删源引入，自 v3.0.0 引入 `arxiv` 包封装起即存在）：`arxiv.Client.__init__(page_size, delay_seconds, num_retries)` 仅此三个参数，**没有任何超时上限**，故上游 `export.arxiv.org` 卡住时工具会挂起 337.8s / 338.1s 才报错，而非快速失败。
+
+根因已在 `.venv`（`arxiv==2.4.1`）中逐行核实，非推测：`query_url_format` 在第 574 行、`_session: requests.Session` 在第 598 行声明、第 613 行 `self._session = requests.Session()` 创建、第 729 行 `resp = self._session.get(url, headers=...)` 发请求；`_parse_feed` 的 except 元组为 `(HTTPError, UnexpectedEmptyPageError, requests.exceptions.ConnectionError)`，**不含 `requests.exceptions.Timeout`**，故读超时会直接向上抛出。
+
+### 关键变更
+| 文件 | 改动 |
+|---|---|
+| `src/uniarticles/sources/arxiv.py` | 新增常量 `_ARXIV_REQUEST_TIMEOUT_SECONDS = 15.0`、`_ARXIV_TOTAL_TIMEOUT_SECONDS = 45.0`；新增 `_build_client()`（`num_retries` 默认 3 降为 1，并把 `timeout=` 注入 `client._session.get`）；新增 `_timeout_message()`、`_is_timeout_error()`；`_run_arxiv_search` / `_get_paper_details` 由 `arxiv.Client()` 改用 `_build_client()`；三个 `@server.tool` 方法的调用点包 `asyncio.wait_for(..., timeout=45.0)` 并新增 `except asyncio.TimeoutError` 分支 |
+| `_verify/arxiv_timeout_check.py` | **新增**（按惯例 `git add -f` 入库）：离线确定性负向验证脚本——本机起一个"只 accept、从不响应"的 TCP 监听冒充上游，改写 `arxiv.Client.query_url_format` 指向该端口，断言三个工具均在 25 秒预算内返回 `ok=False` + 超时关键字 + 归一化六键形状；结束时恢复类属性并关闭端口 |
+
+工具名、参数、返回结构、注册数量均**未改动**；未新增环境变量；`pyproject.toml` 依赖不变（`requests` 是 `arxiv` 的传递依赖，本步未 import、仅字符串判别）。
+
+### 验证结果
+- **离线负向**（`_verify/arxiv_timeout_check.py`）：check 0「注入是否真的装上」PASS；三个工具**全部在 15.0s** 返回归一化超时错误（对照：故障窗口内 337.8s / 338.1s，相差一个数量级），`RESULT: PASS`。
+- **真实网络正向**：`arxiv_paper_search_by_query` 1.5s、`arxiv_latest_paper_list_by_category` 1.1s、`arxiv_paper_detail_by_id` 0.7s，三者 `ok=True` 且首条标题正确。
+- **静态**：`import uniarticles` 的 stdout / stderr 均为 **0 字节**（stdio 洁净）；`__version__` = `3.4.0`；`list_tools()` = **21**。
+
+### 遇到的问题及解决方案
+1. **主路径错误文案不够可操作（计划书未覆盖，已补）**：计划书只要求"注入 socket 超时"，但注入真正生效时抛出的是 `requests` 的 `ReadTimeout`/`ConnectTimeout`，经 `str(exc)` 原样落到用户侧会带上连接池、端口等实现细节，与步骤 66 自述的目标（"明确错误 + 可操作提示"）不符。已新增 `_is_timeout_error()` 把超时类异常统一映射到 `_timeout_message()`。该判别只做字符串与 `TimeoutError` 匹配、**刻意不 import `requests`**（`requests.exceptions.Timeout` 继承自 `OSError` 而非 `TimeoutError`，仅按内建类型判断会漏掉）。
+2. **提示文案的数值修正**：计划书给出的文案只写"after 45s"，而实际主路径由 15s 的请求超时触发，照抄会误导用户。已改为同时标明"per-request limit 15s, overall deadline 45s"。
+3. `uv run` 在本机触发依赖同步联网重试、耗时过长，故验证统一改用项目中已存在的 `.venv\Scripts\python.exe`（`uv.lock` 已锁定 `arxiv==2.4.1`），未改变依赖状态。
+
+### 遗留风险（已如实记录，勿在后续误判）
+- `client._session` 是**私有属性**，注入依赖它属脆弱写法：已在 `getattr` 缺失时降级（仅保留外层 `wait_for` 兜底）。**未来升级/放宽 `arxiv` 版本后本步必须重测。**
+- `asyncio.wait_for` 超时**不会终止**已在线程池中执行的线程；真正让线程退出的是注入的 socket 超时。两者不可只用后者（本步采用双层）。
+
+### 下一步计划
+- 步骤 67：同步 `README.md` / `README_ZH.md` / `AGENTS.md` 中的 arXiv 超时描述——原文"**未设置显式超时**……会先长时间挂起再报错"自本步起失实。
