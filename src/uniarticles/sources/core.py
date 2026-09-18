@@ -503,3 +503,100 @@ def register(server: FastMCP) -> None:
         bounded_top = max(1, min(top_n, 50))
         normalized_fields = [f.strip() for f in (fields or []) if isinstance(f, str) and f.strip()]
         return await _aggregate(query=normalized_query, fields=normalized_fields, top_n=bounded_top)
+
+    @server.tool()
+    async def core_data_provider_search_by_query(query: str, max_results: int = 10) -> dict:
+        """Search CORE's data providers — institutional repositories and journal sources.
+
+        Each item is a repository/journal source (`id` / `name` / `type` / `url` /
+        `software` / `country_code` …), not a paper. Take an `id` from here into
+        `core_data_provider_detail_by_id`, or reach a provider id from a work by
+        reading `data_providers` in `core_work_detail_by_identifier` / search results.
+
+        `max_results` is capped at 200 (verified against the real API in buildlog
+        step 69's F12 plus this step's limit probe: 50/100/200 all accepted).
+        """
+        normalized_query = query.strip()
+        if not normalized_query:
+            return _err(query=query, message="query must not be empty")
+        bounded = max(1, min(max_results, 200))
+        result = await _request(
+            "GET", "/search/data-providers", query=normalized_query,
+            params={"q": normalized_query, "limit": bounded},
+        )
+        if not result["ok"]:
+            return result
+        items = [_normalize_data_provider(p) for p in _as_list(result["payload"]) if isinstance(p, dict)]
+        return _ok(query=normalized_query, items=items)
+
+    @server.tool()
+    async def core_data_provider_detail_by_id(
+        provider_id: str,
+        include_stats: bool = False,
+        include_outputs: bool = False,
+    ) -> dict:
+        """Fetch one CORE data provider (repository / journal source) by numeric id.
+
+        `include_stats` and `include_outputs` each add one extra upstream request, so
+        they are off by default; turn them on only when you need the figures. Get the
+        numeric id from `core_data_provider_search_by_query` or from the
+        `data_providers` field of a work record.
+
+        The two sub-resources are best-effort: if the main detail call succeeds but a
+        sub-resource fails, the response stays `ok=True` and the failure is reported
+        under that sub-key (`stats` / `outputs` holding an `{ok, error}` object)
+        instead of discarding the detail you already have.
+        """
+        candidate = provider_id.strip()
+        if not _is_core_id(candidate):
+            return _err(query=provider_id, message=f"机构库 ID 必须是数字（收到 {candidate!r}）。")
+        result = await _request("GET", f"/data-providers/{candidate}", query=candidate)
+        if not result["ok"]:
+            return result
+        payload = result["payload"]
+        if not isinstance(payload, dict):
+            return _err(query=candidate, message="CORE 返回了非预期的机构库详情结构。")
+        item = _normalize_data_provider(payload)
+
+        if include_stats:
+            stats = await _request("GET", f"/data-providers/{candidate}/stats", query=candidate)
+            if stats["ok"] and isinstance(stats["payload"], dict):
+                item["stats"] = _normalize_data_provider_stats(stats["payload"])
+            else:
+                item["stats"] = {"ok": False, "error": stats.get("error", "机构库统计信息不可用。")}
+
+        if include_outputs:
+            outputs = await _request(
+                "GET", f"/data-providers/{candidate}/outputs", query=candidate, params={"limit": 25}
+            )
+            if outputs["ok"]:
+                item["outputs"] = [
+                    _normalize_output(o) for o in _as_list(outputs["payload"]) if isinstance(o, dict)
+                ]
+            else:
+                item["outputs"] = {"ok": False, "error": outputs.get("error", "机构库 outputs 不可用。")}
+
+        return _ok_one(query=candidate, item=item)
+
+    @server.tool()
+    async def core_output_detail_by_id(output_id: str) -> dict:
+        """Fetch one raw CORE harvesting record (`output`) by numeric id.
+
+        An `output` is a de-duplicated *source signal*: the same paper shows up once
+        per repository that harvested it, whereas a `work` is CORE's merged record
+        for that paper. Call this when you need per-repository detail — `license`,
+        `repositories`, `sdg`, `fulltext_status`, `source_fulltext_urls` — and use
+        the works tools (`core_work_detail_by_identifier`) for the paper itself.
+
+        `output_id` must be numeric. Returns a single item.
+        """
+        candidate = output_id.strip()
+        if not _is_core_id(candidate):
+            return _err(query=output_id, message=f"output ID 必须是数字（收到 {candidate!r}）。")
+        result = await _request("GET", f"/outputs/{candidate}", query=candidate)
+        if not result["ok"]:
+            return result
+        payload = result["payload"]
+        if not isinstance(payload, dict):
+            return _err(query=candidate, message="CORE 返回了非预期的 output 结构。")
+        return _ok_one(query=candidate, item=_normalize_output(payload))

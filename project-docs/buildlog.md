@@ -2525,3 +2525,46 @@ README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元
 
 ### 下一步计划
 - ⏭️ 步骤 74：新增机构库与 output 详情 3 个工具（`core_data_provider_search_by_query` / `core_data_provider_detail_by_id` / `core_output_detail_by_id`，工具总数 25 → 28）。
+
+## [2026-09-19 00:39] 步骤 74 完成：新增机构库与 output 详情 3 个工具（v3.5.0，QA-R021 第 6～8 项）
+
+### 执行的任务
+- 新增 `core_data_provider_search_by_query`（机构库/期刊源检索）、`core_data_provider_detail_by_id`（机构库详情，可选附带统计与其下 outputs）、`core_output_detail_by_id`（未去重的原始采集记录详情）。
+- 三个 `_normalize_*` 函数（`_normalize_data_provider` / `_normalize_data_provider_stats` / `_normalize_output`）自步骤 70 起就已按实测写好，本步骤**首次全部接入真实调用点**，不再是"待用骨架"。
+- 落地上游唯一一处"多形态列表"差异：`/data-providers/{id}/outputs` 返回 `{"results": […]}` 分页对象，而 `/works/{id}/outputs` 返回裸列表——两者都由步骤 70 的 `_as_list()` 统一处理，本步骤无需分支。
+
+### 关键设计决策
+| 决策 | 依据 / 理由 |
+|---|---|
+| `core_data_provider_search_by_query` 的 `max_results` 上限 = **200** | 步骤 69 的 F12 只覆盖 `limit=2`，本步骤**补测** 50/100/200 三档（均 200 且条数分别为 50/100/200，`totalHits=453`），按"不超出已验证范围"原则取 200 |
+| `include_stats` / `include_outputs` 默认**关闭** | 每个开关各追加一次上游请求（更慢、更耗 token）；默认只发一次详情请求 |
+| 子资源失败时**主结果仍 `ok=True`**，失败信息写入该子键 | 避免"统计拿不到就把已取到的机构库详情一起丢掉"。实测已触发该分支：一次 `include_outputs` 命中 60 s 读超时，`items[0]["outputs"] = {"ok": False, "error": "CORE 请求异常：ReadTimeout: "}`，而 `items[0]` 的名称/类型/统计均在；重试两次均正常返回 25 条 |
+| 该行为写进 docstring | 部分成功是本项目既有 `_ok`/`_err` 二元结构下的**特例**，必须让 LLM 调用方能预期，而不是当成"工具失败了" |
+| `stats` 走归一化（`count_metadata` / `count_fulltext` / `is_active` / `set`）而非原样透出上游 JSON | 上游 F14 响应含 `history` / `sourceStats` / `lastSeen.harvest_times` 等空数组与大对象，原样透出只会挤占上下文；归一化后只保留 5 个有信息量的键 |
+| `core_data_provider_detail_by_id` 只接受**数字 ID**（`_is_core_id` 预校验），不接受 `dataProviders[].url` | 计划书风险提示明确要求：URL 形态解析会引入无谓脆弱性；实测上游 `url` 字段就是 `https://api.core.ac.uk/v3/data-providers/{id}`，数字 ID 可从其末段直接取得 |
+
+### 实测数据（本机，2026-09-19 00:35～00:39）
+
+| 调用 | 结果 |
+|---|---|
+| `core_data_provider_search_by_query("university")` | `ok=True`，`count=10`；首条 `{"id": 23143, "name": "(U.P.) Diliman Journals Online …", "type": "JOURNAL", "country_code": "ph", "software": "OJS"}` |
+| `core_data_provider_detail_by_id("1630")` | `ok=True`，`name="Intellectum (Universidad de La Sabana)"`，`type="REPOSITORY"` |
+| `core_data_provider_detail_by_id("1630", include_stats=True, include_outputs=True)` | `ok=True`；`stats = {"id":1630,"count_metadata":29987,"count_fulltext":7446,"is_active":false,"set":""}`；`outputs` 重试后为 **25 条**（每条约 18 个归一化键） |
+| `core_data_provider_detail_by_id("abc")` | `ok=False`，`error="机构库 ID 必须是数字（收到 'abc'）。"` |
+| `core_output_detail_by_id("29197653")` | `ok=True`；`license` 有值（JMLR 版权说明）、`fulltext_status="enabled"`、`repositories=[]`、`sdg=[]` |
+| `core_output_detail_by_id("abc")` | `ok=False`，`error="output ID 必须是数字（收到 'abc'）。"` |
+| 端到端链路 | `core_work_detail_by_identifier("171513974")` → `data_providers[0].id = 1630` → `core_data_provider_detail_by_id("1630")` 两者均 `ok=True` |
+| `limit` 上限补测 | `limit=50/100/200` 均 200，返回条数 50/100/200，`totalHits=453` |
+
+### 遇到的问题及解决方案
+- **`include_outputs` 首次命中 60 s `ReadTimeout`**：与步骤 72/73 记录的瞬时读超时同源（本机到 `api.core.ac.uk` 的国际链路）。按设计**未被吞掉**——主结果保持成功、失败原因写入 `items[0]["outputs"]`，用户可直接看到"统计拿到了、outputs 这次没拿到"。重试两次均正常（25 条）。未添加重试逻辑（同步骤 72 的说明）。
+- 其余项目无异常。
+
+### 验证
+- `create_server()` → `list_tools()` = **28 个工具**（25 + 3）；`core_` 前缀工具 **8 个**：`core_data_provider_detail_by_id` / `core_data_provider_search_by_query` / `core_output_detail_by_id` / `core_work_aggregate_by_query` / `core_work_detail_by_identifier` / `core_work_outputs_by_id` / `core_work_search_by_query` / `core_work_stats_by_id`。
+- 三个工具的响应键集合与其他工具一致（六项），`source` 恒为 `"core"`。
+- `items` 中 `fullText` / `full_text` 均不存在（硬边界回归通过；`_normalize_output` 面对内联了正文的 output 记录同样只保留元数据与链接）。
+- **`work` vs `output` 的语义区分已写入两个工具的 docstring**（作品级去重记录 vs 各机构库的原始采集信号），避免 LLM 调用方随机二选一。
+
+### 下一步计划
+- ⏭️ 步骤 75：新增 `core_output_search_by_query`。步骤 69 的 F17a/F17b/F17c 三组合**全部 200**，击杀条件已通过，故本步骤**注册该工具**，工具总数 28 → 29。
