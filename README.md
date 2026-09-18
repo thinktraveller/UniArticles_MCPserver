@@ -368,9 +368,6 @@ If the AGPL's copyleft obligations do not fit your use case — for example, emb
 - **[ScopusMCP](https://github.com/qwe4559999/scopus-mcp)**:
   ScopusMCP is the first literature retrieval MCP tool the author successfully developed, but initially it was quite bloated and difficult to port.Thanks to my roommate [(https://github.com/qwe4559999)](https://github.com/qwe4559999) for the suggestion to use pypi and uv for packaging.
 
-- **[ArxivMCPserver](https://github.com/blazickjp/arxiv-mcp-server)**:
-  Integrated directly from the ArxivMCPserver project.
-
 ### Special Declaration
 
 This project uses AI-generated content.

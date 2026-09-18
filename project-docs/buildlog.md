@@ -2143,3 +2143,25 @@ Hashing uniarticles_mcp-3.4.0.tar.gz (800.0KiB)
 
 ### 遗留提示
 README 是 PyPI 项目页的长描述来源，而 PyPI 上已发布的 3.4.0 元数据**不可修改**——若不发新版本，PyPI 的 3.4.0 页面仍显示改动前的文本。如需让 PyPI 页面同步，需发布 `3.4.1`。本 agent 未擅自提版本号。
+
+## [2026-09-18] 文档：移除 README 中对 ArxivMCPserver 的致谢（经核实已不再依赖）
+
+### 用户提问与结论
+用户提问："当前项目是否仍然依赖 arxivMCPserver 这个项目，如果不再依赖的话，将其从 README.md 中移除"。
+
+**核实结论：不再依赖。** 依据分三层：
+
+1. **依赖层面从不存在**：`pyproject.toml` 中唯一的 arXiv 相关依赖是 `arxiv>=2.1.0`，即**官方 arXiv 客户端库**（lukasschwab/arxiv.py）；`uv.lock` 中亦只有该包。`src/uniarticles/sources/arxiv.py` 只 `import arxiv` 与 `mcp.server.fastmcp`，没有任何来自 `blazickjp/arxiv-mcp-server` 的导入，项目也从未在依赖中引用过它。
+2. **曾经存在的是代码派生，而非依赖**：最早版本（提交 `a694f2e`，0.2.0）的 `arxiv.py` 确实照搬了该项目的工具面——`download_paper`、`read_paper`、`list_papers`、`search_paper`（别名），且源码注释中留有 "original arxiv-mcp" 字样，这与 README 原致谢中"直接集成"的说法一致。
+3. **那些带特征的部分已被删除**：v2.1.0（QA-R003）一次性删除 6 个工具时移除了 `downloadPaper`，`search_paper` 别名在 v2.2.0 删除；此后 `arxiv.py` 于 v2.2.0（category 过滤 + 工具重命名）、v3.3.0（排序修复）、v3.4.0（显式超时）被重写。当前文件与 0.2.0 的逐行重合率约 39%，但重合部分主要是 `_ok`/`_err` 这一**全项目 9 个源模块统一使用的响应约定**（`openalex.py` 等后期新增、与该项目无关的模块同样使用），以及 `import arxiv` 等通用行——已无该项目的特征代码残留。
+
+### 改动
+- `README.md` / `README_ZH.md`：从 "Special Acknowledgments / 特别致谢" 中删除 ArxivMCPserver 条目，保留 ScopusMCP 条目，段落结构不变。
+
+### 未改动
+- `project-docs/teach.md` 第 55、80 行仍提及 `arxiv-mcp-server`（一处是解释 `_ok`/`_err` 重复定义的推测依据，一处是解释 `search_paper` 别名来源的推测）。用户此前已明确"没必要更新 teach.md"，且这两处是推测性说明而非致谢，故本轮不动——但需知其第一处引用的"README 提到……"在本轮后已不再成立，`teach.md` 的滞后程度因此又多一处。
+- `LICENSE`、`pyproject.toml`、任何源码均未改动。
+
+### 验证
+- 全仓库（排除 `.venv`/`dist`/`reference-projects`/`docs`）检索 `arxiv[-_ ]?mcp`：README×2 中已零命中；仅剩 `project-docs/teach.md` 两处（见上）。
+- 两份 README 的代码围栏数仍为偶数，Markdown 结构未破坏。

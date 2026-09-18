@@ -350,8 +350,6 @@ python -m uniarticles      # 使用 pip 安装时
 
 - **[ScopusMCP](https://github.com/qwe4559999/scopus-mcp)**:
   ScopusMCP是笔者第一个开发成功的文献检索MCP工具，但初始相当臃肿与难以移植，感谢舍友 [(https://github.com/qwe4559999)](https://github.com/qwe4559999) 提供的使用pypi和uv打包的建议。
-- **[ArxivMCPserver](https://github.com/blazickjp/arxiv-mcp-server)**:
-  ArxivMCPserver项目，本项目直接将其进行了打包集成。
 
 ### 特别声明
 
