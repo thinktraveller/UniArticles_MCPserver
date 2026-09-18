@@ -126,6 +126,46 @@ v3.0.0 已在 QA-R013 全部定案发布（当前 `pyproject.toml` 版本号 `3.
 
 步骤 1～42（v2.0～v3.0.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
 
+### v3.3.0 范围补充（QA-R017，2026-09-18）
+
+v3.2.0 已在 QA-R016 定案发布（本轮改动前基线：`pyproject.toml` 版本号 `3.2.0`、14 个数据源、默认 26 个工具、配置 `SEMANTIC_SCHOLAR_API_KEY` 时 28 个工具）。本轮范围源自用户"当前文献源有些太多了"的范围收缩意向，经 QA-R017 一轮澄清问答（判定标准）加一轮全量实测（14 个源 24 次真实调用 + 3 篇已知文献的定向检索矩阵）闭合。**用户决策（QA-R017 逐字记录）：采用方案 A，并额外移除 Zenodo。**
+
+**本轮性质：范围收缩型破坏性变更，但排除依据与 v3.2.0 不同，必须严格区分。** v3.2.0 的 ChEMBL/HAL 属"产品价值收窄"（两者均已实测可用，本轮不否定该历史结论）；本轮三个源分属三类依据，`goal.md` QA-R017 已明确要求不得混写：
+
+| 源（模块） | 被删工具 | 排除性质 | 判据来源 |
+| --- | --- | --- | --- |
+| bioRxiv / medRxiv（`biorxiv.py`） | `biorxiv_paper_list_by_date_range` | 上游 API **结构性不支持定向检索**（本集合唯一一例：上游无关键词检索，只能按 `server` + 日期窗口 + `cursor` 浏览、固定 30 条/次） | QA-R017 定向检索矩阵"结构性无法定向检索"一档 |
+| dblp（`dblp.py`） | `dblp_publication_search_by_query` | **可连接性不达标**（本机实测 0/4：HTTP 429 + 连接被重置 + 非 JSON 响应） | QA-R017 连通性全量实测；性质与 QA-R013 记录的间歇性不可达一致，按该条既定流程规则此记录**不构成**"技术不可行"结论 |
+| Zenodo（`zenodo.py`） | `zenodo_record_search_by_query` | **检索形态重复造成的工具干扰**（差异化内容——数据集/软件——已因 `type=publication` 硬过滤而放弃，剩余记录与 OpenAlex/Crossref 重叠） | QA-R017 判定标准①"工具干扰" + 定向检索矩阵命中 1/3 |
+
+三者均**不属于** QA-R003（权限受限，401/超时）与 QA-R012（技术不可行，PMC）的排除性质。
+
+**收缩后规模**：
+
+- 数据源 **14 → 11**（默认激活 13 → 10；Semantic Scholar 为条件注册，不计入默认集合）
+- 工具 **26 → 23**（配置 `SEMANTIC_SCHOLAR_API_KEY` 时 **28 → 25**）
+- 源码减少 280 行（`biorxiv.py` 91 + `dblp.py` 113 + `zenodo.py` 76，占源文件总量 2137 行的 13.1%；行数已逐一核对）
+- 工具名称+描述合计约 7041 → 5662 字符（-19.6%，据 QA-R017 实测）
+- "关键词检索型"工具由 12 个降至 10 个（减少 dblp、zenodo 两个；biorxiv 本就不属该形态）——这是"工具干扰"这一主要困扰的直接下降量
+
+**保留的 11 个源各有不可替代角色**（本轮不因删源而降低定向检索能力）：Scopus（受控索引 + 引用数 + 期刊元数据 + 学科分类代码）、ScienceDirect（全库唯一提供图表/补充材料清单；注意它没有任何检索工具）、arXiv、PubMed（MeSH + 相关文献 + PMC 关联）、OpenAlex、Crossref、Europe PMC（定向检索 3/3 命中，且提供 PubMed 缺失的引用数与预印本覆盖）、DOAJ、OpenAIRE、CORE、Semantic Scholar（条件注册）。
+
+**未纳入本轮的两项（`goal.md` QA-R017 明确记录，本计划书不得默认其为已授权）**：
+
+1. **三处默认排序修复**（`scopus.py` 默认排序改相关性、`pubmed.py` 显式传 `sort=relevance`、评估 `arxiv.py` 硬编码的 `SubmittedDate`）——用户本轮未表态，QA-R017 记录为"默认不纳入"。这是用户回答 1 后半句"部分工具无法直接检索到特定文献"的直接病根，本计划书以"候选步骤 59/60"形式预置（默认不执行），待用户确认后按既有"增量追加步骤"方式启用。
+2. **版本号**——QA-R017 记录建议 `3.3.0`（比照 QA-R016 先例），但**需用户在构建计划书阶段确认**；本计划书按 `3.3.0` 拟制步骤 57，并在该步骤标注确认门禁。
+
+**本计划书组织的步骤 54～58**：
+
+- 步骤 54：删除三个源文件与 `sources/__init__.py` 中的注册引用（代码层）。
+- 步骤 55：`README.md` / `README_ZH.md` 全量同步（计数下修 + 三个源小节删除）。
+- 步骤 56：`AGENTS.md` / `CLAUDE.md` 两份 agent 指导文件同步（含两文件的未跟踪/被忽略状态说明）。
+- 步骤 57：版本号提升至 `3.3.0`（**待用户确认**）。
+- 步骤 58：`project-docs/buildlog.md` 记录本轮变更 + 整体回归验证（v3.3.0 交付检查点）。
+- 候选步骤 59/60（默认不纳入）：三处默认排序修复的真实探测与实施。
+
+步骤 1～53（v2.0～v3.2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
 ## 可行性分析
 
 ### 技术可行性评估
@@ -2120,6 +2160,145 @@ def register_all_sources(server: FastMCP) -> None:
 
 ---
 
+### 步骤 54：删除 `biorxiv.py` / `dblp.py` / `zenodo.py` 与 `sources/__init__.py` 中的注册引用（v3.3.0，QA-R017）
+
+#### 目标说明
+落实 QA-R017 的用户决策（方案 A + 额外移除 Zenodo），删除三个源模块，数据源 14→11、默认工具 26→23。范围小且封闭（3 个文件 + 聚合文件中的 6 行），无需分阶段或探索性调研，一步完成代码层删除，文档同步交由步骤 55/56。三个源的排除性质见"项目概述 → v3.3.0 范围补充"表格，buildlog 记录必须沿用该三分类，不得笼统写成"不可用"。
+
+#### 具体操作
+1. 删除 `src/uniarticles/sources/biorxiv.py`、`src/uniarticles/sources/dblp.py`、`src/uniarticles/sources/zenodo.py`（共 280 行，行数已核对：91 + 113 + 76）。
+2. `src/uniarticles/sources/__init__.py` 删除 3 行 import：`from .zenodo import register as register_zenodo_source`、`from .dblp import register as register_dblp_source`、`from .biorxiv import register as register_biorxiv_source`。
+3. 同文件 `register_all_sources()` 内删除 3 行调用：`register_zenodo_source(server)`（位于"v3.0.0 新增：通用检索型"分组内）、`register_dblp_source(server)`（该分组的最后一行）、`register_biorxiv_source(server)  # 浏览语义（server/start_date/end_date/cursor）`（单独构成"v3.0.0 新增：语义特殊型（非关键词检索）"分组）。
+4. **连带清理分组注释**：删除 `register_biorxiv_source` 后，"v3.0.0 新增：语义特殊型（非关键词检索）"这一分组标题注释**整体为空**，必须连同注释一并删除，不得遗留空的分组注释块（比照步骤 53 对孤立分组注释的处理）。"通用检索型"分组删去 2 行后仍剩 7 个源（OpenAlex / Crossref / Europe PMC / DOAJ / OpenAIRE / Semantic Scholar / CORE），该分组标题保留。
+5. 不改动其余 11 个源模块的任何代码，包括各模块内硬编码的 `USER_AGENT` 版本号字符串——沿用 v3.1.0 步骤 51 已确认的惯例："仅在该模块被创建/重写时设为当时版本号，不存在随发布统一同步的约定"；本轮未新建/重写任何模块，故不涉及。
+6. 删除后做一次全仓库静态检索 `biorxiv|dblp|zenodo`（排除 `project-docs/`、`.venv/`、`dist/`），确认 `src/` 下已无任何指向这三个模块的 import 或调用。
+
+#### 验证方法
+- 启动 server 并枚举工具（本项目无自动化测试，沿用既有手动回归方式）：未配置 `SEMANTIC_SCHOLAR_API_KEY` 时为 **11 个数据源、23 个工具**；配置后为 **25 个工具**；工具名单中确认无 `biorxiv_*`、`dblp_*`、`zenodo_*`。
+- 逐源核对注册数，**必须以实际 `list_tools()` 返回值为准**，不要用 `rg -c "@server.tool"` 的直接计数：`semantic_scholar.py` 的该字符串有 1 处出现在注释中（第 67 行），会使计数虚高 1。逐源应为 scopus 6、sciencedirect 2、arxiv 3、pubmed 4、openalex 2、crossref 2、europepmc 1、doaj 1、openaire 1、core 1、semantic_scholar 2（条件注册）。
+
+#### 风险提示
+- 破坏性变更、无过渡期：下游若硬编码了 `biorxiv_paper_list_by_date_range` / `dblp_publication_search_by_query` / `zenodo_record_search_by_query`，升级后会静默失效——buildlog 与外发说明中必须逐个列出这三个工具名（比照 v3.2.0 的处理方式）。
+- `zenodo.py` 删除后，归一化响应中的 `file_links` 字段不再有任何产出方；README 与 `AGENTS.md` 中"文件元信息/链接"一类描述需同步清理，避免留下"文档描述了不存在字段来源"的失真（步骤 55/56 处理）。
+- `biorxiv.py` 是本项目**唯一**非关键词检索型源，删除后"语义特殊型"这一分类在代码与文档中都不复存在；README 第 22–23 行的两条分类 bullet 会退化为一条（步骤 55），今后不得再引用该分类。
+- `_verify/dblp_connectivity_test.py` 与 `_verify/dblp_field_probe.py` **保留不删**。这是本计划书的衍生决策（`goal.md` 未逐字提及），理由有三：① dblp.org 站点仍然存在，两个脚本诊断的是 DNS→TCP→TLS→HTTP 分层可达性，与"本项目是否注册 dblp 源"无关，仍具复用价值；② `AGENTS.md` 的 `_verify/` 常设流程规则把这两个脚本列为该模式的标准范例，删除会连带使该规则失去示例；③ 两脚本已按 `git add -f` 强制入库（`_verify` 在 `.gitignore` 中被忽略），删除属无必要的额外改动。只需避免新增 dblp 引用。
+
+---
+
+### 步骤 55：`README.md` / `README_ZH.md` 全量同步（计数下修 + 三个源小节删除）
+
+#### 目标说明
+两份 README 是项目对外门面，硬编码了数据源清单与四处工具/数据源计数，删源后必须逐处下修，且中英文两份保持结构一致。历史上计数漏改已发生两次（v2.2.0 步骤 17、v2.3.0 步骤 23，均因"计数不在表格内、位置隐蔽"），本步骤明确列出全部改动位置以免重犯。
+
+#### 具体操作
+以下行号为**改动前基线**（`README.md` 与 `README_ZH.md` 的对应位置几乎逐行对齐），实施时以内容匹配为准，删除小节后行号会整体上移。
+
+1. **第 22 行**（功能特性 → "通用学术检索"分类 bullet）：列表中删去 `Zenodo`、`dblp`，保留 OpenAlex、Crossref、Europe PMC、DOAJ、OpenAIRE、Semantic Scholar、CORE。
+2. **第 23 行**（`专项数据源（v3.0.0）: bioRxiv/medRxiv 预印本按日期区间浏览。`）：**整行删除**——该分类仅含 bioRxiv/medRxiv 一个源，删除后分类为空，不保留空 bullet。
+3. **第 29 行**（"当前支持的文献数据源"总览段落）：`14 个数据源` → `11 个`、`13 个默认即启用` → `10 个`、`26 个工具` → `23 个`、配置 key 后 `28 个` → `25 个`。
+4. **第 41 / 45 / 46 行**（数据源对比表格）：删除 `Zenodo`、`dblp`、`bioRxiv / medRxiv` 三行。
+5. **第 54 行**（⚠️ API 密钥说明 → Elsevier 限制段落）：`共注册 26 个工具、覆盖 13 个数据源` → `23 个工具、10 个数据源`；`配置后为 28 个` → `25 个`。
+6. **第 196 / 198 行**（可用工具列表 → 计数摘要段）：`默认注册 26 个工具` → `23 个`；`总数达到 28 个` → `25 个`。
+7. 删除三个独立小节及其工具表格：`### Zenodo`（README.md 263–267 / README_ZH.md 261–265）、`### dblp`（290–294 / 288–292）、`### bioRxiv / medRxiv`（296–300 / 294–298）。其中 `### bioRxiv / medRxiv` 是"可用工具列表"章节的最后一节，删除后该章节直接接 `## 🤝 贡献与共建` / `## 🤝 Call for Contributions`，注意不要留下多余空行或孤立分隔。
+8. 两份各做一次全文检索 `Zenodo|dblp|bioRxiv|medRxiv` 与 `26|28|14 个|13 个`，确认除历史叙述外无残留；两份 README 当前均无 TOC（已核实），若最终版本存在指向被删小节的锚点则一并清理。
+9. 中英文逐项对齐：分类 bullet 数量、数据源表格行数、`###` 级小节数量两份一致。
+
+#### 验证方法
+- 两份 README 中检索三个源名与 `medRxiv`：正文（分类 bullet、数据源表格、工具小节）零命中。
+- 两份 README 中所有计数与代码实际一致（11 源 / 23 工具 / 25 工具含 key），且两份文件互相对齐。
+- 对比两份 README 的 `###` 级小节目录，确认一一对应。
+
+#### 风险提示
+- 计数散落在至少 4 处互不相邻的位置（分类 bullet、总览段、Key 说明段、工具列表段），历史上两次漏改都出在这里——必须以"全文检索数字"的方式穷尽检查，而不是只改显眼处。
+- `README.md:204` / `README_ZH.md:202` 的 Scopus 工具表格写有 `sort`="coverDate"：**本轮不改**（排序修复属候选步骤 60，未获授权）。若用户后续决定纳入排序修复，该表格行必须同步更新，届时另行追加步骤。
+- 中英文两份必须同批改完，不允许只改一份（历史各轮均以两份同批交付）。
+
+---
+
+### 步骤 56：`AGENTS.md` / `CLAUDE.md` 两份 agent 指导文件同步
+
+#### 目标说明
+仓库中另有两份面向 AI agent 的指导文件硬编码了数据源清单与计数，本轮删源后同样失真。用户在上一轮已明确要求 `AGENTS.md` 应如实列出当前全部数据源的可检索范围，因此该文件的同步属于用户已表达的意图，不是本计划书的自作主张；但两份文件的**入库状态特殊**（见风险提示），故单独成步，与代码/README 的改动分开处理。
+
+#### 具体操作
+1. `AGENTS.md`（16626 字节，**当前 git 未跟踪**，内容基线为 v3.2.0）：
+   - Project overview 段：`**14 data sources / 26 tools** by default (**28 tools** if SEMANTIC_SCHOLAR_API_KEY is set)` → `**11 data sources / 23 tools** ... (**25 tools** ...)`；数据源枚举串中删去 `Zenodo`、`dblp`、`bioRxiv/medRxiv`；沿用既有"product-scope decision, not a technical failure"的表述方式补一句本轮性质说明，但须按 QA-R017 修正为三类依据，并指向 `project-docs/goal.md` QA-R017。
+   - `## Data sources and searchable scope` 一节：删除 `Zenodo`、`dblp`、`bioRxiv / medRxiv` 三行表格行；表头说明与 Cross-cutting notes 中对该三源的引用同步清理，至少两处：`Nothing in this server returns file contents or downloads binaries` 一条中的 "Zenodo a `file_links` list"，以及 `query` 字段说明中的 "a human-readable `server/start/end` description for `biorxiv.py`"。
+   - `Architecture` 段中把 `sciencedirect.py` / `biorxiv.py` / `zenodo.py` 并列说明"语义特殊型"的那句改写——`biorxiv.py`、`zenodo.py` 均已删除，只剩 `sciencedirect.py`。
+   - `_verify/` 常设流程规则段**保留不变**（该规则本身与本轮无关，其举例的 `dblp_*` 脚本按步骤 54 的决定保留）。
+2. `CLAUDE.md`（9079 字节，**被 `.gitignore` 第 53 行忽略、不入库**）：该文件停在 v3.1.0 基线（15 源 / 28 工具 / 30 工具），比当前代码落后两轮（v3.2.0 删除 ChEMBL/HAL 时步骤 53 并未同步此文件）。因此本步骤应把 overview 段一次性刷新到当前基线（11 源 / 23 工具 / 25 工具），而不是只做"三个源"的减法——在旧基线上做减法只会得到一个仍然错误的数字。
+3. 两个文件均**不得 `git add`**：`AGENTS.md` 未跟踪（是否入库由用户决定），`CLAUDE.md` 被 `.gitignore` 显式忽略。同时不得改动 `.gitignore` 本身（该文件在本机存在与本轮无关的既有状态，`AGENTS.md` 内已有明确告诫）。
+
+#### 验证方法
+- 两份文件中检索 `Zenodo|dblp|bioRxiv|26|28|14 |15 `，确认残留处均为历史叙述或已更新为新计数。
+- `git status --short` 中不出现这两个文件的暂存项：`AGENTS.md` 应仍显示为 `?? AGENTS.md`，`CLAUDE.md` 不应出现（被忽略）。
+
+#### 风险提示
+- 这是"改 agent 自己阅读的规则书"的改动，且 `AGENTS.md` 处于未跟踪状态：若用户对该文件的入库安排另有打算，**本步骤的内容更新可整体跳过**——跳过不会破坏其他步骤的正确性，代价只是两份指导文件继续描述已删除的源，后续会话可能据此产生错误假设。
+- `CLAUDE.md` 长期被 `.gitignore` 忽略却仍在维护，存在"本机有效、他处缺失"的固有风险；本计划书不改变这一现状（是否取消忽略属独立的仓库治理问题）。
+- 修改 `AGENTS.md` 时**不要**触碰其中的 `_verify/` 流程规则与 "Project docs (Chinese)" 分工约定——那两条与本轮无关。
+
+---
+
+### 步骤 57：版本号提升至 `3.3.0`（**待用户确认**）
+
+#### 目标说明
+本项目既有惯例是"范围变更即 bump minor 版本号"（v2.1.0、v2.2.0、v3.2.0 均如此，其中 v3.2.0 与删除 ChEMBL/HAL 同批）。`goal.md` QA-R017 记录：建议 `3.3.0`，但**需用户在构建计划书阶段确认**——本步骤即该确认的门禁点。
+
+#### 具体操作
+1. `pyproject.toml` 第 7 行 `version = "3.2.0"` → `"3.3.0"`。
+2. `src/uniarticles/__init__.py` 第 20 行 `__version__ = "3.2.0"` → `"3.3.0"`。
+3. 两处必须**同时**修改并保持一致——v3.1.0 步骤 51 处理过这两个字段历史不一致的问题，不得只改其一。已核实 `pyproject.toml` 中项目版本号仅此一处。
+4. 若用户否决 `3.3.0`（要求改号、或要求本轮不 bump），仅替换上述两处字面值即可，不影响步骤 54–56、58 的任何内容。
+
+#### 验证方法
+- `python -c "import uniarticles; print(uniarticles.__version__)"` 输出与 `pyproject.toml` 的 `version` 一致（均为 `3.3.0`）。
+
+#### 风险提示
+- **本步骤在用户明确确认前不得执行**：写入计划书不等于获得授权，QA-R017 已把版本号列为"仍未确认事项"。
+- 版本号失真最容易被外部察觉（PyPI 元数据、`uvx` 缓存均受影响）；若最终决定不 bump，须在 buildlog 中说明理由。
+
+---
+
+### 步骤 58：`project-docs/buildlog.md` 记录本轮变更 + 整体回归验证（v3.3.0 交付检查点）
+
+#### 目标说明
+`buildlog.md` 是本项目唯一的变更日志（`CHANGELOG.md` 已并入其"历史记录"段）。本轮属破坏性变更，需留下可追溯记录，并与整体回归验证共同构成交付检查点，格式对齐 v3.2.0 的既有条目。
+
+#### 具体操作
+1. 在 `project-docs/buildlog.md` 追加本轮条目（v3.3.0，引用 QA-R017）：逐个列出删除的 3 个源/3 个工具名；**排除性质按三类分写**（biorxiv = 上游结构性不支持定向检索、dblp = 可连接性不达标、zenodo = 检索形态重复），并明确"三者均非技术不可行、非权限受限"，与 QA-R016 的产品价值收窄一并作为历史对照；记录计数变化（14→11 源、26→23 工具、28→25 含 key）、README 同步范围、版本号（若步骤 57 未执行则如实说明）。
+2. 登记两条已知文档失真（本轮不改，留给对应角色处理）：`project-docs/teach.md` 第 127/132/133 行仍在描述 Zenodo/dblp/bioRxiv，其第 128/134/65 行仍描述 v3.2.0 已删除的 HAL/ChEMBL 与 `paperscraper.py` 时代的实现——该文件由 `project-explainer-cn` 维护且明确"可能滞后"，本轮删源不改变其归属；`CLAUDE.md` 的忽略状态（若步骤 56 被跳过）。
+3. 整体回归（无自动化测试，沿用人工回归惯例）：启动 server → 枚举工具，确认 23/25；对**保留的 11 个源**各抽查至少 1 个工具做真实调用（Scopus/ScienceDirect 依赖 Elsevier key，Semantic Scholar 视 key 是否配置），确认删源未影响其余模块的注册与调用；确认 stdout 无任何多余输出（stdout 是 MCP stdio 的 JSON-RPC 通道）。
+
+#### 验证方法
+- `buildlog.md` 新条目中可检索到三个被删工具名与 QA-R017 引用。
+- 回归结果：11 源 / 23 工具（含 key 25），保留源抽查无新增失败；服务可正常启动并退出。
+- `git status --short` 中除本轮预期改动外无新增意外文件。
+
+#### 风险提示
+- 无自动化测试，"已删工具确实不再注册"只能通过枚举确认；若枚举方式本身有误（例如手工数 `@server.tool` 字符串），会得到错误结论——必须以实际 `list_tools()` 结果为准（见步骤 54 对 `semantic_scholar.py` 注释干扰的提醒）。
+- 抽查若出现失败，先按 QA-R013 / `_verify/` 流程判断是否属本机网络环境波动，不要据此判定源不可用或回滚本轮改动。
+
+---
+
+### 候选步骤 59 / 60：三处默认排序修复（**默认不纳入本版本，未经用户确认不得执行**）
+
+`goal.md` QA-R017 明确记录："三处排序修复……用户本轮未表态，默认不纳入，留待后续按 project-plan.md 增量追加步骤的方式补入"。此处以候选形式预置，用户一旦确认即可直接启用（步骤编号顺延为 59/60）。
+
+**候选步骤 59：三处排序行为真实探测（编码前置步骤）**
+
+- 目的：QA-R017 的实测只记录了结论（Scopus 改 `sort=relevancy` 后 3/3 命中、`TITLE("...")` 字段查询 top-1 命中、arXiv 改用 `ti:"..."` 命中、PubMed 未传 `sort` 时默认非 Best Match），**未留存可复现脚本**；按本项目"先探测再定实现、不凭空编写"的一贯做法（步骤 14/21/43 先例），实施前必须补一次真实探测。
+- 内容：分别验证 `scopus.py` 的 `sort` 参数取值（`relevancy` / `coverDate`）与 `TITLE(...)` 字段语法、`arxiv.py` 的 `sort_by` 取值与 `ti:` 前缀、NCBI ESearch 的 `sort` 参数取值（含 `relevance`），以及带引号的 `"标题"[Title]` 查询返回 0 条这一现象是否可复现（QA-R017 实测记录，属 NCBI 自身行为，非本项目 bug）。
+- 产出：诊断脚本写入 `_verify/`（注意 `_verify` 在 `.gitignore` 中被忽略，新脚本需 `git add -f` 才会入库——`AGENTS.md` 已记录这一既有约定，且不得为此改动 `.gitignore`）。
+
+**候选步骤 60：实施排序修复 + 文档同步**
+
+- 改动点（位置已由代码核实）：`src/uniarticles/sources/scopus.py:364` 的 `sort: str = "coverDate"` 默认值；`src/uniarticles/sources/arxiv.py:71` 硬编码的 `sort_by=arxiv.SortCriterion.SubmittedDate`；`src/uniarticles/sources/pubmed.py` 的 ESearch 请求补显式排序参数（该文件当前未传 `sort`）。
+- 文档同步：`README.md:204` / `README_ZH.md:202` 的 Scopus 工具表格中 `sort`="coverDate" 默认值需同步更新；两份 README 与 `AGENTS.md` 中若有排序相关描述一并更新。
+- 性质：这是**默认行为变更，属对已发布工具的破坏性变更**，需在 buildlog 中显著提示（依赖"按日期排序"既有行为的调用方会感知到变化）。
+
+---
+
 ## Q&A 记录
 
 ### 通用问题
@@ -2178,3 +2357,13 @@ def register_all_sources(server: FastMCP) -> None:
 - （v3.2.0，2026-08-09）步骤 53 基于 `project-docs/goal.md` QA-R016 追加，源自用户直接、明确的范围收缩指令——移除 ChEMBL 与 HAL 两个数据源（理由：产品价值不足，"用处不大"，非技术不可行）。范围小而封闭，一步完成代码删除（`chembl.py`/`hal.py` 源文件 + `sources/__init__.py` 中对应 import/注册行）、验证（`create_server()` 工具数量核对）、README.md/README_ZH.md 同步更新、版本号提升。数据源规模由 15 个降为 13 个，工具规模由 28/30 降为 26/28。用户在本轮澄清中已明确确认将版本号一并 bump 至 `3.2.0`（当前 `3.1.0`），延续本项目"范围变更即 bump minor 版本号"的既有惯例。
 - 与此前几轮删除性质变更（v2.1.0 QA-R003、v2.2.0 QA-R004）不同：本轮排除的 ChEMBL/HAL **均已实测确认可用**（非技术不可行），排除依据是用户对已发布范围的主观产品价值判断，`goal.md` 已特别标注这一性质区分，步骤 53 与 buildlog 记录中均需如实反映，不得误写为"技术不可行"。
 - 步骤 1～52（v2.0～v3.1.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
+
+---
+
+- （v3.3.0，2026-09-18）步骤 54～58 基于 `project-docs/goal.md` QA-R017 追加，源自用户"当前文献源有些太多了"的范围收缩意向。用户决策为"采用方案 A，并额外移除 Zenodo"，删源集合为 `biorxiv.py` / `dblp.py` / `zenodo.py` 三个源文件（各 1 个工具），数据源由 14 降为 11、默认工具由 26 降为 23（配置 `SEMANTIC_SCHOLAR_API_KEY` 时 28→25）。三个源的排除性质分属三类（biorxiv 上游 API 结构性不支持定向检索、dblp 可连接性不达标、zenodo 检索形态重复），与 QA-R016"产品价值收窄"、QA-R003"权限受限"、QA-R012"技术不可行"均不同，buildlog 记录不得混写。
+- 步骤 55 的改动位置以"改动前行号 + 内容匹配"双条件给出（两份 README 的对应行号几乎逐行对齐）；历史上计数漏改已发生两次（v2.2.0 步骤 17、v2.3.0 步骤 23），故本步骤要求以全文检索数字的方式穷尽检查，而非只改显眼处。
+- 步骤 56 涉及 `AGENTS.md`（当前 git 未跟踪）与 `CLAUDE.md`（被 `.gitignore` 忽略、不入库）两份 agent 指导文件：前者是用户上一轮明确要求维护的对象，后者的基线停在 v3.1.0（比代码落后两轮）。两文件均**不得 `git add`**，也不得改动 `.gitignore`；若用户对 `AGENTS.md` 另有安排，该步骤可整体跳过且不影响其余步骤。
+- 步骤 57（版本号 `3.3.0`）标注为**待用户确认**：`goal.md` QA-R017 把版本号列为"仍未确认事项"，本计划书按既有惯例拟制为 `3.3.0`，但不等于获得授权；若否决，仅替换两处字面值。
+- 候选步骤 59/60（三处默认排序修复）**默认不纳入本版本**，依据 QA-R017 明文记录；这是用户回答"部分工具无法直接检索到特定文献"的直接病根，本计划书以候选形式预置并保留充分细节，待用户确认后按既有"增量追加步骤"方式启用。
+- `_verify/dblp_connectivity_test.py` / `_verify/dblp_field_probe.py` 在删源后**保留不删**，属本计划书的衍生决策（`goal.md` 未逐字提及），理由见步骤 54 风险提示（诊断脚本与"是否注册该源"无关、`AGENTS.md` 常设规则以其为标准范例、已按 `git add -f` 入库）。
+- 步骤 1～53（v2.0～v3.2.0 构建）已全部执行完毕并发布，保留在文档中作为历史记录，不受本轮改动影响。
