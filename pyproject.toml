@@ -52,7 +52,7 @@ packages = ["src/uniarticles"]
 # 排除内部研发文档/配置，不对外分发（wheel 已由上面的 packages 限定范围，无需排除）。
 # 采用 gitignore 风格的锚定 glob，前导 "/" 表示相对仓库根目录。
 exclude = [
-    "/project-docs",   # 内部规划文档：goal.md / project-plan.md / buildlog.md / teach.md
+    "/project-docs",   # 内部规划文档：goal.md / project-plan.md / buildlog.md
     "/.claude",        # Claude Code 本地配置（含 settings.local.json）
     "/CLAUDE.md",      # 给 Claude Code 的开发指导文件
     "/docs",           # Elsevier 官方文档等内部调研资料（本已被 .gitignore 排除，此处双保险）
