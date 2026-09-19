@@ -2763,3 +2763,31 @@ called 28 tools, 25 ok, 3 failed
 
 ### 下一步计划
 - ✅ 构建已全部完成，无待执行步骤（仅剩"是否发布 PyPI"这一项需用户决策）。
+
+---
+
+## [2026-09-19 00:26] 发布 v3.5.0 至 PyPI + 移除 teach.md（用户授权）
+
+### 用户指令
+原始指令："移除 `teach.md` 并删除所有 git 中的存档，然后推送更新和包。"
+
+### 本轮执行内容
+1. **移除 `project-docs/teach.md`**：该文档由 `project-explainer-cn` 工作流独立维护、已连续多轮滞后于当前数据源集合（仍描述 v3.2.0 已删除的 HAL/ChEMBL、`paperscraper.py` 时代的实现等）。用户指令为移除，故从工作区与索引中一并删除；同步清理 `pyproject.toml` 中 sdist `exclude` 注释里的 `teach.md` 字样。`project-docs/goal.md`/`project-plan.md`/本文件中的历史条目按"不篡改历史记录"的既定原则**保持原样**（它们是对既往步骤的如实记载）。
+2. **构建与发布前门禁（逐条通过）**：`LICENSE`（AGPL-3.0）↔ `pyproject.toml`（`license = "AGPL-3.0-or-later"` + AGPLv3+ classifier）↔ README 徽章三者一致；`dist/` 中原有的 `3.4.0` 陈旧产物（`uniarticles_mcp-3.4.0-py3-none-any.whl` / `.tar.gz`）已清空后再构建；sdist 内容经实测确认**不含** `project-docs/`、真实 `.env`、`CLAUDE.md`、`docs/`、`teach.md`（仅含 `.env.example` 占位示例，属预期）。
+3. **构建**：`uv build` → `uniarticles_mcp-3.5.0-py3-none-any.whl`（61,439 字节）、`uniarticles_mcp-3.5.0.tar.gz`（118,023 字节）。
+4. **推送**：`git push -u origin main`，`d681c82..90c79f1` → 远端 `origin/main` 已与本地同步。
+5. **发布**：`uv publish`（凭据经 `UV_PUBLISH_TOKEN` 环境变量传入，未落盘、未回显）→ PyPI 接收 2 个文件。
+
+### 发布后核对
+- `https://pypi.org/pypi/uniarticles-mcp/3.5.0/json` 返回版本 `3.5.0`、`license_expression = AGPL-3.0-or-later`，两个文件均已列出。
+- 在临时干净虚拟环境中实测 `uv pip install "uniarticles-mcp==3.5.0"`：安装成功，`uniarticles.__version__` = `3.5.0`，`list_tools()` = **29 个工具**、`core_` 前缀 **9 个**——与本地一致性判据完全吻合。
+- 注：发布后短时间内 `https://pypi.org/pypi/uniarticles-mcp/json` 的 `info.version` 仍显示 `3.4.0`（CDN 缓存滞后），版本级 endpoint 与 simple index 均已正确列出 `3.5.0`。
+- **PyPI 长描述为中文**：`readme = "README.md"` 指向中文主 README（v3.4.0 轮次 README 更名互换的既定结果），用户已知悉该决策点并指示继续发布。
+
+### 遗留与门禁
+- **v3.5.0 已发布**，本条关闭此前"是否发布 PyPI"的待办；PyPI 上 `3.5.0` 不可覆盖重发，后续如需修改只能 bump 版本号。
+- `AGENTS.md` 仍未被 git 跟踪（本机 `.gitignore` 第 54 行忽略），其内容已按步骤 76 更新但只存在于本地。
+- **`teach.md` 的历史清除尚未执行**：用户指令中的"删除所有 git 中的存档"若指清除历史提交中的该文件，需重写历史（将影响 `3fa9bea`（2026-08-01）之后的 **131 个提交**）并强推覆盖公开仓库，属不可逆操作，已提请用户二次确认后单独执行。
+
+### 下一步计划
+- ⏳ 待用户确认是否执行 `teach.md` 的历史清除（重写 + 强推）；不确认则维持现状（文件已从 HEAD 起不存在，仅历史提交中留存）。
